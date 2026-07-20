@@ -1,0 +1,83 @@
+name: Build Unsigned IPA
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build HTMLApp IPA
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 15 or 16
+        shell: bash
+        run: |
+          set -euo pipefail
+          for xcode_path in /Applications/Xcode_16*.app /Applications/Xcode_15*.app /Applications/Xcode.app; do
+            if [ -d "$xcode_path" ]; then
+              sudo xcode-select -s "$xcode_path/Contents/Developer"
+              break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+
+      - name: Generate Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          test -d HTMLApp.xcodeproj
+
+      - name: Clean and build unsigned app
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild clean build \
+            -project "HTMLApp.xcodeproj" \
+            -scheme "HTMLApp" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/DerivedData" \
+            IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+            TARGETED_DEVICE_FAMILY=1 \
+            SUPPORTS_MACCATALYST=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            SKIP_INSTALL=NO
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$PWD/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'HTMLApp.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "HTMLApp.app was not found."
+            exit 1
+          fi
+
+          rm -rf Payload HTMLApp-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload HTMLApp-unsigned.ipa
+          ls -lh HTMLApp-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HTMLApp-unsigned-ipa
+          path: HTMLApp-unsigned.ipa
+          if-no-files-found: error
