@@ -1,7 +1,5 @@
 import Foundation
 import UIKit
-import SafariServices
-import Network
 
 extension SavedHTMLApp {
     var resolvedIconData: Data {
@@ -129,8 +127,39 @@ enum HTMLAppIconTools {
 }
 
 enum WebClipProfile {
+    enum ProfileError: LocalizedError {
+        case invalidDataURL
+        case unableToOpen
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidDataURL:
+                return "The Web Clip profile data URL could not be generated."
+            case .unableToOpen:
+                return "iOS could not open the generated profile in Safari."
+            }
+        }
+    }
+
     static func mobileConfigData(for app: SavedHTMLApp) -> Data {
         Data(mobileConfig(for: app).utf8)
+    }
+
+    static func dataURL(for app: SavedHTMLApp) throws -> URL {
+        let options: Data.Base64EncodingOptions = [
+            .lineLength64Characters,
+            .endLineWithCarriageReturn,
+            .endLineWithLineFeed
+        ]
+        let base64 = mobileConfigData(for: app).base64EncodedString(options: options)
+        let encodedBase64 = base64
+            .replacingOccurrences(of: "%", with: "%25")
+            .replacingOccurrences(of: "\r", with: "%0D")
+            .replacingOccurrences(of: "\n", with: "%0A")
+        guard let url = URL(string: "data:application/x-apple-aspen-config;base64,\(encodedBase64)") else {
+            throw ProfileError.invalidDataURL
+        }
+        return url
     }
 
     static func mobileConfig(for app: SavedHTMLApp) -> String {
@@ -148,38 +177,60 @@ enum WebClipProfile {
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-          <key>ConsentText</key>
-          <dict>
-            <key>default</key>
-            <string>Choose 'Install' and enter passcode if prompted.</string>
-          </dict>
-          <key>PayloadContent</key>
-          <array>
-            <dict>
-              <key>FullScreen</key><\(fullScreen ? "true" : "false")/>
-              <key>Icon</key><data>\(icon)</data>
-              <key>IgnoreManifestScope</key><true/>
-              <key>IsRemovable</key><true/>
-              <key>Label</key><string>\(label)</string>
-              <key>PayloadDescription</key><string>Created webapp</string>
-              <key>PayloadDisplayName</key><string>Web Clip \(label)</string>
-              <key>PayloadIdentifier</key><string>space.mekabrine.htmlapp.webclip.\(app.id.lowercased()).\(nonce)</string>
-              <key>PayloadOrganization</key><string>Mekabrine</string>
-              <key>PayloadType</key><string>com.apple.webClip.managed</string>
-              <key>PayloadUUID</key><string>\(clipUUID)</string>
-              <key>PayloadVersion</key><integer>1</integer>
-              <key>Precomposed</key><\(precomposed ? "true" : "false")/>
-              <key>URL</key><string>\(launchURL)</string>
-            </dict>
-          </array>
-          <key>PayloadDescription</key><string></string>
-          <key>PayloadDisplayName</key><string>WebClip: \(label)</string>
-          <key>PayloadIdentifier</key><string>space.mekabrine.webclip.\(app.id.lowercased()).\(nonce)</string>
-          <key>PayloadOrganization</key><string>mekabrine.space</string>
-          <key>PayloadRemovalDisallowed</key><false/>
-          <key>PayloadType</key><string>Configuration</string>
-          <key>PayloadUUID</key><string>\(profileUUID)</string>
-          <key>PayloadVersion</key><integer>1</integer>
+        <key>ConsentText</key>
+        <dict>
+        <key>default</key>
+        <string>Choose 'Install' and enter passcode if prompted.</string>
+        </dict>
+        <key>PayloadContent</key>
+        <array>
+        <dict>
+        <key>FullScreen</key>
+        <\(fullScreen ? "true" : "false")/>
+        <key>Icon</key>
+        <data>\(icon)</data>
+        <key>IgnoreManifestScope</key>
+        <true/>
+        <key>IsRemovable</key>
+        <true/>
+        <key>Label</key>
+        <string>\(label)</string>
+        <key>PayloadDescription</key>
+        <string>Created webapp</string>
+        <key>PayloadDisplayName</key>
+        <string>Web Clip \(label)</string>
+        <key>PayloadIdentifier</key>
+        <string>space.mekabrine.htmlapp.webclip.\(app.id.lowercased()).\(nonce)</string>
+        <key>PayloadOrganization</key>
+        <string>Mekabrine</string>
+        <key>PayloadType</key>
+        <string>com.apple.webClip.managed</string>
+        <key>PayloadUUID</key>
+        <string>\(clipUUID)</string>
+        <key>PayloadVersion</key>
+        <integer>1</integer>
+        <key>Precomposed</key>
+        <\(precomposed ? "true" : "false")/>
+        <key>URL</key>
+        <string>\(launchURL)</string>
+        </dict>
+        </array>
+        <key>PayloadDescription</key>
+        <string></string>
+        <key>PayloadDisplayName</key>
+        <string>WebClip: \(label)</string>
+        <key>PayloadIdentifier</key>
+        <string>space.mekabrine.webclip.\(app.id.lowercased()).\(nonce)</string>
+        <key>PayloadOrganization</key>
+        <string>mekabrine.space</string>
+        <key>PayloadRemovalDisallowed</key>
+        <false/>
+        <key>PayloadType</key>
+        <string>Configuration</string>
+        <key>PayloadUUID</key>
+        <string>\(profileUUID)</string>
+        <key>PayloadVersion</key>
+        <integer>1</integer>
         </dict>
         </plist>
         """
@@ -199,144 +250,19 @@ enum WebClipProfile {
 final class WebClipInstaller {
     static let shared = WebClipInstaller()
 
-    enum InstallError: LocalizedError {
-        case serverFailed
-        case presentationFailed
-
-        var errorDescription: String? {
-            switch self {
-            case .serverFailed:
-                return "The local profile download server could not start."
-            case .presentationFailed:
-                return "Safari could not be opened for the profile download."
-            }
-        }
-    }
-
-    private var server: ProfileDownloadServer?
-
     func install(app: SavedHTMLApp, completion: @escaping (Result<Void, Error>) -> Void) {
-        server?.stop()
-        let server = ProfileDownloadServer(
-            profileData: WebClipProfile.mobileConfigData(for: app),
-            filename: "HTMLApp-\(app.id).mobileconfig"
-        )
-        self.server = server
-        server.start { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let url):
-                    guard let presenter = UIViewController.htmlAppTopPresenter else {
-                        completion(.failure(InstallError.presentationFailed))
-                        return
-                    }
-                    let safari = SFSafariViewController(url: url)
-                    safari.dismissButtonStyle = .close
-                    presenter.present(safari, animated: true)
-                    completion(.success(()))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 120) {
-                        self?.server?.stop()
-                        self?.server = nil
-                    }
-                case .failure:
-                    completion(.failure(InstallError.serverFailed))
-                }
-            }
-        }
-    }
-}
-
-final class ProfileDownloadServer {
-    private let profileData: Data
-    private let filename: String
-    private let queue = DispatchQueue(label: "space.mekabrine.htmlapp.profile-server")
-    private var listener: NWListener?
-
-    init(profileData: Data, filename: String) {
-        self.profileData = profileData
-        self.filename = filename
-    }
-
-    func start(completion: @escaping (Result<URL, Error>) -> Void) {
         do {
-            let listener = try NWListener(using: .tcp, on: .any)
-            self.listener = listener
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.handle(connection)
-            }
-            listener.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    guard let port = listener.port,
-                          let url = URL(string: "http://127.0.0.1:\(port.rawValue)/\(self.filename)") else {
-                        completion(.failure(WebClipInstaller.InstallError.serverFailed))
-                        return
-                    }
-                    completion(.success(url))
-                case .failed(let error):
-                    completion(.failure(error))
-                default:
-                    break
+            let url = try WebClipProfile.dataURL(for: app)
+            UIApplication.shared.open(url, options: [:]) { opened in
+                if opened {
+                    completion(.success(()))
+                } else {
+                    completion(.failure(WebClipProfile.ProfileError.unableToOpen))
                 }
             }
-            listener.start(queue: queue)
         } catch {
             completion(.failure(error))
         }
-    }
-
-    func stop() {
-        listener?.cancel()
-        listener = nil
-    }
-
-    private func handle(_ connection: NWConnection) {
-        connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] _, _, _, _ in
-            guard let self else {
-                connection.cancel()
-                return
-            }
-            let headers = """
-            HTTP/1.1 200 OK\r
-            Content-Type: application/x-apple-aspen-config\r
-            Content-Disposition: attachment; filename=\"\(self.filename)\"\r
-            Content-Length: \(self.profileData.count)\r
-            Cache-Control: no-store\r
-            Connection: close\r
-            \r
-            """
-            var response = Data(headers.utf8)
-            response.append(self.profileData)
-            connection.send(content: response, completion: .contentProcessed { _ in
-                connection.cancel()
-            })
-        }
-    }
-}
-
-private extension UIViewController {
-    static var htmlAppTopPresenter: UIViewController? {
-        guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }),
-              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
-            return nil
-        }
-        return root.htmlAppTopPresented
-    }
-
-    var htmlAppTopPresented: UIViewController {
-        if let presentedViewController {
-            return presentedViewController.htmlAppTopPresented
-        }
-        if let navigation = self as? UINavigationController {
-            return navigation.visibleViewController?.htmlAppTopPresented ?? navigation
-        }
-        if let tab = self as? UITabBarController {
-            return tab.selectedViewController?.htmlAppTopPresented ?? tab
-        }
-        return self
     }
 }
 
