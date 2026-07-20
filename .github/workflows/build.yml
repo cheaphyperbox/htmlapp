@@ -6,31 +6,37 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: htmlapp-main-build
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build HTMLApp IPA
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15 or 16
+      - name: Select Xcode (prefer 16.4 if available)
         shell: bash
         run: |
           set -euo pipefail
-          for xcode_path in /Applications/Xcode_16*.app /Applications/Xcode_15*.app /Applications/Xcode.app; do
-            if [ -d "$xcode_path" ]; then
-              sudo xcode-select -s "$xcode_path/Contents/Developer"
-              break
-            fi
-          done
+          if [ -d "/Applications/Xcode_16.4.app" ]; then
+            echo "Using Xcode_16.4.app"
+            sudo xcode-select -s "/Applications/Xcode_16.4.app/Contents/Developer"
+          else
+            echo "Xcode_16.4.app not found. Using current default:"
+            xcode-select -p
+          fi
           xcodebuild -version
 
       - name: Install XcodeGen
         shell: bash
         run: |
           set -euo pipefail
+          brew update
           brew install xcodegen
 
       - name: Generate Xcode project
@@ -38,18 +44,20 @@ jobs:
         run: |
           set -euo pipefail
           xcodegen generate
-          test -d HTMLApp.xcodeproj
+          test -d "HTMLApp.xcodeproj"
+          ls -la
 
-      - name: Clean and build unsigned app
+      - name: Build unsigned device app
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild clean build \
+          rm -rf "$PWD/DerivedData"
+          xcodebuild \
             -project "HTMLApp.xcodeproj" \
             -scheme "HTMLApp" \
             -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
+            -destination "generic/platform=iOS" \
             -derivedDataPath "$PWD/DerivedData" \
             IPHONEOS_DEPLOYMENT_TARGET=16.0 \
             TARGETED_DEVICE_FAMILY=1 \
@@ -57,7 +65,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            SKIP_INSTALL=NO
+            SKIP_INSTALL=NO \
+            build
 
       - name: Package unsigned IPA
         shell: bash
@@ -66,6 +75,7 @@ jobs:
           APP_PATH="$(find "$PWD/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name 'HTMLApp.app' -type d | head -n 1)"
           if [ -z "$APP_PATH" ]; then
             echo "HTMLApp.app was not found."
+            find "$PWD/DerivedData/Build/Products" -maxdepth 3 -print || true
             exit 1
           fi
 
@@ -73,6 +83,7 @@ jobs:
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           ditto -c -k --sequesterRsrc --keepParent Payload HTMLApp-unsigned.ipa
+          test -f HTMLApp-unsigned.ipa
           ls -lh HTMLApp-unsigned.ipa
 
       - name: Upload IPA artifact
@@ -81,3 +92,4 @@ jobs:
           name: HTMLApp-unsigned-ipa
           path: HTMLApp-unsigned.ipa
           if-no-files-found: error
+          retention-days: 30
