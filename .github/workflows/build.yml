@@ -19,17 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode (prefer 16.4 if available)
+      - name: Select Xcode (prefer 26, fallback to 16.4)
         shell: bash
         run: |
           set -euo pipefail
-          if [ -d "/Applications/Xcode_16.4.app" ]; then
-            echo "Using Xcode_16.4.app"
-            sudo xcode-select -s "/Applications/Xcode_16.4.app/Contents/Developer"
-          else
-            echo "Xcode_16.4.app not found. Using current default:"
-            xcode-select -p
+          XCODE_PATH=""
+          for candidate in /Applications/Xcode_26*.app /Applications/Xcode_16.4.app /Applications/Xcode.app; do
+            if [ -d "$candidate" ]; then
+              XCODE_PATH="$candidate"
+              break
+            fi
+          done
+          if [ -z "$XCODE_PATH" ]; then
+            echo "No supported Xcode installation was found."
+            ls -1 /Applications | grep Xcode || true
+            exit 1
           fi
+          echo "Using $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
 
       - name: Install XcodeGen
