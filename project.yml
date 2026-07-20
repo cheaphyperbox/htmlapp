@@ -16,6 +16,7 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - path: HTMLApp/HTMLAppV2.swift
+      - path: HTMLApp/WebClipSupport.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp
