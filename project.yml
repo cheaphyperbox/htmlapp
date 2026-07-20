@@ -1,0 +1,49 @@
+name: HTMLApp
+options:
+  bundleIdPrefix: com.mekabrine
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    CODE_SIGN_STYLE: Automatic
+targets:
+  HTMLApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: HTMLApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp
+        PRODUCT_NAME: HTMLApp
+        INFOPLIST_KEY_CFBundleDisplayName: HTMLApp
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiredDeviceCapabilities: arm64
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: HTML apps may request your location after you approve access for that saved app.
+        INFOPLIST_KEY_NSCameraUsageDescription: HTML apps may request camera access after you approve access for that saved app.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: HTML apps may request microphone access after you approve access for that saved app.
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: HTML apps may request access to selected photos after you approve access.
+        INFOPLIST_KEY_LSApplicationQueriesSchemes: https http
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: HTMLApp/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.mekabrine.htmlapp
+            CFBundleURLSchemes:
+              - htmlapp
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIDeviceFamily:
+          - 1
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
