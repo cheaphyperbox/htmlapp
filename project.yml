@@ -15,7 +15,7 @@ targets:
     platform: iOS
     deploymentTarget: "16.0"
     sources:
-      - path: HTMLApp/HTMLAppV3.swift
+      - path: HTMLAppV3
       - path: HTMLApp/WebClipSupport.swift
     settings:
       base:
