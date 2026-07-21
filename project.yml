@@ -17,6 +17,8 @@ targets:
     sources:
       - path: HTMLAppV3
       - path: HTMLApp/WebClipSupport.swift
+    resources:
+      - path: HTMLApp/Assets.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp
