@@ -54,7 +54,7 @@ jobs:
           test -d "HTMLApp.xcodeproj"
           ls -la
 
-      - name: Build unsigned device app
+      - name: Build unsigned universal device app
         shell: bash
         run: |
           set -euo pipefail
@@ -67,7 +67,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath "$PWD/DerivedData" \
             IPHONEOS_DEPLOYMENT_TARGET=16.0 \
-            TARGETED_DEVICE_FAMILY=1 \
+            TARGETED_DEVICE_FAMILY="1,2" \
             SUPPORTS_MACCATALYST=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
