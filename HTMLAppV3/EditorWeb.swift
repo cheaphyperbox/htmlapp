@@ -131,12 +131,14 @@ struct HTMLWebView: UIViewRepresentable {
         let appID: String
         private weak var webView: WKWebView?
         private var nativePermissions: NativePermissionCoordinator?
+        private var locationPermissions: HTMLLocationBridge?
 
         init(appID: String) { self.appID = appID }
 
         func attach(_ webView: WKWebView) {
             self.webView = webView
             nativePermissions = NativePermissionCoordinator(webView: webView, appID: appID)
+            locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
         }
 
         func webView(_ webView: WKWebView,
@@ -162,7 +164,7 @@ struct HTMLWebView: UIViewRepresentable {
                 guard let callbackID = body["id"] as? String else { return }
                 let highAccuracy = body["highAccuracy"] as? Bool ?? false
                 let timeout = body["timeout"] as? Double
-                nativePermissions?.requestLocation(callbackID: callbackID, highAccuracy: highAccuracy, timeoutMS: timeout)
+                locationPermissions?.request(callbackID: callbackID, highAccuracy: highAccuracy, timeoutMS: timeout)
 
             case "htmlappNotificationPermission":
                 guard let callbackID = body["id"] as? String else { return }
