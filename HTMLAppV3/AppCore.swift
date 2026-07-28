@@ -58,6 +58,7 @@ struct SavedHTMLApp: Identifiable, Codable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var lastOpenedAt: Date?
+    var isFavorite: Bool?
 }
 
 @MainActor
@@ -68,6 +69,10 @@ final class AppStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var notice: String?
     private let libraryURL: URL
+
+    var orderedApps: [SavedHTMLApp] {
+        apps.filter { $0.isFavorite == true } + apps.filter { $0.isFavorite != true }
+    }
 
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -89,7 +94,8 @@ final class AppStore: ObservableObject {
             favicon: icon,
             createdAt: now,
             updatedAt: now,
-            lastOpenedAt: nil
+            lastOpenedAt: nil,
+            isFavorite: false
         )
         apps.insert(app, at: 0)
         save()
@@ -123,11 +129,29 @@ final class AppStore: ObservableObject {
         runningApp = apps[index]
     }
 
+    func toggleFavorite(_ app: SavedHTMLApp) {
+        guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+        apps[index].isFavorite = !(apps[index].isFavorite == true)
+        save()
+        notice = apps[index].isFavorite == true ? "Pinned \(apps[index].name) to the top." : "Removed \(apps[index].name) from favorites."
+    }
+
     func delete(_ app: SavedHTMLApp) {
         apps.removeAll { $0.id == app.id }
         save()
         SourceCache.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
+    }
+
+    func exportHTML(_ app: SavedHTMLApp) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(OpticalTransferCodec.safeFileName(app.name))
+        do {
+            try Data(app.html.utf8).write(to: url, options: .atomic)
+            SharePresenter.present(items: [url])
+        } catch {
+            errorMessage = "The HTML file could not be exported."
+        }
     }
 
     func openDeepLink(_ url: URL) {
@@ -182,21 +206,23 @@ final class AppStore: ObservableObject {
 
     func results(for query: String) -> [SavedHTMLApp] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !value.isEmpty else { return apps }
-        return apps.compactMap { app -> (SavedHTMLApp, Int)? in
+        let ordered = orderedApps
+        guard !value.isEmpty else { return ordered }
+
+        return ordered.enumerated().compactMap { offset, app -> (SavedHTMLApp, Int, Int)? in
             let name = app.name.lowercased()
-            if name == value { return (app, 600) }
-            if name.hasPrefix(value) { return (app, 500) }
-            if name.contains(value) { return (app, 400) }
-            if app.summary.lowercased().contains(value) { return (app, 300) }
-            if HTMLTools.visibleText(in: app.html).lowercased().contains(value) { return (app, 200) }
-            if app.html.lowercased().contains(value) { return (app, 100) }
-            return nil
+            let score: Int
+            if name == value { score = 600 }
+            else if name.hasPrefix(value) { score = 500 }
+            else if name.contains(value) { score = 400 }
+            else if app.summary.lowercased().contains(value) { score = 300 }
+            else if HTMLTools.visibleText(in: app.html).lowercased().contains(value) { score = 200 }
+            else if app.html.lowercased().contains(value) { score = 100 }
+            else { return nil }
+            return (app, score, offset)
         }
-        .sorted {
-            $0.1 == $1.1
-                ? $0.0.name.localizedCaseInsensitiveCompare($1.0.name) == .orderedAscending
-                : $0.1 > $1.1
+        .sorted { left, right in
+            left.1 == right.1 ? left.2 < right.2 : left.1 > right.1
         }
         .map(\.0)
     }
