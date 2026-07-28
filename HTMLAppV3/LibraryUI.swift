@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @EnvironmentObject private var store: AppStore
@@ -7,6 +8,11 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var editor: EditorMode?
     @State private var showSettings = false
+    @State private var showAddOptions = false
+    @State private var importingFile = false
+    @State private var showReceiver = false
+    @State private var senderApp: SavedHTMLApp?
+    @State private var pendingImport: OpticalImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var profileApp: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
@@ -18,7 +24,7 @@ struct LibraryView: View {
         NavigationStack {
             Group {
                 if store.apps.isEmpty {
-                    EmptyLibraryView { editor = .new }
+                    EmptyLibraryView { showAddOptions = true }
                 } else if results.isEmpty {
                     ContentUnavailableViewCompat(
                         title: "No Results",
@@ -46,15 +52,40 @@ struct LibraryView: View {
                     .accessibilityLabel("Settings")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { editor = .new } label: {
+                    Button { showAddOptions = true } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Add HTML App")
+                    .accessibilityLabel("Add or Import HTML App")
                 }
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
             .sheet(item: $permissionsApp) { AppPermissionsView(app: $0) }
+            .sheet(item: $pendingImport) {
+                ImportHTMLDestinationView(payload: $0).environmentObject(store)
+            }
+            .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
+            .fullScreenCover(isPresented: $showReceiver) {
+                OpticalReceiverView { payload in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        pendingImport = payload
+                    }
+                }
+            }
+            .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
+                Button("Enter Custom Code") { editor = .new }
+                Button("Select an HTML File") { importingFile = true }
+                Button("Import from Another Device") { showReceiver = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Create an app from code, choose an HTML file, or scan a transfer from another device.")
+            }
+            .fileImporter(
+                isPresented: $importingFile,
+                allowedContentTypes: [.html, .plainText],
+                allowsMultipleSelection: false,
+                onCompletion: importFile
+            )
             .confirmationDialog(
                 "Install Home Screen Web Clip?",
                 isPresented: Binding(
@@ -73,7 +104,7 @@ struct LibraryView: View {
                 }
                 Button("Cancel", role: .cancel) { profileApp = nil }
             } message: {
-                Text("Safari will download the generated profile with its embedded icon. Then follow the iOS profile installation prompts.")
+                Text("Safari will open the generated profile with its embedded icon. Then follow the iOS profile installation prompts.")
             }
             .confirmationDialog(
                 "Delete \(pendingDelete?.name ?? "this app")?",
@@ -129,10 +160,10 @@ struct LibraryView: View {
                 .buttonStyle(.plain)
                 .contextMenu { appMenu(for: app) }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button { profileApp = app } label: {
-                        Label("Home Screen", systemImage: "apps.iphone")
+                    Button { store.toggleFavorite(app) } label: {
+                        Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
                     }
-                    .tint(.blue)
+                    .tint(.yellow)
                     Button { refresh(app) } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
@@ -161,14 +192,25 @@ struct LibraryView: View {
         Button { store.launch(app) } label: {
             Label("Open", systemImage: "play.fill")
         }
+        Button { store.toggleFavorite(app) } label: {
+            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top",
+                  systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
+        }
         Button { permissionsApp = app } label: {
             Label("Permissions", systemImage: "hand.raised.fill")
         }
-        Button { profileApp = app } label: {
-            Label("Install Home Screen Web Clip", systemImage: "apps.iphone")
-        }
         Button { editor = .edit(app) } label: {
             Label("Update HTML", systemImage: "pencil")
+        }
+        Divider()
+        Button { senderApp = app } label: {
+            Label("Send to Another Device", systemImage: "qrcode")
+        }
+        Button { store.exportHTML(app) } label: {
+            Label("Export HTML File", systemImage: "square.and.arrow.up")
+        }
+        Button { profileApp = app } label: {
+            Label("Install Home Screen Web Clip", systemImage: "apps.iphone")
         }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: {
@@ -190,6 +232,23 @@ struct LibraryView: View {
         }
     }
 
+    private func importFile(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+            guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                store.errorMessage = "The selected file was empty."
+                return
+            }
+            pendingImport = OpticalImportPayload(fileName: url.lastPathComponent, html: html)
+        } catch {
+            store.errorMessage = "The selected HTML file could not be opened."
+        }
+    }
+
     private func refresh(_ app: SavedHTMLApp) {
         refreshingID = app.id
         Task {
@@ -207,6 +266,16 @@ struct ListAppRow: View {
     var body: some View {
         HStack(spacing: 14) {
             AppIconView(app: app, size: 58)
+                .overlay(alignment: .topTrailing) {
+                    if app.isFavorite == true {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                            .padding(4)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .offset(x: 5, y: -5)
+                    }
+                }
             VStack(alignment: .leading, spacing: 5) {
                 Text(app.name)
                     .font(.headline)
@@ -260,7 +329,17 @@ struct PagedAppGrid: View {
                             Button { open(app) } label: {
                                 VStack(spacing: 7) {
                                     AppIconView(app: app, size: min(70, proxy.size.width / 5.2))
-                                        .shadow(color: .black.opacity(0.12), radius: 5, y: 3)
+                                        .shadow(color: Color.black.opacity(0.12), radius: 5, y: 3)
+                                        .overlay(alignment: .topTrailing) {
+                                            if app.isFavorite == true {
+                                                Image(systemName: "star.fill")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.yellow)
+                                                    .padding(4)
+                                                    .background(.regularMaterial, in: Circle())
+                                                    .offset(x: 5, y: -5)
+                                            }
+                                        }
                                     Text(app.name)
                                         .font(.caption)
                                         .foregroundStyle(.primary)
@@ -295,7 +374,7 @@ struct EmptyLibraryView: View {
                 .foregroundStyle(.tint)
             Text("Create your first HTML app")
                 .font(.title2.bold())
-            Text("Paste HTML, preview it, and save it as a full-screen app. Press and hold saved apps for more actions.")
+            Text("Enter HTML code, select a file, or receive an app from another device.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 34)
