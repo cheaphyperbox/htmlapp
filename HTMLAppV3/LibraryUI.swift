@@ -9,6 +9,7 @@ struct LibraryView: View {
     @State private var showSettings = false
     @State private var pendingDelete: SavedHTMLApp?
     @State private var profileApp: SavedHTMLApp?
+    @State private var permissionsApp: SavedHTMLApp?
     @State private var refreshingID: String?
 
     private var results: [SavedHTMLApp] { store.results(for: searchText) }
@@ -53,6 +54,7 @@ struct LibraryView: View {
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
+            .sheet(item: $permissionsApp) { AppPermissionsView(app: $0) }
             .confirmationDialog(
                 "Install Home Screen Web Clip?",
                 isPresented: Binding(
@@ -87,7 +89,7 @@ struct LibraryView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("Its HTML, icon, metadata, and cached sources will be removed.")
+                Text("Its HTML, icon, metadata, cached sources, and saved permission choices will be removed.")
             }
             .alert(
                 "HTMLApp",
@@ -158,6 +160,9 @@ struct LibraryView: View {
     private func appMenu(for app: SavedHTMLApp) -> some View {
         Button { store.launch(app) } label: {
             Label("Open", systemImage: "play.fill")
+        }
+        Button { permissionsApp = app } label: {
+            Label("Permissions", systemImage: "hand.raised.fill")
         }
         Button { profileApp = app } label: {
             Label("Install Home Screen Web Clip", systemImage: "apps.iphone")
