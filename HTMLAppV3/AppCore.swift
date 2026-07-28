@@ -6,6 +6,10 @@ struct HTMLAppMain: App {
     @StateObject private var store = AppStore()
     @AppStorage("onboardingComplete") private var onboardingComplete = false
 
+    init() {
+        HTMLNotificationCenterDelegate.shared.activate()
+    }
+
     var body: some Scene {
         WindowGroup {
             LibraryView()
@@ -36,6 +40,11 @@ struct HTMLAppMain: App {
                     Text("The current HTML app will be unloaded before the linked app opens.")
                 }
                 .onOpenURL(perform: store.openDeepLink)
+                .onReceive(NotificationCenter.default.publisher(for: .htmlAppNotificationOpened)) { notification in
+                    if let url = notification.object as? URL {
+                        store.openDeepLink(url)
+                    }
+                }
         }
     }
 }
@@ -118,6 +127,7 @@ final class AppStore: ObservableObject {
         apps.removeAll { $0.id == app.id }
         save()
         SourceCache.shared.remove(appID: app.id)
+        HTMLPermissionStore.reset(appID: app.id)
     }
 
     func openDeepLink(_ url: URL) {
