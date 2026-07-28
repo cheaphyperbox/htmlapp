@@ -25,26 +25,18 @@ enum OpticalTransferCodec {
     }
 
     static func frames(fileName: String, html: String) -> [String] {
-        let envelope = OpticalEnvelope(fileName: fileName, html: html)
-        guard let payload = try? JSONEncoder().encode(envelope) else { return [] }
+        guard let payload = try? JSONEncoder().encode(OpticalEnvelope(fileName: fileName, html: html)) else { return [] }
         let transferID = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
         let chunks = stride(from: 0, to: payload.count, by: rawChunkSize).map {
             payload.subdata(in: $0..<min($0 + rawChunkSize, payload.count))
         }
-        let total = chunks.count
-        guard total > 0 else { return [] }
+        guard !chunks.isEmpty else { return [] }
 
-        var output: [String] = []
-        for blockStart in stride(from: 0, to: total, by: parityBlockSize) {
-            let blockEnd = min(blockStart + parityBlockSize, total)
+        var frames: [String] = []
+        for blockStart in stride(from: 0, to: chunks.count, by: parityBlockSize) {
+            let blockEnd = min(blockStart + parityBlockSize, chunks.count)
             for index in blockStart..<blockEnd {
-                output.append(frame(
-                    transferID: transferID,
-                    kind: "D",
-                    index: index,
-                    total: total,
-                    payload: chunks[index]
-                ))
+                frames.append(makeFrame(transferID, "D", index, chunks.count, chunks[index]))
             }
 
             let block = Array(chunks[blockStart..<blockEnd])
@@ -59,18 +51,12 @@ enum OpticalTransferCodec {
                     }
                 }
             }
-            output.append(frame(
-                transferID: transferID,
-                kind: "P",
-                index: blockStart / parityBlockSize,
-                total: total,
-                payload: parity
-            ))
+            frames.append(makeFrame(transferID, "P", blockStart / parityBlockSize, chunks.count, parity))
         }
-        return output
+        return frames
     }
 
-    private static func frame(transferID: String, kind: String, index: Int, total: Int, payload: Data) -> String {
+    private static func makeFrame(_ transferID: String, _ kind: String, _ index: Int, _ total: Int, _ payload: Data) -> String {
         "HAT1|\(transferID)|\(kind)|\(String(index, radix: 36))|\(String(total, radix: 36))|\(String(parityBlockSize, radix: 36))|\(payload.base64EncodedString())"
     }
 
@@ -80,9 +66,8 @@ enum OpticalTransferCodec {
         filter.correctionLevel = "M"
         guard let output = filter.outputImage else { return nil }
         let scale = max(1, floor(size / output.extent.width))
-        let transformed = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let context = CIContext(options: [.useSoftwareRenderer: false])
-        guard let cgImage = context.createCGImage(transformed, from: transformed.extent) else { return nil }
+        let image = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        guard let cgImage = CIContext().createCGImage(image, from: image.extent) else { return nil }
         return UIImage(cgImage: cgImage)
     }
 
@@ -106,8 +91,7 @@ final class OpticalFrameCollector: ObservableObject {
     private var blockSize = OpticalTransferCodec.parityBlockSize
 
     var progress: Double {
-        guard totalExpected > 0 else { return 0 }
-        return min(1, Double(receivedCount) / Double(totalExpected))
+        totalExpected == 0 ? 0 : min(1, Double(receivedCount) / Double(totalExpected))
     }
 
     func accept(_ string: String) {
@@ -117,29 +101,21 @@ final class OpticalFrameCollector: ObservableObject {
               let index = Int(parts[3], radix: 36),
               let total = Int(parts[4], radix: 36),
               let parsedBlockSize = Int(parts[5], radix: 36),
-              let data = Data(base64Encoded: parts[6]), total > 0 else { return }
+              let payload = Data(base64Encoded: parts[6]), total > 0 else { return }
 
         if transferID == nil {
             transferID = parts[1]
             totalExpected = total
             blockSize = max(1, parsedBlockSize)
-            status = "Receiving \(total) data frames…"
         }
         guard transferID == parts[1], totalExpected == total else { return }
 
-        if parts[2] == "D" {
-            if chunks[index] == nil {
-                chunks[index] = data
-                receivedCount = chunks.count
-                attemptRecovery(blockIndex: index / blockSize)
-            }
-        } else if parts[2] == "P" {
-            if parity[index] == nil {
-                parity[index] = data
-                attemptRecovery(blockIndex: index)
-            }
-        } else {
-            return
+        if parts[2] == "D", chunks[index] == nil {
+            chunks[index] = payload
+            recover(blockIndex: index / blockSize)
+        } else if parts[2] == "P", parity[index] == nil {
+            parity[index] = payload
+            recover(blockIndex: index)
         }
 
         receivedCount = chunks.count
@@ -147,21 +123,22 @@ final class OpticalFrameCollector: ObservableObject {
         if chunks.count == totalExpected { assemble() }
     }
 
-    private func attemptRecovery(blockIndex: Int) {
-        guard let parityData = parity[blockIndex], totalExpected > 0 else { return }
+    private func recover(blockIndex: Int) {
+        guard let parityData = parity[blockIndex] else { return }
         let start = blockIndex * blockSize
         let end = min(start + blockSize, totalExpected)
         let missing = (start..<end).filter { chunks[$0] == nil }
         guard missing.count == 1 else { return }
 
         var recovered = parityData
+        let recoveredLength = recovered.count
         recovered.withUnsafeMutableBytes { recoveredBuffer in
             guard let recoveredBytes = recoveredBuffer.bindMemory(to: UInt8.self).baseAddress else { return }
             for index in start..<end where index != missing[0] {
                 guard let chunk = chunks[index] else { return }
                 chunk.withUnsafeBytes { chunkBuffer in
                     guard let bytes = chunkBuffer.bindMemory(to: UInt8.self).baseAddress else { return }
-                    for offset in 0..<min(chunk.count, recovered.count) { recoveredBytes[offset] ^= bytes[offset] }
+                    for offset in 0..<min(chunk.count, recoveredLength) { recoveredBytes[offset] ^= bytes[offset] }
                 }
             }
         }
@@ -179,7 +156,7 @@ final class OpticalFrameCollector: ObservableObject {
             data.append(chunk)
         }
         guard let envelope = try? JSONDecoder().decode(OpticalEnvelope.self, from: data) else {
-            status = "All frames arrived, but the HTML file could not be decoded."
+            status = "The complete transfer could not be decoded."
             return
         }
         status = "Transfer complete"
@@ -226,7 +203,6 @@ struct OpticalSenderView: View {
             .navigationTitle("Send \(app.name)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
             .onAppear { frames = OpticalTransferCodec.frames(for: app) }
             .onReceive(timer) { _ in
                 guard !paused, !frames.isEmpty else { return }
@@ -246,17 +222,14 @@ struct OpticalReceiverView: View {
             VStack(spacing: 18) {
                 OpticalScannerView { collector.accept($0) }
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(alignment: .center) {
+                    .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .strokeBorder(.white.opacity(0.9), style: StrokeStyle(lineWidth: 3, dash: [12, 8]))
                             .padding(40)
                     }
                     .frame(maxHeight: 520)
                 ProgressView(value: collector.progress)
-                    .progressViewStyle(.linear)
-                Text(collector.status)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+                Text(collector.status).font(.headline).multilineTextAlignment(.center)
                 if collector.totalExpected > 0 {
                     Text("\(Int(collector.progress * 100))% complete")
                         .font(.caption)
@@ -321,13 +294,15 @@ private final class OpticalScannerViewController: UIViewController, AVCaptureMet
 
     private func requestAndStart() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized: configureAndStart()
+        case .authorized:
+            configureAndStart()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 guard granted else { return }
                 DispatchQueue.main.async { self?.configureAndStart() }
             }
-        default: break
+        default:
+            break
         }
     }
 
@@ -340,7 +315,10 @@ private final class OpticalScannerViewController: UIViewController, AVCaptureMet
             session.sessionPreset = .high
             session.addInput(input)
             let output = AVCaptureMetadataOutput()
-            guard session.canAddOutput(output) else { session.commitConfiguration(); return }
+            guard session.canAddOutput(output) else {
+                session.commitConfiguration()
+                return
+            }
             session.addOutput(output)
             output.setMetadataObjectsDelegate(self, queue: .main)
             output.metadataObjectTypes = [.qr]
@@ -353,7 +331,9 @@ private final class OpticalScannerViewController: UIViewController, AVCaptureMet
             configured = true
         }
         if !session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in self?.session.startRunning() }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+            }
         }
     }
 
@@ -361,10 +341,10 @@ private final class OpticalScannerViewController: UIViewController, AVCaptureMet
                         didOutput metadataObjects: [AVMetadataObject],
                         from connection: AVCaptureConnection) {
         for object in metadataObjects {
-            if let qr = object as? AVMetadataMachineReadableCodeObject,
-               let value = qr.stringValue, value.hasPrefix("HAT1|") {
-                onCode(value)
-            }
+            guard let qr = object as? AVMetadataMachineReadableCodeObject,
+                  let value = qr.stringValue,
+                  value.hasPrefix("HAT1|") else { continue }
+            onCode(value)
         }
     }
 }
@@ -379,9 +359,7 @@ struct ImportHTMLDestinationView: View {
         NavigationStack {
             List {
                 Section {
-                    Button {
-                        installNew()
-                    } label: {
+                    Button { installNew() } label: {
                         Label("Install as New HTML App", systemImage: "plus.app.fill")
                     }
                     .disabled(working)
@@ -397,7 +375,9 @@ struct ImportHTMLDestinationView: View {
                                     AppIconView(app: app, size: 44)
                                     Text(app.name).foregroundStyle(.primary)
                                     Spacer()
-                                    if app.isFavorite == true { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+                                    if app.isFavorite == true {
+                                        Image(systemName: "star.fill").foregroundStyle(.yellow)
+                                    }
                                 }
                             }
                             .disabled(working)
