@@ -31,13 +31,14 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UIRequiredDeviceCapabilities: arm64
-        INFOPLIST_KEY_NSCameraUsageDescription: HTML apps may request camera access after you approve access for that saved app.
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: HTML apps may request microphone access after you approve access for that saved app.
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: HTML apps may request your location after you approve access for that saved app.
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: HTML apps may request selected photo access after you approve access.
     info:
       path: HTMLApp/Info.plist
       properties:
+        CFBundleDisplayName: HTMLApp
+        NSCameraUsageDescription: HTML apps can use the camera only after you allow that saved app and approve the iOS permission.
+        NSMicrophoneUsageDescription: HTML apps can use the microphone only after you allow that saved app and approve the iOS permission.
+        NSLocationWhenInUseUsageDescription: HTML apps can request your location only after you allow that saved app and approve the iOS permission.
+        NSPhotoLibraryUsageDescription: HTML apps may request access to photos you select.
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLName: com.mekabrine.htmlapp
