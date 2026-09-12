@@ -1,24 +1,23 @@
 import Foundation
+import SwiftUI
 
 struct AIGenerationOutput {
-    var html: String
-    var description: String
-    var iconScript: String
-    var refinedBrief: String
+    var html = ""
+    var description = ""
+    var iconScript = ""
+    var refinedBrief = ""
 }
 
 enum AIGenerationError: LocalizedError {
-    case notConfigured
-    case invalidEndpoint
-    case badResponse(String)
-    case missingHTML
+    case notConfigured, invalidEndpoint, missingHTML
+    case provider(String)
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "Configure an AI API URL and model in Settings first."
         case .invalidEndpoint: return "The configured AI API URL is invalid."
-        case .badResponse(let value): return value
         case .missingHTML: return "The AI response did not contain a complete HTML app."
+        case .provider(let message): return message
         }
     }
 }
@@ -30,78 +29,52 @@ final class AIGenerationSession: ObservableObject {
     @Published var refinedBrief = ""
     @Published var description = ""
     @Published var iconScript = ""
-    @Published var rawResponse = ""
     @Published var errorMessage: String?
     @Published var isWorking = false
 
-    private var conversation: [(role: String, content: String)] = []
+    private var conversation: [(String, String)] = []
     private var originalPrompt = ""
 
     func generate(prompt: String) async {
         originalPrompt = prompt
         conversation = []
-        await run(userRequest: prompt, existingHTML: nil)
+        await run(request: prompt, existingHTML: nil)
     }
 
     func revise(change: String) async {
         guard !streamedHTML.isEmpty else { return }
-        let request = "Revise the current HTML app with these changes:\n\(change)"
-        await run(userRequest: request, existingHTML: streamedHTML)
+        await run(request: "Revise the current app with these changes:\n\(change)", existingHTML: streamedHTML)
     }
 
-    private func run(userRequest: String, existingHTML: String?) async {
-        let configuration = AISettingsStore.configuration
-        guard configuration.isConfigured else {
-            errorMessage = AIGenerationError.notConfigured.localizedDescription
-            return
-        }
-
+    private func run(request: String, existingHTML: String?) async {
+        let config = AISettingsStore.configuration
+        guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         isWorking = true
         errorMessage = nil
-        rawResponse = ""
         phase = "Refining your idea"
-
         do {
-            let researchQueries = try await AIHTMLAgent.planResearch(
-                request: originalPrompt,
-                revision: existingHTML == nil ? nil : userRequest,
-                configuration: configuration
-            )
-
-            phase = researchQueries.isEmpty ? "Designing the app" : "Checking public APIs"
-            let research = await SafePublicAPIResearch.research(queries: researchQueries)
-
+            let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: existingHTML == nil ? nil : request, config: config)
+            phase = queries.isEmpty ? "Designing the app" : "Checking public APIs"
+            let research = await SafePublicAPIResearch.research(queries: queries)
             phase = "Generating live preview"
-            let systemPrompt = AIHTMLAgent.systemPrompt(research: research)
-            var messages: [(String, String)] = conversation
+
+            var messages = conversation
             if let existingHTML {
-                messages.append(("user", "Current HTML app:\n<htmlapp_existing>\n\(existingHTML)\n</htmlapp_existing>\n\nRequested change:\n\(userRequest)"))
+                messages.append(("user", "Current HTML app:\n<htmlapp_existing>\n\(existingHTML)\n</htmlapp_existing>\n\nRequested change:\n\(request)"))
             } else {
-                messages.append(("user", userRequest))
+                messages.append(("user", request))
             }
 
-            let stream = try await AIProviderClient.stream(
-                configuration: configuration,
-                system: systemPrompt,
-                messages: messages
-            )
-
+            let stream = try await AIProviderClient.stream(config: config, system: AIHTMLAgent.systemPrompt(research: research), messages: messages)
             var full = ""
-            for try await text in stream {
-                full += text
-                rawResponse = full
-                updateParsedState(from: full)
+            for try await piece in stream {
+                full += piece
+                apply(AIHTMLAgent.parsePartial(full), partial: true)
             }
-
             let final = AIHTMLAgent.parse(full)
-            guard !final.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw AIGenerationError.missingHTML
-            }
-            streamedHTML = final.html
-            description = final.description
-            iconScript = final.iconScript
-            refinedBrief = final.refinedBrief
-            conversation.append(("user", userRequest))
+            guard !final.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIGenerationError.missingHTML }
+            apply(final, partial: false)
+            conversation.append(("user", request))
             conversation.append(("assistant", full))
             phase = "Ready to review"
         } catch {
@@ -111,123 +84,95 @@ final class AIGenerationSession: ObservableObject {
         isWorking = false
     }
 
-    private func updateParsedState(from text: String) {
-        let partial = AIHTMLAgent.parsePartial(text)
-        if !partial.html.isEmpty { streamedHTML = HTMLStreamRepair.previewDocument(partial.html) }
-        if !partial.description.isEmpty { description = partial.description }
-        if !partial.iconScript.isEmpty { iconScript = partial.iconScript }
-        if !partial.refinedBrief.isEmpty { refinedBrief = partial.refinedBrief }
+    private func apply(_ output: AIGenerationOutput, partial: Bool) {
+        if !output.html.isEmpty { streamedHTML = partial ? HTMLStreamRepair.previewDocument(output.html) : output.html }
+        if !output.description.isEmpty { description = output.description }
+        if !output.iconScript.isEmpty { iconScript = output.iconScript }
+        if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
     }
 }
 
 enum AIProviderClient {
-    static func complete(configuration: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> String {
-        var value = ""
-        let stream = try await stream(configuration: configuration, system: system, messages: messages, forceStreaming: false)
-        for try await chunk in stream { value += chunk }
-        return value
+    static func complete(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> String {
+        guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
+        var request = makeRequest(config: config, endpoint: endpoint)
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false))
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AIGenerationError.provider("The AI provider returned invalid JSON.") }
+        switch config.compatibility {
+        case .openAI:
+            if let choices = object["choices"] as? [[String: Any]], let message = choices.first?["message"] as? [String: Any], let text = message["content"] as? String { return text }
+        case .anthropic:
+            if let blocks = object["content"] as? [[String: Any]] { return blocks.compactMap { $0["text"] as? String }.joined() }
+        }
+        throw AIGenerationError.provider("The AI provider response did not contain text.")
     }
 
-    static func stream(configuration: AIProviderConfiguration, system: String, messages: [(String, String)], forceStreaming: Bool = true) async throws -> AsyncThrowingStream<String, Error> {
-        guard let endpoint = configuration.endpointURL() else { throw AIGenerationError.invalidEndpoint }
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 180
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: Any]
-        switch configuration.compatibility {
-        case .openAI:
-            if !configuration.apiKey.isEmpty { request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization") }
-            var encodedMessages: [[String: String]] = [["role": "system", "content": system]]
-            encodedMessages.append(contentsOf: messages.map { ["role": $0.0, "content": $0.1] })
-            body = [
-                "model": configuration.model,
-                "messages": encodedMessages,
-                "stream": forceStreaming
-            ]
-        case .anthropic:
-            if !configuration.apiKey.isEmpty { request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key") }
-            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-            body = [
-                "model": configuration.model,
-                "max_tokens": 32000,
-                "system": system,
-                "messages": messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] },
-                "stream": forceStreaming
-            ]
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        if !forceStreaming {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            try validate(response: response, data: data)
-            let text = try parseWholeResponse(data: data, compatibility: configuration.compatibility)
-            return AsyncThrowingStream { continuation in
-                continuation.yield(text)
-                continuation.finish()
-            }
-        }
-
+    static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
+        guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
+        var request = makeRequest(config: config, endpoint: endpoint)
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true))
         return AsyncThrowingStream { continuation in
             Task {
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                        throw AIGenerationError.badResponse("The AI provider returned an HTTP error.")
+                        throw AIGenerationError.provider("The AI provider returned an HTTP error.")
                     }
                     for try await line in bytes.lines {
                         guard line.hasPrefix("data:") else { continue }
-                        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                         if payload == "[DONE]" { break }
-                        guard let data = payload.data(using: .utf8),
-                              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                        if let delta = streamText(from: object, compatibility: configuration.compatibility), !delta.isEmpty {
-                            continuation.yield(delta)
-                        }
+                        guard let data = payload.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                        if let text = streamedText(object, type: config.compatibility), !text.isEmpty { continuation.yield(text) }
                     }
                     continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
+                } catch { continuation.finish(throwing: error) }
             }
         }
     }
 
-    private static func validate(response: URLResponse, data: Data) throws {
-        guard let http = response as? HTTPURLResponse else { return }
-        guard (200..<300).contains(http.statusCode) else {
-            let detail = String(data: data.prefix(1500), encoding: .utf8) ?? ""
-            throw AIGenerationError.badResponse("AI provider error \(http.statusCode): \(detail)")
-        }
-    }
-
-    private static func parseWholeResponse(data: Data, compatibility: AIProviderConfiguration.Compatibility) throws -> String {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw AIGenerationError.badResponse("The AI provider returned invalid JSON.")
-        }
-        switch compatibility {
+    private static func makeRequest(config: AIProviderConfiguration, endpoint: URL) -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        switch config.compatibility {
         case .openAI:
-            if let choices = object["choices"] as? [[String: Any]],
-               let message = choices.first?["message"] as? [String: Any],
-               let text = message["content"] as? String { return text }
+            if !config.apiKey.isEmpty { request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization") }
         case .anthropic:
-            if let content = object["content"] as? [[String: Any]] {
-                return content.compactMap { $0["text"] as? String }.joined()
-            }
+            if !config.apiKey.isEmpty { request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key") }
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         }
-        throw AIGenerationError.badResponse("The AI provider response did not contain text.")
+        return request
     }
 
-    private static func streamText(from object: [String: Any], compatibility: AIProviderConfiguration.Compatibility) -> String? {
-        switch compatibility {
+    private static func requestBody(config: AIProviderConfiguration, system: String, messages: [(String, String)], stream: Bool) -> [String: Any] {
+        switch config.compatibility {
         case .openAI:
-            guard let choices = object["choices"] as? [[String: Any]],
-                  let delta = choices.first?["delta"] as? [String: Any] else { return nil }
+            var list: [[String: String]] = [["role": "system", "content": system]]
+            list.append(contentsOf: messages.map { ["role": $0.0, "content": $0.1] })
+            return ["model": config.model, "messages": list, "stream": stream]
+        case .anthropic:
+            let list: [[String: String]] = messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] }
+            return ["model": config.model, "max_tokens": 32000, "system": system, "messages": list, "stream": stream]
+        }
+    }
+
+    private static func validate(_ response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) else { return }
+        let detail = String(decoding: data.prefix(1500), as: UTF8.self)
+        throw AIGenerationError.provider("AI provider error \(http.statusCode): \(detail)")
+    }
+
+    private static func streamedText(_ object: [String: Any], type: AIProviderConfiguration.Compatibility) -> String? {
+        switch type {
+        case .openAI:
+            guard let choices = object["choices"] as? [[String: Any]], let delta = choices.first?["delta"] as? [String: Any] else { return nil }
             return delta["content"] as? String
         case .anthropic:
-            guard object["type"] as? String == "content_block_delta",
-                  let delta = object["delta"] as? [String: Any] else { return nil }
+            guard object["type"] as? String == "content_block_delta", let delta = object["delta"] as? [String: Any] else { return nil }
             return delta["text"] as? String
         }
     }
@@ -235,122 +180,100 @@ enum AIProviderClient {
 
 enum AIHTMLAgent {
     static let designGuide = """
-Build one self-contained, standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, and inline SVG icons. It should feel like a premium native iOS 26 app translated to the web: restrained Liquid Glass used mainly for navigation/controls/sheets, strong hierarchy, large-title navigation, Apple-like spacing, spring motion, safe-area support, adaptive phone/tablet layouts, light and dark themes, polished loading/empty/error states, 44pt touch targets, accessibility, and no dead controls. Avoid generic SaaS dashboards, excessive gradients/glow/blur, Material-style UI, emoji icons, generic browser alerts, and permission prompts on page load. Browser APIs that require permission must only activate after a user gesture. Use local fallback data for remote APIs and handle offline/rate-limit failures gracefully.
+Create one self-contained standards-compliant HTML file: semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, no framework or build step. It must feel like a premium native iOS 26 product: restrained Liquid Glass mainly for navigation, controls, sheets and overlays; native-feeling navigation; clear hierarchy; Apple-like spacing; spring motion; safe areas; adaptive phone/tablet layouts; light and dark appearance; loading, empty, error and offline states; accessible 44px touch targets; no dead controls. Avoid generic SaaS dashboards, excessive blur/glow/gradients, Material-style UI, emoji icons and browser alert() for routine feedback. Permission-requiring APIs may only activate after an explicit user gesture. Use realistic local fallback data when remote data fails.
 """
 
     static let iconGuide = """
-For the app icon, output a static drawing script only inside <icon_script>. The drawing language supports: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; and optional FILL_LINEAR, FILL_RADIAL, or FILL_TEXTURE immediately before a shape. Use absolute coordinates, draw back-to-front, CSS/HEX colors, and never use ANIM, GROUP, or FPS. The script will be POSTed as JSON {"code":"..."} to the configured image renderer.
+Inside <icon_script>, output only a static drawing script. Commands: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Use absolute coordinates and CSS/HEX colors, draw back-to-front, and never use ANIM, GROUP or FPS.
 """
 
-    static func planResearch(request: String, revision: String?, configuration: AIProviderConfiguration) async throws -> [String] {
-        let system = """
-You are a fast planning agent for a single-file HTML app generator. Return only zero to four concise public-API search queries, one per <query> tag. Use research only when live data materially improves the requested app. Do not search for age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition content. Prefer APIs with no authentication, then documented free tiers. If no research is needed, return <research></research>.
-"""
-        let user = revision.map { "Original request: \(request)\nRevision: \($0)" } ?? request
-        let result = try await AIProviderClient.complete(configuration: configuration, system: system, messages: [("user", user)])
-        return tagValues("query", in: result).prefix(4).map { String($0) }
+    static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> [String] {
+        let system = "Return zero to four concise safe public-API search queries, each inside <query>. Research only if live data materially helps. Prefer no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If none is needed, return <research></research>."
+        let user = revision.map { "Original: \(original)\nRevision: \($0)" } ?? original
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+        return tagValues("query", in: text).prefix(4).map(String.init)
     }
 
     static func systemPrompt(research: String) -> String {
         """
-You are HTMLApp's app-building agent. Complete the task quickly and produce a production-quality single-file HTML app.
+You are HTMLApp's fast app-building agent. Refine the request into a concise implementation brief, then build the app. Do not reveal hidden chain-of-thought; <thinking> is only a short user-facing requirements/design brief.
 
-First refine the user's idea into a concise implementation brief inside <thinking>. This is a short requirements/design brief, not hidden chain-of-thought. Then output a user-facing one-sentence app description in <description>. Then output an icon drawing script in <icon_script>. Finally output the complete app in <htmlapp_code>.
+Return exactly these sections with no Markdown fences:
+<thinking>concise refined brief</thinking>
+<description>one sentence describing the finished app</description>
+<icon_script>static icon drawing script</icon_script>
+<htmlapp_code><!DOCTYPE html>...complete app...</htmlapp_code>
 
-Required output structure:
-<thinking>concise refined requirements</thinking>
-<description>one sentence</description>
-<icon_script>static drawing script</icon_script>
-<htmlapp_code><!DOCTYPE html>...</htmlapp_code>
-
-Do not wrap the response in Markdown fences. Do not put commentary outside these tags.
-
-DESIGN INSTRUCTIONS:
+DESIGN RULES:
 \(designGuide)
 
-ICON INSTRUCTIONS:
+ICON RULES:
 \(iconGuide)
 
-PUBLIC API RESEARCH:
-The catalog routing policy is: prefer Auth=None, then APIs with a documented free tier; only use OAuth when account access is essential; endpoint placeholders are not literal URLs; verify current documentation. Restricted categories are intentionally excluded from research.
-\(research.isEmpty ? "No external API research was needed." : research)
+API ROUTING:
+Prefer Auth=None, then documented free tiers. OAuth only when account access is essential. Endpoint placeholders are not literal URLs. Never embed private keys in generated HTML. Restricted API categories are excluded. Include local fallback data.
 
-When using an API, include robust fallback data. Never expose secrets in generated HTML. If an API requires a private key and no safe demo fallback exists, choose another source.
+RESEARCH RESULTS:
+\(research.isEmpty ? "No external API research was needed." : research)
 """
     }
 
     static func parse(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(
-            html: tagValue("htmlapp_code", in: text),
-            description: tagValue("description", in: text).trimmingCharacters(in: .whitespacesAndNewlines),
-            iconScript: tagValue("icon_script", in: text).trimmingCharacters(in: .whitespacesAndNewlines),
-            refinedBrief: tagValue("thinking", in: text).trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        AIGenerationOutput(html: tagValue("htmlapp_code", in: text), description: tagValue("description", in: text).trimmed, iconScript: tagValue("icon_script", in: text).trimmed, refinedBrief: tagValue("thinking", in: text).trimmed)
     }
 
     static func parsePartial(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(
-            html: partialTagValue("htmlapp_code", in: text),
-            description: partialTagValue("description", in: text).trimmingCharacters(in: .whitespacesAndNewlines),
-            iconScript: partialTagValue("icon_script", in: text).trimmingCharacters(in: .whitespacesAndNewlines),
-            refinedBrief: partialTagValue("thinking", in: text).trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        AIGenerationOutput(html: partialTag("htmlapp_code", in: text), description: partialTag("description", in: text).trimmed, iconScript: partialTag("icon_script", in: text).trimmed, refinedBrief: partialTag("thinking", in: text).trimmed)
     }
 
     private static func tagValues(_ tag: String, in text: String) -> [String] {
-        var values: [String] = []
-        var remainder = text[...]
-        let open = "<\(tag)>"
-        let close = "</\(tag)>"
-        while let start = remainder.range(of: open) {
-            let after = remainder[start.upperBound...]
-            guard let end = after.range(of: close) else { break }
-            values.append(String(after[..<end.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines))
-            remainder = after[end.upperBound...]
+        var result: [String] = []
+        var remaining = text[...]
+        let open = "<\(tag)>"; let close = "</\(tag)>"
+        while let start = remaining.range(of: open) {
+            let tail = remaining[start.upperBound...]
+            guard let end = tail.range(of: close) else { break }
+            result.append(String(tail[..<end.lowerBound]).trimmed)
+            remaining = tail[end.upperBound...]
         }
-        return values
+        return result
     }
 
     private static func tagValue(_ tag: String, in text: String) -> String { tagValues(tag, in: text).first ?? "" }
-
-    private static func partialTagValue(_ tag: String, in text: String) -> String {
-        let open = "<\(tag)>"
+    private static func partialTag(_ tag: String, in text: String) -> String {
+        let open = "<\(tag)>"; let close = "</\(tag)>"
         guard let start = text.range(of: open) else { return "" }
-        let after = text[start.upperBound...]
-        let close = "</\(tag)>"
-        if let end = after.range(of: close) { return String(after[..<end.lowerBound]) }
-        return String(after)
+        let tail = text[start.upperBound...]
+        if let end = tail.range(of: close) { return String(tail[..<end.lowerBound]) }
+        return String(tail)
     }
 }
 
 enum SafePublicAPIResearch {
-    private static let source = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
-    private static let blockedTerms = ["gambling", "betting", "casino", "alcohol", "beer", "wine", "weapon", "gun", "firearm", "drug", "porn", "adult", "malware"]
+    private static let catalogURL = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
+    private static let excluded = ["gambling", "betting", "casino", "alcohol", "beer", "wine", "weapon", "firearm", "drug", "porn", "adult", "malware"]
 
     static func research(queries: [String]) async -> String {
         guard !queries.isEmpty else { return "" }
-        guard let (data, _) = try? await URLSession.shared.data(from: source),
-              let catalog = String(data: data, encoding: .utf8) else { return "Public API catalog could not be reached; use local fallback data." }
-
-        var sections: [String] = []
-        for query in queries where isSafe(query) {
-            let terms = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
-            let rows = catalog.split(separator: "\n").map(String.init).filter { line in
-                guard line.hasPrefix("|") else { return false }
-                let lower = line.lowercased()
-                guard !blockedTerms.contains(where: { lower.contains($0) }) else { return false }
-                return terms.contains(where: { lower.contains($0) })
-            }.prefix(8)
-            if !rows.isEmpty {
-                sections.append("Query: \(query)\n" + rows.joined(separator: "\n"))
-            }
+        guard let (data, _) = try? await URLSession.shared.data(from: catalogURL), let catalog = String(data: data, encoding: .utf8) else {
+            return "The public API catalog is unavailable. Build the app with robust local fallback data."
         }
-        return sections.joined(separator: "\n\n")
+        var output: [String] = []
+        for query in queries where safe(query) {
+            let terms = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+            let rows = catalog.split(separator: "\n").map(String.init).filter { row in
+                guard row.hasPrefix("|") else { return false }
+                let lower = row.lowercased()
+                return !excluded.contains(where: lower.contains) && terms.contains(where: lower.contains)
+            }.prefix(8)
+            if !rows.isEmpty { output.append("Query: \(query)\n" + rows.joined(separator: "\n")) }
+        }
+        return output.joined(separator: "\n\n")
     }
 
-    private static func isSafe(_ query: String) -> Bool {
+    private static func safe(_ query: String) -> Bool {
         let lower = query.lowercased()
-        return !blockedTerms.contains(where: { lower.contains($0) })
+        return !excluded.contains(where: lower.contains)
     }
 }
 
@@ -359,36 +282,32 @@ enum HTMLStreamRepair {
         var html = fragment
         let lower = html.lowercased()
         if !lower.contains("<!doctype") && !lower.contains("<html") {
-            html = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"></head><body>" + html
+            html = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"></head><body>" + html
         }
-        if count("<script", in: html) > count("</script>", in: html) { html += "\n</script>" }
-        if count("<style", in: html) > count("</style>", in: html) { html += "\n</style>" }
-        if count("<head", in: html) > count("</head>", in: html) { html += "\n</head>" }
-        if count("<body", in: html) > count("</body>", in: html) { html += "\n</body>" }
-        if count("<html", in: html) > count("</html>", in: html) { html += "\n</html>" }
+        if count("<script", html) > count("</script>", html) { html += "\n</script>" }
+        if count("<style", html) > count("</style>", html) { html += "\n</style>" }
+        if count("<head", html) > count("</head>", html) { html += "\n</head>" }
+        if count("<body", html) > count("</body>", html) { html += "\n</body>" }
+        if count("<html", html) > count("</html>", html) { html += "\n</html>" }
         return html
     }
-
-    private static func count(_ needle: String, in value: String) -> Int {
-        value.lowercased().components(separatedBy: needle).count - 1
-    }
+    private static func count(_ needle: String, _ haystack: String) -> Int { haystack.lowercased().components(separatedBy: needle).count - 1 }
 }
 
 enum AIIconRenderer {
-    static let endpoint = URL(string: "https://mekapc.hostish.site/api/image")!
-
     static func render(script: String) async -> Data? {
-        let cleaned = script.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { return nil }
-        var request = URLRequest(url: endpoint)
+        let code = script.trimmed
+        guard !code.isEmpty, let url = URL(string: "https://mekapc.hostish.site/api/image") else { return nil }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["code": cleaned])
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
-              !data.isEmpty else { return nil }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["code": code])
+        guard let (data, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), !data.isEmpty else { return nil }
         return data
     }
+}
+
+private extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
