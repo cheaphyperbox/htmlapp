@@ -8,6 +8,8 @@ struct AIGenerationView: View {
     @State private var changePrompt = ""
     @State private var showingChange = false
     @State private var saving = false
+    @State private var showCancelConfirmation = false
+    @State private var uiPolishNotice: String?
 
     var body: some View {
         NavigationStack {
@@ -22,9 +24,25 @@ struct AIGenerationView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(saving)
+                    Button("Cancel") {
+                        if session.isWorking || !session.streamedHTML.isEmpty {
+                            showCancelConfirmation = true
+                        } else {
+                            dismiss()
+                        }
+                    }
+                    .disabled(saving)
                 }
+            }
+            .confirmationDialog(
+                "Discard this AI generation?",
+                isPresented: $showCancelConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Discard and Close", role: .destructive) { dismiss() }
+                Button("Keep Working", role: .cancel) {}
+            } message: {
+                Text("The generated preview and current AI work will be lost if you close it without saving.")
             }
             .alert("Generation Error", isPresented: Binding(
                 get: { session.errorMessage != nil },
@@ -35,6 +53,7 @@ struct AIGenerationView: View {
                 Text(session.errorMessage ?? "")
             }
         }
+        .interactiveDismissDisabled(true)
     }
 
     private var promptView: some View {
@@ -46,12 +65,12 @@ struct AIGenerationView: View {
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("Describe the app, its purpose, and any data you want it to use. HTMLApp will refine the idea, research suitable public APIs when useful, and build a live preview.")
+                Text("Describe the app, its purpose, and any data you want it to use. HTMLApp will refine the idea, research suitable public APIs when useful, build a live preview, and optionally run the finished UI through your separate UI Overhaul model.")
             }
 
             Section {
                 Button {
-                    Task { await session.generate(prompt: prompt) }
+                    generateApp()
                 } label: {
                     Label("Generate HTML App", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
@@ -67,24 +86,39 @@ struct AIGenerationView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if AISettingsStore.isUIOverhaulEnabled {
+                Section {
+                    Label("A separate UI Overhaul model will make a conservative visual-only refinement after the functional generation finishes.", systemImage: "paintbrush")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
     private var studioView: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    if session.isWorking { ProgressView() }
-                    Text(session.phase)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    if !session.refinedBrief.isEmpty {
-                        Menu {
-                            Text(session.refinedBrief)
-                        } label: {
-                            Image(systemName: "doc.text.magnifyingglass")
+                VStack(spacing: 4) {
+                    HStack(spacing: 10) {
+                        if session.isWorking { ProgressView() }
+                        Text(session.phase)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        if !session.refinedBrief.isEmpty {
+                            Menu {
+                                Text(session.refinedBrief)
+                            } label: {
+                                Image(systemName: "doc.text.magnifyingglass")
+                            }
+                            .accessibilityLabel("View refined brief")
                         }
-                        .accessibilityLabel("View refined brief")
+                    }
+                    if let uiPolishNotice {
+                        Text(uiPolishNotice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -108,6 +142,7 @@ struct AIGenerationView: View {
                                     let change = changePrompt
                                     changePrompt = ""
                                     showingChange = false
+                                    uiPolishNotice = nil
                                     Task { await session.revise(change: change) }
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -148,6 +183,32 @@ struct AIGenerationView: View {
         """
         <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font-family:-apple-system;background:#f2f2f7;color:#111;display:grid;place-items:center;min-height:100vh}main{text-align:center;padding:32px}.dot{width:12px;height:12px;border-radius:50%;background:#007aff;margin:18px auto;animation:p 1s infinite alternate}@keyframes p{to{transform:scale(1.6);opacity:.35}}@media(prefers-color-scheme:dark){body{background:#000;color:#fff}}</style></head><body><main><h2>Building your app</h2><p>The live preview will appear as HTML is generated.</p><div class="dot"></div></main></body></html>
         """
+    }
+
+    private func generateApp() {
+        let originalPrompt = prompt
+        uiPolishNotice = nil
+        Task {
+            await session.generate(prompt: originalPrompt)
+            guard session.errorMessage == nil,
+                  !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  AISettingsStore.isUIOverhaulEnabled else { return }
+
+            let functionalHTML = session.streamedHTML
+            session.isWorking = true
+            session.phase = "Polishing the interface"
+            do {
+                let polished = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
+                session.streamedHTML = polished
+                session.phase = "Ready to review"
+                uiPolishNotice = "UI Overhaul finished without intentionally changing app functionality."
+            } catch {
+                session.streamedHTML = functionalHTML
+                session.phase = "Ready to review"
+                uiPolishNotice = "UI Overhaul was skipped because it failed. The original functional generation was preserved."
+            }
+            session.isWorking = false
+        }
     }
 
     private func saveGeneratedApp() {
