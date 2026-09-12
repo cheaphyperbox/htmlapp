@@ -9,7 +9,7 @@ struct OnboardingView: View {
         ("Generate with AI", "sparkles", "Configure an OpenAI-compatible or Anthropic-compatible API in Settings. Describe what you want, watch the app appear live, then keep it or ask for changes."),
         ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold anywhere for the full menu."),
         ("Choose your layout", "square.grid.3x3", "Use List for details or Grid for an iPhone-style Home Screen. Grid apps automatically continue onto swipeable pages."),
-        ("Device capabilities", "sensor.tag.radiowaves.forward", "Each app can have separate camera, microphone, location, notification, and motion/orientation choices. Haptics are available after user interaction without a per-app permission."),
+        ("Device capabilities", "gyroscope", "Each app can have separate camera, microphone, location, notification, and motion/orientation choices. Haptics are available after user interaction without a per-app permission."),
         ("Add it to Home Screen", "apps.iphone", "Press and hold an app, choose Install Home Screen Web Clip, then follow the iOS profile installation prompts."),
         ("Open with deep links", "link", "Use htmlapp://open?id=ABC123. You can choose whether HTMLApp asks before replacing an app that is already open.")
     ]
@@ -88,7 +88,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
-                Section("AI App Generator") {
+                Section {
                     Picker("Compatibility", selection: $aiCompatibility) {
                         ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
                             Text(option.rawValue).tag(option)
@@ -112,6 +112,8 @@ struct SettingsView: View {
                             AISettingsStore.apiKey = ""
                         }
                     }
+                } header: {
+                    Text("AI App Generator")
                 } footer: {
                     Text("The API key is stored in this device’s Keychain and is sent only to the API URL you configure. Generate supports OpenAI-compatible chat-completions servers and Anthropic-compatible messages servers.")
                 }
