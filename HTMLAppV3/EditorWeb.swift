@@ -21,7 +21,9 @@ struct EditorView: View {
         self.mode = mode
         switch mode {
         case .new:
-            _html = State(initialValue: "<!doctype html>\n<html>\n<head>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>My HTML App</title>\n<style>body{font-family:-apple-system;background:#111827;color:#fff;padding:24px}</style>\n</head>\n<body><h1>Hello</h1></body>\n</html>")
+            let clipboard = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let starter = "<!doctype html>\n<html>\n<head>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n<title>My HTML App</title>\n<style>body{font-family:-apple-system;background:#111827;color:#fff;padding:24px}</style>\n</head>\n<body><h1>Hello</h1></body>\n</html>"
+            _html = State(initialValue: clipboard.isEmpty ? starter : clipboard)
             _summary = State(initialValue: "")
         case .edit(let app):
             _html = State(initialValue: app.html)
@@ -42,7 +44,7 @@ struct EditorView: View {
                         .autocorrectionDisabled()
                         .frame(minHeight: 390)
                 } header: { Text("HTML") } footer: {
-                    Text("The name comes from <title>. A favicon is saved as a PNG; otherwise an icon is generated from the first initial and detected page colors.")
+                    Text("New apps automatically start with HTML from your clipboard when text is available. The name comes from <title> and icons are saved automatically.")
                 }
             }
             .navigationTitle(mode.id == "new" ? "New HTML App" : "Edit HTML App")
@@ -97,18 +99,21 @@ struct HTMLWebView: UIViewRepresentable {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.allowsInlineMediaPlayback = true
 
+        let sensorPolicy = appID == "PREVIEW" ? "deny" : HTMLSensorPermissionPolicy.choice(appID: appID).rawValue
         let controller = configuration.userContentController
         controller.addUserScript(WKUserScript(
-            source: PermissionBridgeScript.source,
+            source: PermissionBridgeScript.source(sensorPolicy: sensorPolicy),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
         controller.add(context.coordinator, name: "htmlappLocation")
         controller.add(context.coordinator, name: "htmlappNotificationPermission")
         controller.add(context.coordinator, name: "htmlappNotification")
+        controller.add(context.coordinator, name: "htmlappHaptic")
+        controller.add(context.coordinator, name: "htmlappSensorPermission")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        context.coordinator.attach(webView)
+        context.coordinator.attach(webView, initialHTML: html)
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -117,26 +122,34 @@ struct HTMLWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard context.coordinator.lastHTML != html else { return }
+        context.coordinator.lastHTML = html
+        uiView.loadHTMLString(html, baseURL: SourceCache.shared.baseURL(appID: appID))
+    }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         let controller = uiView.configuration.userContentController
         controller.removeScriptMessageHandler(forName: "htmlappLocation")
         controller.removeScriptMessageHandler(forName: "htmlappNotificationPermission")
         controller.removeScriptMessageHandler(forName: "htmlappNotification")
+        controller.removeScriptMessageHandler(forName: "htmlappHaptic")
+        controller.removeScriptMessageHandler(forName: "htmlappSensorPermission")
         uiView.stopLoading()
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
         let appID: String
+        var lastHTML = ""
         private weak var webView: WKWebView?
         private var nativePermissions: NativePermissionCoordinator?
         private var locationPermissions: HTMLLocationBridge?
 
         init(appID: String) { self.appID = appID }
 
-        func attach(_ webView: WKWebView) {
+        func attach(_ webView: WKWebView, initialHTML: String) {
             self.webView = webView
+            lastHTML = initialHTML
             nativePermissions = NativePermissionCoordinator(webView: webView, appID: appID)
             locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
         }
@@ -177,128 +190,251 @@ struct HTMLWebView: UIViewRepresentable {
                 let silent = body["silent"] as? Bool ?? false
                 nativePermissions?.sendNotification(title: title, body: notificationBody, tag: tag, silent: silent)
 
+            case "htmlappHaptic":
+                let values = body["pattern"] as? [Int] ?? [8]
+                HTMLHapticsBridge.perform(pattern: values)
+
+            case "htmlappSensorPermission":
+                guard let callbackID = body["id"] as? String else { return }
+                requestSensorPermission(callbackID: callbackID)
+
             default:
                 break
             }
+        }
+
+        private func requestSensorPermission(callbackID: String) {
+            guard appID != "PREVIEW" else { resolveSensor(callbackID, value: "denied"); return }
+            switch HTMLSensorPermissionPolicy.choice(appID: appID) {
+            case .allow:
+                resolveSensor(callbackID, value: "granted")
+            case .deny:
+                resolveSensor(callbackID, value: "denied")
+            case .ask:
+                guard let presenter = topViewController() else { resolveSensor(callbackID, value: "denied"); return }
+                let alert = UIAlertController(
+                    title: "Allow Motion & Orientation?",
+                    message: "This saved HTML app wants access to device motion, orientation, and compass events while it is open.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "Don’t Allow", style: .cancel) { _ in
+                    HTMLSensorPermissionPolicy.set(.deny, appID: self.appID)
+                    self.resolveSensor(callbackID, value: "denied")
+                })
+                alert.addAction(UIAlertAction(title: "Allow", style: .default) { _ in
+                    HTMLSensorPermissionPolicy.set(.allow, appID: self.appID)
+                    self.resolveSensor(callbackID, value: "granted")
+                })
+                presenter.present(alert, animated: true)
+            }
+        }
+
+        private func resolveSensor(_ callbackID: String, value: String) {
+            guard let data = try? JSONSerialization.data(withJSONObject: [callbackID, value]),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__htmlappSensorPermission.apply(null, \(json));")
+        }
+
+        private func topViewController() -> UIViewController? {
+            guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+                  let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else { return nil }
+            var current = root
+            while let presented = current.presentedViewController { current = presented }
+            if let navigation = current as? UINavigationController { return navigation.visibleViewController ?? navigation }
+            if let tab = current as? UITabBarController { return tab.selectedViewController ?? tab }
+            return current
         }
     }
 }
 
 enum PermissionBridgeScript {
-    static let source = #"""
-    (() => {
-      if (window.__htmlappPermissionBridgeInstalled) return;
-      window.__htmlappPermissionBridgeInstalled = true;
+    static func source(sensorPolicy: String) -> String {
+        #"""
+        (() => {
+          if (window.__htmlappPermissionBridgeInstalled) return;
+          window.__htmlappPermissionBridgeInstalled = true;
 
-      const locationCallbacks = new Map();
-      let callbackCounter = 0;
-      const makeID = (prefix) => `${prefix}-${Date.now()}-${++callbackCounter}`;
-
-      window.__htmlappLocationSuccess = (id, payload) => {
-        const item = locationCallbacks.get(id);
-        if (!item) return;
-        locationCallbacks.delete(id);
-        item.success({
-          coords: {
-            latitude: payload.latitude,
-            longitude: payload.longitude,
-            accuracy: payload.accuracy,
-            altitude: payload.altitude,
-            altitudeAccuracy: payload.altitudeAccuracy,
-            heading: payload.heading,
-            speed: payload.speed
-          },
-          timestamp: payload.timestamp
-        });
-      };
-
-      window.__htmlappLocationError = (id, code, message) => {
-        const item = locationCallbacks.get(id);
-        if (!item) return;
-        locationCallbacks.delete(id);
-        if (typeof item.error === 'function') item.error({ code, message });
-      };
-
-      const geo = {
-        getCurrentPosition(success, error, options = {}) {
-          const id = makeID('geo');
-          locationCallbacks.set(id, { success, error });
-          window.webkit.messageHandlers.htmlappLocation.postMessage({
-            id,
-            highAccuracy: !!options.enableHighAccuracy,
-            timeout: Number.isFinite(options.timeout) ? options.timeout : 15000
+          const locationCallbacks = new Map();
+          const locationWatches = new Map();
+          let callbackCounter = 0;
+          const makeID = (prefix) => `${prefix}-${Date.now()}-${++callbackCounter}`;
+          const positionFromPayload = (payload) => ({
+            coords: {
+              latitude: payload.latitude,
+              longitude: payload.longitude,
+              accuracy: payload.accuracy,
+              altitude: payload.altitude,
+              altitudeAccuracy: payload.altitudeAccuracy,
+              heading: payload.heading,
+              speed: payload.speed
+            },
+            timestamp: payload.timestamp
           });
-        },
-        watchPosition(success, error, options = {}) {
-          const id = makeID('watch');
-          locationCallbacks.set(id, { success, error });
-          window.webkit.messageHandlers.htmlappLocation.postMessage({
-            id,
-            highAccuracy: !!options.enableHighAccuracy,
-            timeout: Number.isFinite(options.timeout) ? options.timeout : 15000
+
+          const postLocation = (id, options) => {
+            window.webkit.messageHandlers.htmlappLocation.postMessage({
+              id,
+              highAccuracy: !!options.enableHighAccuracy,
+              timeout: Number.isFinite(options.timeout) ? options.timeout : 15000
+            });
+          };
+
+          const issueWatch = (watchID) => {
+            const watch = locationWatches.get(watchID);
+            if (!watch) return;
+            const callbackID = makeID('watchfix');
+            watch.callbackID = callbackID;
+            locationCallbacks.set(callbackID, { ...watch, watchID, isWatch: true });
+            postLocation(callbackID, watch.options);
+          };
+
+          const scheduleWatch = (watchID, delay = 1000) => {
+            const watch = locationWatches.get(watchID);
+            if (!watch) return;
+            clearTimeout(watch.timer);
+            watch.timer = setTimeout(() => issueWatch(watchID), delay);
+          };
+
+          window.__htmlappLocationSuccess = (id, payload) => {
+            const item = locationCallbacks.get(id);
+            if (!item) return;
+            locationCallbacks.delete(id);
+            item.success(positionFromPayload(payload));
+            if (item.isWatch && locationWatches.has(item.watchID)) scheduleWatch(item.watchID);
+          };
+
+          window.__htmlappLocationError = (id, code, message) => {
+            const item = locationCallbacks.get(id);
+            if (!item) return;
+            locationCallbacks.delete(id);
+            if (typeof item.error === 'function') item.error({ code, message });
+            if (item.isWatch && locationWatches.has(item.watchID)) {
+              if (code === 1) locationWatches.delete(item.watchID);
+              else scheduleWatch(item.watchID, 1200);
+            }
+          };
+
+          const geo = {
+            getCurrentPosition(success, error, options = {}) {
+              const id = makeID('geo');
+              locationCallbacks.set(id, { success, error, options, isWatch: false });
+              postLocation(id, options);
+            },
+            watchPosition(success, error, options = {}) {
+              const watchID = makeID('watch');
+              locationWatches.set(watchID, { success, error, options, timer: null, callbackID: null });
+              issueWatch(watchID);
+              return watchID;
+            },
+            clearWatch(watchID) {
+              const watch = locationWatches.get(watchID);
+              if (watch) {
+                clearTimeout(watch.timer);
+                if (watch.callbackID) locationCallbacks.delete(watch.callbackID);
+              }
+              locationWatches.delete(watchID);
+            }
+          };
+
+          try { Object.defineProperty(navigator, 'geolocation', { configurable: true, value: geo }); } catch (_) {}
+
+          try {
+            Object.defineProperty(navigator, 'vibrate', {
+              configurable: true,
+              value: (input) => {
+                if (navigator.userActivation && !navigator.userActivation.isActive) return false;
+                const raw = Array.isArray(input) ? input : [input];
+                const pattern = raw.slice(0, 12).map(v => Math.max(0, Math.min(1000, Math.round(Number(v) || 0))));
+                window.webkit.messageHandlers.htmlappHaptic.postMessage({ pattern });
+                return true;
+              }
+            });
+          } catch (_) {}
+
+          let htmlappSensorPolicy = "__SENSOR_POLICY__";
+          const sensorCallbacks = new Map();
+          window.__htmlappSensorPermission = (id, value) => {
+            htmlappSensorPolicy = value === 'granted' ? 'allow' : 'deny';
+            const callback = sensorCallbacks.get(id);
+            if (callback) { sensorCallbacks.delete(id); callback(value); }
+          };
+
+          const nativeOrientationRequest = typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission ? DeviceOrientationEvent.requestPermission.bind(DeviceOrientationEvent) : null;
+          const nativeMotionRequest = typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission ? DeviceMotionEvent.requestPermission.bind(DeviceMotionEvent) : null;
+
+          const requestSensor = (nativeRequest) => {
+            if (htmlappSensorPolicy === 'deny') return Promise.resolve('denied');
+            if (htmlappSensorPolicy === 'allow') {
+              return nativeRequest ? nativeRequest().catch(() => 'denied') : Promise.resolve('granted');
+            }
+            return new Promise((resolve) => {
+              const id = makeID('sensor');
+              sensorCallbacks.set(id, async (value) => {
+                if (value !== 'granted') { resolve('denied'); return; }
+                if (!nativeRequest) { resolve('granted'); return; }
+                try { resolve(await nativeRequest()); } catch (_) { resolve('denied'); }
+              });
+              window.webkit.messageHandlers.htmlappSensorPermission.postMessage({ id });
+            });
+          };
+
+          try {
+            if (typeof DeviceOrientationEvent !== 'undefined') {
+              DeviceOrientationEvent.requestPermission = () => requestSensor(nativeOrientationRequest);
+            }
+          } catch (_) {}
+          try {
+            if (typeof DeviceMotionEvent !== 'undefined') {
+              DeviceMotionEvent.requestPermission = () => requestSensor(nativeMotionRequest);
+            }
+          } catch (_) {}
+
+          window.htmlappCompassHeading = null;
+          window.addEventListener('deviceorientation', (event) => {
+            const heading = Number.isFinite(event.webkitCompassHeading) ? event.webkitCompassHeading : (Number.isFinite(event.alpha) ? (360 - event.alpha) % 360 : null);
+            if (heading == null) return;
+            window.htmlappCompassHeading = heading;
+            window.dispatchEvent(new CustomEvent('htmlappcompass', { detail: { heading, accuracy: event.webkitCompassAccuracy ?? null } }));
           });
-          return id;
-        },
-        clearWatch(id) { locationCallbacks.delete(id); }
-      };
 
-      try {
-        Object.defineProperty(navigator, 'geolocation', { configurable: true, value: geo });
-      } catch (_) {}
+          const notificationCallbacks = new Map();
+          let notificationPermission = 'default';
+          window.__htmlappNotificationPermission = (id, value) => {
+            notificationPermission = value;
+            const callback = notificationCallbacks.get(id);
+            if (callback) { notificationCallbacks.delete(id); callback(value); }
+          };
 
-      const notificationCallbacks = new Map();
-      let notificationPermission = 'default';
+          function HTMLAppNotification(title, options = {}) {
+            if (!(this instanceof HTMLAppNotification)) return new HTMLAppNotification(title, options);
+            this.title = String(title || 'HTMLApp');
+            this.body = String(options.body || '');
+            this.tag = String(options.tag || '');
+            this.silent = !!options.silent;
+            this.onclick = null;
+            this.onshow = null;
+            this.onerror = null;
+            this.onclose = null;
+            this.close = () => { if (typeof this.onclose === 'function') this.onclose(); };
+            if (notificationPermission !== 'granted') {
+              setTimeout(() => { if (typeof this.onerror === 'function') this.onerror(new Error('Notification permission not granted')); }, 0);
+              return;
+            }
+            window.webkit.messageHandlers.htmlappNotification.postMessage({ title: this.title, body: this.body, tag: this.tag, silent: this.silent });
+            setTimeout(() => { if (typeof this.onshow === 'function') this.onshow(); }, 0);
+          }
 
-      window.__htmlappNotificationPermission = (id, value) => {
-        notificationPermission = value;
-        const callback = notificationCallbacks.get(id);
-        if (callback) {
-          notificationCallbacks.delete(id);
-          callback(value);
-        }
-      };
-
-      function HTMLAppNotification(title, options = {}) {
-        if (!(this instanceof HTMLAppNotification)) return new HTMLAppNotification(title, options);
-        this.title = String(title || 'HTMLApp');
-        this.body = String(options.body || '');
-        this.tag = String(options.tag || '');
-        this.silent = !!options.silent;
-        this.onclick = null;
-        this.onshow = null;
-        this.onerror = null;
-        this.onclose = null;
-        this.close = () => { if (typeof this.onclose === 'function') this.onclose(); };
-
-        if (notificationPermission !== 'granted') {
-          setTimeout(() => { if (typeof this.onerror === 'function') this.onerror(new Error('Notification permission not granted')); }, 0);
-          return;
-        }
-
-        window.webkit.messageHandlers.htmlappNotification.postMessage({
-          title: this.title,
-          body: this.body,
-          tag: this.tag,
-          silent: this.silent
-        });
-        setTimeout(() => { if (typeof this.onshow === 'function') this.onshow(); }, 0);
-      }
-
-      Object.defineProperty(HTMLAppNotification, 'permission', {
-        configurable: true,
-        get: () => notificationPermission
-      });
-
-      HTMLAppNotification.requestPermission = (callback) => new Promise((resolve) => {
-        const id = makeID('notification');
-        notificationCallbacks.set(id, (value) => {
-          if (typeof callback === 'function') callback(value);
-          resolve(value);
-        });
-        window.webkit.messageHandlers.htmlappNotificationPermission.postMessage({ id });
-      });
-
-      try { window.Notification = HTMLAppNotification; } catch (_) {}
-    })();
-    """#
+          Object.defineProperty(HTMLAppNotification, 'permission', { configurable: true, get: () => notificationPermission });
+          HTMLAppNotification.requestPermission = (callback) => new Promise((resolve) => {
+            const id = makeID('notification');
+            notificationCallbacks.set(id, (value) => {
+              if (typeof callback === 'function') callback(value);
+              resolve(value);
+            });
+            window.webkit.messageHandlers.htmlappNotificationPermission.postMessage({ id });
+          });
+          try { window.Notification = HTMLAppNotification; } catch (_) {}
+        })();
+        """#.replacingOccurrences(of: "__SENSOR_POLICY__", with: sensorPolicy)
+    }
 }
