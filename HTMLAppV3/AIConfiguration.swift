@@ -39,6 +39,9 @@ enum AISettingsStore {
     private static let providerKey = "ai.compatibility"
     private static let urlKey = "ai.apiURL"
     private static let modelKey = "ai.model"
+    private static let uiProviderKey = "ai.ui.compatibility"
+    private static let uiURLKey = "ai.ui.apiURL"
+    private static let uiModelKey = "ai.ui.model"
 
     static var compatibility: AIProviderConfiguration.Compatibility {
         get { AIProviderConfiguration.Compatibility(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "") ?? .openAI }
@@ -65,6 +68,37 @@ enum AISettingsStore {
 
     static var configuration: AIProviderConfiguration {
         AIProviderConfiguration(compatibility: compatibility, apiURL: apiURL, model: model, apiKey: apiKey)
+    }
+
+    static var uiCompatibility: AIProviderConfiguration.Compatibility {
+        get { AIProviderConfiguration.Compatibility(rawValue: UserDefaults.standard.string(forKey: uiProviderKey) ?? "") ?? .openAI }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: uiProviderKey) }
+    }
+
+    static var uiAPIURL: String {
+        get { UserDefaults.standard.string(forKey: uiURLKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: uiURLKey) }
+    }
+
+    static var uiModel: String {
+        get { UserDefaults.standard.string(forKey: uiModelKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: uiModelKey) }
+    }
+
+    static var uiAPIKey: String {
+        get { KeychainValueStore.read(account: "ai-ui-api-key") ?? "" }
+        set {
+            if newValue.isEmpty { KeychainValueStore.delete(account: "ai-ui-api-key") }
+            else { KeychainValueStore.write(newValue, account: "ai-ui-api-key") }
+        }
+    }
+
+    static var uiConfiguration: AIProviderConfiguration {
+        AIProviderConfiguration(compatibility: uiCompatibility, apiURL: uiAPIURL, model: uiModel, apiKey: uiAPIKey)
+    }
+
+    static var isUIOverhaulEnabled: Bool {
+        !uiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && uiConfiguration.isConfigured
     }
 }
 
