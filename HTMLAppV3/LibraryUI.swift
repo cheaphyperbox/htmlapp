@@ -9,6 +9,7 @@ struct LibraryView: View {
     @State private var editor: EditorMode?
     @State private var showSettings = false
     @State private var showAddOptions = false
+    @State private var showGenerator = false
     @State private var importingFile = false
     @State private var showReceiver = false
     @State private var senderApp: SavedHTMLApp?
@@ -32,11 +33,7 @@ struct LibraryView: View {
                         message: "Try a name, description, or text from the saved HTML."
                     )
                 } else if libraryLayout == "grid" {
-                    PagedAppGrid(
-                        apps: results,
-                        open: store.launch,
-                        menu: { AnyView(appMenu(for: $0)) }
-                    )
+                    PagedAppGrid(apps: results, open: store.launch, menu: { AnyView(appMenu(for: $0)) })
                 } else {
                     appList
                 }
@@ -46,39 +43,33 @@ struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Search HTML apps")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
+                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showAddOptions = true } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Add or Import HTML App")
+                    Button { showAddOptions = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("Add or Import HTML App")
                 }
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
-            .sheet(item: $permissionsApp) { AppPermissionsView(app: $0) }
-            .sheet(item: $pendingImport) {
-                ImportHTMLDestinationView(payload: $0).environmentObject(store)
-            }
+            .sheet(isPresented: $showGenerator) { AIGenerationView().environmentObject(store) }
+            .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
+            .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
             .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
             .fullScreenCover(isPresented: $showReceiver) {
                 OpticalReceiverView { payload in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        pendingImport = payload
-                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pendingImport = payload }
                 }
             }
             .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
+                Button("Generate with AI") { showGenerator = true }
                 Button("Enter Custom Code") { editor = .new }
                 Button("Select an HTML File") { importingFile = true }
                 Button("Import from Another Device") { showReceiver = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Create an app from code, choose an HTML file, or scan a transfer from another device.")
+                Text("Generate an app, paste or write code, choose an HTML file, or scan a transfer from another device.")
             }
             .fileImporter(
                 isPresented: $importingFile,
@@ -88,10 +79,7 @@ struct LibraryView: View {
             )
             .confirmationDialog(
                 "Install Home Screen Web Clip?",
-                isPresented: Binding(
-                    get: { profileApp != nil },
-                    set: { if !$0 { profileApp = nil } }
-                ),
+                isPresented: Binding(get: { profileApp != nil }, set: { if !$0 { profileApp = nil } }),
                 titleVisibility: .visible
             ) {
                 Button("Open Profile in Safari") {
@@ -108,10 +96,7 @@ struct LibraryView: View {
             }
             .confirmationDialog(
                 "Delete \(pendingDelete?.name ?? "this app")?",
-                isPresented: Binding(
-                    get: { pendingDelete != nil },
-                    set: { if !$0 { pendingDelete = nil } }
-                ),
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
@@ -124,10 +109,7 @@ struct LibraryView: View {
             }
             .alert(
                 "HTMLApp",
-                isPresented: Binding(
-                    get: { store.errorMessage != nil },
-                    set: { if !$0 { store.errorMessage = nil } }
-                )
+                isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })
             ) {
                 Button("OK") { store.errorMessage = nil }
             } message: {
@@ -142,9 +124,7 @@ struct LibraryView: View {
                         .background(.regularMaterial, in: Capsule())
                         .padding(.bottom, 18)
                         .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
-                                store.notice = nil
-                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { store.notice = nil }
                         }
                 }
             }
@@ -164,19 +144,13 @@ struct LibraryView: View {
                         Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
                     }
                     .tint(.yellow)
-                    Button { refresh(app) } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .tint(.indigo)
+                    Button { refresh(app) } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                        .tint(.indigo)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) { pendingDelete = app } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    Button { editor = .edit(app) } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    .tint(.orange)
+                    Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
+                    Button { editor = .edit(app) } label: { Label("Edit", systemImage: "pencil") }
+                        .tint(.orange)
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -189,47 +163,24 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp) -> some View {
-        Button { store.launch(app) } label: {
-            Label("Open", systemImage: "play.fill")
-        }
+        Button { store.launch(app) } label: { Label("Open", systemImage: "play.fill") }
         Button { store.toggleFavorite(app) } label: {
-            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top",
-                  systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
+            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
-        Button { permissionsApp = app } label: {
-            Label("Permissions", systemImage: "hand.raised.fill")
-        }
-        Button { editor = .edit(app) } label: {
-            Label("Update HTML", systemImage: "pencil")
-        }
+        Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
+        Button { editor = .edit(app) } label: { Label("Update HTML", systemImage: "pencil") }
         Divider()
-        Button { senderApp = app } label: {
-            Label("Send to Another Device", systemImage: "qrcode")
-        }
-        Button { store.exportHTML(app) } label: {
-            Label("Export HTML File", systemImage: "square.and.arrow.up")
-        }
-        Button { profileApp = app } label: {
-            Label("Install Home Screen Web Clip", systemImage: "apps.iphone")
-        }
+        Button { senderApp = app } label: { Label("Send to Another Device", systemImage: "qrcode") }
+        Button { store.exportHTML(app) } label: { Label("Export HTML File", systemImage: "square.and.arrow.up") }
+        Button { profileApp = app } label: { Label("Install Home Screen Web Clip", systemImage: "apps.iphone") }
         Divider()
-        Button { UIPasteboard.general.string = app.id } label: {
-            Label("Copy ID", systemImage: "number")
-        }
-        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: {
-            Label("Copy URL Scheme", systemImage: "link")
-        }
-        Button { refresh(app) } label: {
-            Label("Refresh External Sources", systemImage: "arrow.clockwise")
-        }
-        Button {} label: {
-            Label("Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock")
-        }
-        .disabled(true)
+        Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
+        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: { Label("Copy URL Scheme", systemImage: "link") }
+        Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
+        Button {} label: { Label("Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock") }
+            .disabled(true)
         Divider()
-        Button(role: .destructive) { pendingDelete = app } label: {
-            Label("Delete HTML App", systemImage: "trash")
-        }
+        Button(role: .destructive) { pendingDelete = app } label: { Label("Delete HTML App", systemImage: "trash") }
     }
 
     private func importFile(_ result: Result<[URL], Error>) {
@@ -277,28 +228,15 @@ struct ListAppRow: View {
                     }
                 }
             VStack(alignment: .leading, spacing: 5) {
-                Text(app.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                Text(app.name).font(.headline).foregroundStyle(.primary).lineLimit(1)
                 if !app.summary.isEmpty {
-                    Text(app.summary)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    Text(app.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 }
-                Text(app.id)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.tertiary)
+                Text(app.id).font(.caption.monospaced()).foregroundStyle(.tertiary)
             }
             Spacer(minLength: 8)
-            if refreshing {
-                ProgressView()
-            } else {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
+            if refreshing { ProgressView() }
+            else { Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary) }
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -313,11 +251,8 @@ struct PagedAppGrid: View {
 
     private let itemsPerPage = 20
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-
     private var pages: [[SavedHTMLApp]] {
-        stride(from: 0, to: apps.count, by: itemsPerPage).map {
-            Array(apps[$0..<min($0 + itemsPerPage, apps.count)])
-        }
+        stride(from: 0, to: apps.count, by: itemsPerPage).map { Array(apps[$0..<min($0 + itemsPerPage, apps.count)]) }
     }
 
     var body: some View {
@@ -366,23 +301,14 @@ struct PagedAppGrid: View {
 
 struct EmptyLibraryView: View {
     let add: () -> Void
-
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .font(.system(size: 58, weight: .semibold))
-                .foregroundStyle(.tint)
-            Text("Create your first HTML app")
-                .font(.title2.bold())
-            Text("Enter HTML code, select a file, or receive an app from another device.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 34)
-            Button(action: add) {
-                Label("Add HTML App", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 58, weight: .semibold)).foregroundStyle(.tint)
+            Text("Create your first HTML app").font(.title2.bold())
+            Text("Generate with AI, enter HTML code, select a file, or receive an app from another device.")
+                .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 34)
+            Button(action: add) { Label("Add HTML App", systemImage: "plus") }
+                .buttonStyle(.borderedProminent).controlSize(.large)
         }
         .padding()
     }
@@ -392,16 +318,11 @@ struct ContentUnavailableViewCompat: View {
     let title: String
     let systemImage: String
     let message: String
-
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 46))
-                .foregroundStyle(.secondary)
+            Image(systemName: systemImage).font(.system(size: 46)).foregroundStyle(.secondary)
             Text(title).font(.title2.bold())
-            Text(message)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .padding(30)
     }
