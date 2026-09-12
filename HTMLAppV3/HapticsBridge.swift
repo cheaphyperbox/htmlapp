@@ -1,7 +1,6 @@
 import Foundation
 import UIKit
 
-@MainActor
 enum HTMLHapticsBridge {
     static func perform(pattern: [Int]) {
         let values = pattern.isEmpty ? [8] : Array(pattern.prefix(12))
