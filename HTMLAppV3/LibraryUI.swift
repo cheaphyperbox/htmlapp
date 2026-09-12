@@ -53,7 +53,11 @@ struct LibraryView: View {
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
-            .sheet(isPresented: $showGenerator) { AIGenerationView().environmentObject(store) }
+            .fullScreenCover(isPresented: $showGenerator) {
+                AIGenerationView()
+                    .environmentObject(store)
+                    .interactiveDismissDisabled(true)
+            }
             .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
             .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
             .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
