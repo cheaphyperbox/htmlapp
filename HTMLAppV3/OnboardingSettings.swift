@@ -7,6 +7,7 @@ struct OnboardingView: View {
     private let pages = [
         ("Create an HTML app", "rectangle.stack.badge.plus", "Tap + to generate an app with AI, paste or write HTML, select a file, or receive one from another device."),
         ("Generate with AI", "sparkles", "Configure an OpenAI-compatible or Anthropic-compatible API in Settings. Describe what you want, watch the app appear live, then keep it or ask for changes."),
+        ("Optional UI polish", "paintbrush", "You can configure a second AI model just for presentation. It receives the finished app and is told to improve only the UI while preserving every feature and behavior."),
         ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold anywhere for the full menu."),
         ("Choose your layout", "square.grid.3x3", "Use List for details or Grid for an iPhone-style Home Screen. Grid apps automatically continue onto swipeable pages."),
         ("Device capabilities", "gyroscope", "Each app can have separate camera, microphone, location, notification, and motion/orientation choices. Haptics are available after user interaction without a per-app permission."),
@@ -71,6 +72,10 @@ struct SettingsView: View {
     @State private var aiURL = AISettingsStore.apiURL
     @State private var aiModel = AISettingsStore.model
     @State private var aiKey = AISettingsStore.apiKey
+    @State private var uiCompatibility = AISettingsStore.uiCompatibility
+    @State private var uiURL = AISettingsStore.uiAPIURL
+    @State private var uiModel = AISettingsStore.uiModel
+    @State private var uiKey = AISettingsStore.uiAPIKey
     @State private var aiSaved = false
 
     var body: some View {
@@ -107,7 +112,7 @@ struct SettingsView: View {
                     Button(aiSaved ? "Saved" : "Save AI Configuration") { saveAI() }
                         .disabled(aiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || aiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if !aiKey.isEmpty {
-                        Button("Clear API Key", role: .destructive) {
+                        Button("Clear Main API Key", role: .destructive) {
                             aiKey = ""
                             AISettingsStore.apiKey = ""
                         }
@@ -115,7 +120,35 @@ struct SettingsView: View {
                 } header: {
                     Text("AI App Generator")
                 } footer: {
-                    Text("The API key is stored in this device’s Keychain and is sent only to the API URL you configure. Generate supports OpenAI-compatible chat-completions servers and Anthropic-compatible messages servers.")
+                    Text("This is the main functional generation model. Its API key is stored in this device’s Keychain and is sent only to the API URL you configure.")
+                }
+
+                Section {
+                    Picker("Compatibility", selection: $uiCompatibility) {
+                        ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    TextField("UI API URL", text: $uiURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    TextField("UI Overhaul Model (optional)", text: $uiModel)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("UI API Key (optional)", text: $uiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    if !uiKey.isEmpty {
+                        Button("Clear UI API Key", role: .destructive) {
+                            uiKey = ""
+                            AISettingsStore.uiAPIKey = ""
+                        }
+                    }
+                } header: {
+                    Text("UI Overhaul Model")
+                } footer: {
+                    Text("Optional. Leave the model empty to skip this stage. When configured, HTMLApp sends the completed functioning app to this second model for a conservative visual-only pass. It is instructed not to add, remove, or alter functionality. This can use a different provider, URL, key, and model from the main generator.")
                 }
 
                 Section("Opening Apps") {
@@ -182,6 +215,10 @@ struct SettingsView: View {
         AISettingsStore.apiURL = aiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.model = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.apiKey = aiKey
+        AISettingsStore.uiCompatibility = uiCompatibility
+        AISettingsStore.uiAPIURL = uiURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.uiModel = uiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.uiAPIKey = uiKey
         if !silent {
             aiSaved = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
