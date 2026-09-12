@@ -191,7 +191,8 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
         let system = "Return zero to four concise safe public-API search queries, each inside <query>. Research only if live data materially helps. Prefer no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If none is needed, return <research></research>."
         let user = revision.map { "Original: \(original)\nRevision: \($0)" } ?? original
         let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
-        return tagValues("query", in: text).prefix(4).map(String.init)
+        let values = tagValues("query", in: text)
+        return Array(values.prefix(upTo: min(4, values.count)))
     }
 
     static func systemPrompt(research: String) -> String {
@@ -209,6 +210,9 @@ DESIGN RULES:
 
 ICON RULES:
 \(iconGuide)
+
+HTMLAPP DEVICE APIS:
+Use navigator.vibrate(...) only after explicit user interaction for haptic feedback. Geolocation supports getCurrentPosition and continuously refreshed watchPosition while the app is open. For motion/gyro/compass experiences, request DeviceMotionEvent.requestPermission() or DeviceOrientationEvent.requestPermission() from a user gesture before listening for devicemotion/deviceorientation. Compass heading is also exposed as window.htmlappCompassHeading and the htmlappcompass custom event. Notifications use the standard Notification.requestPermission() and new Notification(...) flow.
 
 API ROUTING:
 Prefer Auth=None, then documented free tiers. OAuth only when account access is essential. Endpoint placeholders are not literal URLs. Never embed private keys in generated HTML. Restricted API categories are excluded. Include local fallback data.
@@ -261,11 +265,12 @@ enum SafePublicAPIResearch {
         var output: [String] = []
         for query in queries where safe(query) {
             let terms = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
-            let rows = catalog.split(separator: "\n").map(String.init).filter { row in
+            let matches = catalog.split(separator: "\n").map(String.init).filter { row in
                 guard row.hasPrefix("|") else { return false }
                 let lower = row.lowercased()
-                return !excluded.contains(where: lower.contains) && terms.contains(where: lower.contains)
-            }.prefix(8)
+                return !excluded.contains(where: { lower.contains($0) }) && terms.contains(where: { lower.contains($0) })
+            }
+            let rows = Array(matches.prefix(upTo: min(8, matches.count)))
             if !rows.isEmpty { output.append("Query: \(query)\n" + rows.joined(separator: "\n")) }
         }
         return output.joined(separator: "\n\n")
@@ -273,7 +278,7 @@ enum SafePublicAPIResearch {
 
     private static func safe(_ query: String) -> Bool {
         let lower = query.lowercased()
-        return !excluded.contains(where: lower.contains)
+        return !excluded.contains(where: { lower.contains($0) })
     }
 }
 
