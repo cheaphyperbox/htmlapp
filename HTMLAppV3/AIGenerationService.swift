@@ -3,13 +3,14 @@ import SwiftUI
 
 struct AIGenerationOutput {
     var html = ""
+    var patch = ""
     var description = ""
     var iconScript = ""
     var refinedBrief = ""
 }
 
 enum AIGenerationError: LocalizedError {
-    case notConfigured, invalidEndpoint, missingHTML
+    case notConfigured, invalidEndpoint, missingHTML, invalidPatch
     case provider(String)
 
     var errorDescription: String? {
@@ -17,6 +18,7 @@ enum AIGenerationError: LocalizedError {
         case .notConfigured: return "Configure an AI API URL and model in Settings first."
         case .invalidEndpoint: return "The configured AI API URL is invalid."
         case .missingHTML: return "The AI response did not contain a complete HTML app."
+        case .invalidPatch: return "The AI returned a patch that could not be applied safely."
         case .provider(let message): return message
         }
     }
@@ -29,59 +31,151 @@ final class AIGenerationSession: ObservableObject {
     @Published var refinedBrief = ""
     @Published var description = ""
     @Published var iconScript = ""
+    @Published var verificationReport = ""
     @Published var errorMessage: String?
     @Published var isWorking = false
 
-    private var conversation: [(String, String)] = []
     private var originalPrompt = ""
+    private var lastResearch = ""
+
+    func load(existing app: SavedHTMLApp) {
+        originalPrompt = "Maintain and improve the existing HTML app named \(app.name). Preserve its current purpose and working behavior unless the user explicitly asks to change them."
+        streamedHTML = app.html
+        description = app.summary
+        refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches."
+        verificationReport = ""
+        phase = "Ready for AI edits"
+    }
 
     func generate(prompt: String) async {
-        originalPrompt = prompt
-        conversation = []
-        await run(request: prompt, existingHTML: nil)
-    }
-
-    func revise(change: String) async {
-        guard !streamedHTML.isEmpty else { return }
-        await run(request: "Revise the current app with these changes:\n\(change)", existingHTML: streamedHTML)
-    }
-
-    private func run(request: String, existingHTML: String?) async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
+        originalPrompt = prompt
         isWorking = true
         errorMessage = nil
-        phase = "Refining your idea"
+        verificationReport = ""
         do {
-            let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: existingHTML == nil ? nil : request, config: config)
-            phase = queries.isEmpty ? "Designing the app" : "Checking public APIs"
-            let research = await SafePublicAPIResearch.research(queries: queries)
+            phase = "Improving your prompt"
+            let improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
+            refinedBrief = improved
+
+            phase = "Planning APIs and capabilities"
+            let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+            phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
+            lastResearch = await SafePublicAPIResearch.research(queries: queries)
+
             phase = "Generating live preview"
-
-            var messages = conversation
-            if let existingHTML {
-                messages.append(("user", "Current HTML app:\n<htmlapp_existing>\n\(existingHTML)\n</htmlapp_existing>\n\nRequested change:\n\(request)"))
-            } else {
-                messages.append(("user", request))
-            }
-
-            let stream = try await AIProviderClient.stream(config: config, system: AIHTMLAgent.systemPrompt(research: research), messages: messages)
+            let stream = try await AIProviderClient.stream(
+                config: config,
+                system: AIHTMLAgent.systemPrompt(research: lastResearch),
+                messages: [("user", improved)]
+            )
             var full = ""
             for try await piece in stream {
                 full += piece
                 apply(AIHTMLAgent.parsePartial(full), partial: true)
             }
             let final = AIHTMLAgent.parse(full)
-            guard !final.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIGenerationError.missingHTML }
+            guard !final.html.trimmed.isEmpty else { throw AIGenerationError.missingHTML }
             apply(final, partial: false)
-            conversation.append(("user", request))
-            conversation.append(("assistant", full))
+            try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
             errorMessage = error.localizedDescription
             phase = "Generation stopped"
         }
         isWorking = false
+    }
+
+    func revise(change: String) async {
+        guard !streamedHTML.trimmed.isEmpty else { return }
+        let config = AISettingsStore.configuration
+        guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
+        isWorking = true
+        errorMessage = nil
+        verificationReport = ""
+        do {
+            phase = "Improving the requested change"
+            let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: config)
+
+            phase = "Checking APIs for this change"
+            let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
+            let research = await SafePublicAPIResearch.research(queries: queries)
+            if !research.isEmpty { lastResearch = research }
+
+            phase = "Patching the app"
+            let user = """
+Current app:
+<htmlapp_existing>
+\(streamedHTML)
+</htmlapp_existing>
+
+Requested change:
+\(improvedChange)
+"""
+            let response = try await AIProviderClient.complete(
+                config: config,
+                system: AIHTMLAgent.patchSystemPrompt(research: lastResearch),
+                messages: [("user", user)]
+            )
+            let output = AIHTMLAgent.parse(response)
+            if !output.patch.trimmed.isEmpty {
+                guard let patched = HTMLPatchApplier.apply(output.patch, to: streamedHTML) else { throw AIGenerationError.invalidPatch }
+                streamedHTML = patched
+            } else if !output.html.trimmed.isEmpty {
+                streamedHTML = output.html
+            } else {
+                throw AIGenerationError.invalidPatch
+            }
+            if !output.description.isEmpty { description = output.description }
+            if !output.iconScript.isEmpty { iconScript = output.iconScript }
+            if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
+
+            try await verifyAndRepair(config: config)
+            phase = "Ready to review"
+        } catch {
+            errorMessage = error.localizedDescription
+            phase = "Edit stopped"
+        }
+        isWorking = false
+    }
+
+    func acceptExternalHTML(_ html: String) {
+        streamedHTML = html
+        verificationReport = ""
+    }
+
+    func verifyCurrent() async {
+        let config = AISettingsStore.configuration
+        guard config.isConfigured, !streamedHTML.trimmed.isEmpty else { return }
+        isWorking = true
+        errorMessage = nil
+        do {
+            try await verifyAndRepair(config: config)
+            phase = "Ready to review"
+        } catch {
+            errorMessage = error.localizedDescription
+            phase = "Verification stopped"
+        }
+        isWorking = false
+    }
+
+    private func verifyAndRepair(config: AIProviderConfiguration) async throws {
+        phase = "Verifying design and behavior"
+        let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
+        let response = try await AIHTMLAgent.review(
+            html: streamedHTML,
+            originalPrompt: originalPrompt,
+            research: lastResearch,
+            localIssues: localIssues,
+            config: config
+        )
+        verificationReport = AIHTMLAgent.verification(from: response)
+        let patch = AIHTMLAgent.patch(from: response)
+        if !patch.trimmed.isEmpty, let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
+            streamedHTML = repaired
+            verificationReport += verificationReport.isEmpty ? "AI QA applied a repair patch." : "\nAI QA applied a repair patch."
+        }
     }
 
     private func apply(_ output: AIGenerationOutput, partial: Bool) {
@@ -180,57 +274,149 @@ enum AIProviderClient {
 
 enum AIHTMLAgent {
     static let designGuide = """
-Create one self-contained standards-compliant HTML file: semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, no framework or build step. It must feel like a premium native iOS 26 product: restrained Liquid Glass mainly for navigation, controls, sheets and overlays; native-feeling navigation; clear hierarchy; Apple-like spacing; spring motion; safe areas; adaptive phone/tablet layouts; light and dark appearance; loading, empty, error and offline states; accessible 44px touch targets; no dead controls. Avoid generic SaaS dashboards, excessive blur/glow/gradients, Material-style UI, emoji icons and browser alert() for routine feedback. Permission-requiring APIs may only activate after an explicit user gesture. Use realistic local fallback data when remote data fails.
+Build one self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. It must behave like a real mobile app rather than a static webpage: clear screen hierarchy, native-feeling navigation, pressed states, sheets/overlays where appropriate, smooth animated transitions, spring-like motion, tasteful micro-interactions, and haptic feedback after user gestures when it improves the experience. Motion must communicate state and navigation, respect prefers-reduced-motion, and never block usability.
+
+Aim for a premium iPhone/iPad experience: Apple system typography, safe areas, responsive layouts, 44px minimum touch targets, polished light/dark appearance, loading/empty/error/offline states, keyboard-friendly forms, and no dead controls. Use restrained iOS-style materials for navigation, controls, sheets and overlays. Avoid generic SaaS dashboards, excessive blur/glow/gradients, Material-style UI, emoji icons, browser alert() for routine feedback, and desktop-first layouts.
+
+Never invent facts, live values, people, accounts, reviews, measurements, availability, prices, API responses, endpoints, or capabilities unless the user explicitly asks for fictional/demo/sample content. Do not silently pass fabricated sample data off as real data. If real data or a capability is needed, use the researched documented API when available. If you are unsure whether something can be done, prefer a documented API solution found in the research rather than pretending it works. If no suitable API exists, make the limitation clear in the app and offer honest user-entered/local functionality instead of fake live data.
+
+Permission-requiring APIs may only activate after an explicit user gesture. Never embed private API keys or secrets in generated HTML.
 """
 
     static let iconGuide = """
 Inside <icon_script>, output only a static drawing script. Commands: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Use absolute coordinates and CSS/HEX colors, draw back-to-front, and never use ANIM, GROUP or FPS.
 """
 
+    static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
+        let system = """
+Turn the user's app idea into a stronger, concise implementation brief. Preserve the user's intent and do not add unsupported requirements. Clarify likely screens, interactions, data needs, mobile behavior, animation/motion, empty/loading/error states, and what must be real versus local. Do not invent data or APIs. Return only <brief>...</brief>.
+"""
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)])
+        return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
+    }
+
+    static func refineRevision(_ change: String, appBrief: String, config: AIProviderConfiguration) async throws -> String {
+        let system = "Return a precise patch request that preserves everything not explicitly changed. Resolve ambiguity conservatively. Include mobile animation/state implications when relevant. Never invent facts or fake live data. Return only <brief>...</brief>."
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")])
+        return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
+    }
+
     static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> [String] {
-        let system = "Return zero to four concise safe public-API search queries, each inside <query>. Research only if live data materially helps. Prefer no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If none is needed, return <research></research>."
-        let user = revision.map { "Original: \(original)\nRevision: \($0)" } ?? original
+        let system = """
+Return zero to six concise public-API discovery queries, each inside <query>. Search whenever the requested app or revision needs real-world/live/current data, a remote capability, or a capability you are not confident can be implemented locally. If unsure whether a capability exists, search rather than making it up. Prefer documented no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If the app truly needs no external data or service, return no queries.
+"""
+        let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
         let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
-        let values = tagValues("query", in: text)
-        return Array(values.prefix(upTo: min(4, values.count)))
+        let values = values("query", in: text)
+        return Array(values.prefix(upTo: min(6, values.count)))
     }
 
     static func systemPrompt(research: String) -> String {
         """
-You are HTMLApp's fast app-building agent. Refine the request into a concise implementation brief, then build the app. Do not reveal hidden chain-of-thought; <thinking> is only a short user-facing requirements/design brief.
+You are HTMLApp's senior mobile web-app builder. First turn the improved brief into a concrete user-facing product plan, then implement it completely. Do not reveal private chain-of-thought; <thinking> is a short plan the user can inspect, covering screens, interaction flow, data/API choices, animation behavior, and important states.
 
 Return exactly these sections with no Markdown fences:
-<thinking>concise refined brief</thinking>
+<thinking>concise implementation plan</thinking>
 <description>one sentence describing the finished app</description>
 <icon_script>static icon drawing script</icon_script>
 <htmlapp_code><!DOCTYPE html>...complete app...</htmlapp_code>
 
-DESIGN RULES:
+DESIGN AND TRUTHFULNESS RULES:
 \(designGuide)
 
 ICON RULES:
 \(iconGuide)
 
 HTMLAPP DEVICE APIS:
-Use navigator.vibrate(...) only after explicit user interaction for haptic feedback. Geolocation supports getCurrentPosition and continuously refreshed watchPosition while the app is open. For motion/gyro/compass experiences, request DeviceMotionEvent.requestPermission() or DeviceOrientationEvent.requestPermission() from a user gesture before listening for devicemotion/deviceorientation. Compass heading is also exposed as window.htmlappCompassHeading and the htmlappcompass custom event. Notifications use the standard Notification.requestPermission() and new Notification(...) flow.
+Use navigator.vibrate(...) only after explicit user interaction for haptic feedback. Geolocation supports getCurrentPosition and continuously refreshed watchPosition while the app is open. For motion/gyro/compass experiences, request DeviceMotionEvent.requestPermission() or DeviceOrientationEvent.requestPermission() from a user gesture before listening for devicemotion/deviceorientation. Compass heading is also exposed as window.htmlappCompassHeading and the htmlappcompass custom event. Notifications use Notification.requestPermission() and new Notification(...).
 
 API ROUTING:
-Prefer Auth=None, then documented free tiers. OAuth only when account access is essential. Endpoint placeholders are not literal URLs. Never embed private keys in generated HTML. Restricted API categories are excluded. Include local fallback data.
+Use only APIs/endpoints supported by the supplied research or APIs you already know are standard browser/device APIs. Prefer Auth=None, then documented free tiers. OAuth only when account access is essential. Never treat endpoint placeholders as literal URLs. Never embed private keys. If research did not find a credible API for a required live capability, do not fake that capability: provide an honest limitation or local alternative.
 
 RESEARCH RESULTS:
-\(research.isEmpty ? "No external API research was needed." : research)
+\(research.isEmpty ? "No external API research was needed or no suitable public API was found." : research)
 """
     }
 
+    static func patchSystemPrompt(research: String) -> String {
+        """
+You are HTMLApp's code-editing agent. Edit the existing single-file HTML app with the smallest safe patch that satisfies the requested change. Preserve all unrelated behavior, IDs, storage keys, API integrations, permissions, navigation and working code. Prefer patching over rewriting.
+
+Return these sections with no Markdown fences:
+<thinking>short updated implementation plan</thinking>
+<description>updated one-sentence description if materially changed, otherwise repeat the current purpose</description>
+<icon_script>updated icon script only if the app identity changed; otherwise leave empty</icon_script>
+<htmlapp_patch>
+<<<<<<< SEARCH
+exact text copied from the existing HTML
+=======
+replacement text
+>>>>>>> REPLACE
+</htmlapp_patch>
+
+You may include multiple SEARCH/REPLACE blocks. SEARCH text must match exactly and should be as small and unique as practical. If an exact safe patch is genuinely impossible, return a complete <htmlapp_code> document instead.
+
+RULES:
+\(designGuide)
+Keep or improve native-feeling animation and mobile interactions. Do not fabricate facts, APIs, live data or capabilities. If the revision depends on something uncertain, use the documented research below; if no credible API is available, implement an honest local/limited state rather than fake data.
+
+RESEARCH RESULTS:
+\(research.isEmpty ? "No new external API research was needed or no suitable public API was found." : research)
+"""
+    }
+
+    static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
+        let system = """
+You are HTMLApp's final QA reviewer. Review the complete HTML/CSS/JavaScript source for likely functional defects and mobile UI quality problems. Check that controls have actions, navigation and state transitions make sense, APIs are not fabricated, error/loading/empty states are honest, permissions require gestures, touch targets are usable, light/dark layouts are coherent, and motion makes the app feel alive without being distracting. Also check for obvious syntax/DOM-reference problems.
+
+Do not claim you visually rendered or device-tested anything you cannot actually observe. Do not invent failures. If you find a concrete issue, return a minimal exact SEARCH/REPLACE patch. If no concrete source-level issue is found, leave <htmlapp_patch> empty.
+
+Return only:
+<verification>brief QA summary including what was checked and any limitations</verification>
+<htmlapp_patch>optional SEARCH/REPLACE blocks</htmlapp_patch>
+"""
+        let user = """
+Original request/intent:
+\(originalPrompt)
+
+Local static checks:
+\(localIssues.isEmpty ? "No local structural warnings." : localIssues.joined(separator: "\n"))
+
+Relevant API research:
+\(research.isEmpty ? "None." : research)
+
+HTML to review:
+<htmlapp_existing>
+\(html)
+</htmlapp_existing>
+"""
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+    }
+
     static func parse(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(html: tagValue("htmlapp_code", in: text), description: tagValue("description", in: text).trimmed, iconScript: tagValue("icon_script", in: text).trimmed, refinedBrief: tagValue("thinking", in: text).trimmed)
+        AIGenerationOutput(
+            html: value("htmlapp_code", in: text),
+            patch: value("htmlapp_patch", in: text),
+            description: value("description", in: text).trimmed,
+            iconScript: value("icon_script", in: text).trimmed,
+            refinedBrief: value("thinking", in: text).trimmed
+        )
     }
 
     static func parsePartial(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(html: partialTag("htmlapp_code", in: text), description: partialTag("description", in: text).trimmed, iconScript: partialTag("icon_script", in: text).trimmed, refinedBrief: partialTag("thinking", in: text).trimmed)
+        AIGenerationOutput(
+            html: partial("htmlapp_code", in: text),
+            patch: partial("htmlapp_patch", in: text),
+            description: partial("description", in: text).trimmed,
+            iconScript: partial("icon_script", in: text).trimmed,
+            refinedBrief: partial("thinking", in: text).trimmed
+        )
     }
 
-    private static func tagValues(_ tag: String, in text: String) -> [String] {
+    static func verification(from text: String) -> String { value("verification", in: text).trimmed }
+    static func patch(from text: String) -> String { value("htmlapp_patch", in: text) }
+
+    private static func values(_ tag: String, in text: String) -> [String] {
         var result: [String] = []
         var remaining = text[...]
         let open = "<\(tag)>"; let close = "</\(tag)>"
@@ -243,8 +429,8 @@ RESEARCH RESULTS:
         return result
     }
 
-    private static func tagValue(_ tag: String, in text: String) -> String { tagValues(tag, in: text).first ?? "" }
-    private static func partialTag(_ tag: String, in text: String) -> String {
+    private static func value(_ tag: String, in text: String) -> String { values(tag, in: text).first ?? "" }
+    private static func partial(_ tag: String, in text: String) -> String {
         let open = "<\(tag)>"; let close = "</\(tag)>"
         guard let start = text.range(of: open) else { return "" }
         let tail = text[start.upperBound...]
@@ -253,31 +439,114 @@ RESEARCH RESULTS:
     }
 }
 
+enum HTMLPatchApplier {
+    static func apply(_ patch: String, to source: String) -> String? {
+        let searchMarker = "<<<<<<< SEARCH"
+        let splitMarker = "======="
+        let replaceMarker = ">>>>>>> REPLACE"
+        var result = source
+        var cursor = patch[...]
+        var applied = 0
+
+        while let searchStart = cursor.range(of: searchMarker) {
+            let afterSearchMarker = cursor[searchStart.upperBound...]
+            guard let divider = afterSearchMarker.range(of: splitMarker) else { return nil }
+            let rawSearch = String(afterSearchMarker[..<divider.lowerBound]).trimmingCharacters(in: .newlines)
+            let afterDivider = afterSearchMarker[divider.upperBound...]
+            guard let replaceEnd = afterDivider.range(of: replaceMarker) else { return nil }
+            let rawReplacement = String(afterDivider[..<replaceEnd.lowerBound]).trimmingCharacters(in: .newlines)
+            guard !rawSearch.isEmpty, let range = result.range(of: rawSearch) else { return nil }
+            result.replaceSubrange(range, with: rawReplacement)
+            applied += 1
+            cursor = afterDivider[replaceEnd.upperBound...]
+        }
+        return applied > 0 ? result : nil
+    }
+}
+
+enum HTMLQualityChecks {
+    static func issues(in html: String) -> [String] {
+        let lower = html.lowercased()
+        var issues: [String] = []
+        if !lower.contains("<!doctype html") { issues.append("Missing <!DOCTYPE html>.") }
+        if !lower.contains("name=\"viewport\"") && !lower.contains("name='viewport'") { issues.append("Missing mobile viewport metadata.") }
+        if count("<script", in: lower) != count("</script>", in: lower) { issues.append("Unbalanced <script> tags.") }
+        if count("<style", in: lower) != count("</style>", in: lower) { issues.append("Unbalanced <style> tags.") }
+        if lower.contains("alert(") { issues.append("Uses browser alert(); routine feedback should use in-app UI.") }
+        if lower.contains("example.com") || lower.contains("your_api_key") || lower.contains("api-key-here") { issues.append("Contains a likely placeholder endpoint or key.") }
+        return issues
+    }
+
+    private static func count(_ needle: String, in haystack: String) -> Int { haystack.components(separatedBy: needle).count - 1 }
+}
+
 enum SafePublicAPIResearch {
-    private static let catalogURL = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
+    private static let publicAPIsURL = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
+    private static let APIsGuruURL = URL(string: "https://api.apis.guru/v2/list.json")!
     private static let excluded = ["gambling", "betting", "casino", "alcohol", "beer", "wine", "weapon", "firearm", "drug", "porn", "adult", "malware"]
 
     static func research(queries: [String]) async -> String {
         guard !queries.isEmpty else { return "" }
-        guard let (data, _) = try? await URLSession.shared.data(from: catalogURL), let catalog = String(data: data, encoding: .utf8) else {
-            return "The public API catalog is unavailable. Build the app with robust local fallback data."
-        }
+        async let publicCatalog = fetchText(publicAPIsURL)
+        async let guruData = fetchData(APIsGuruURL)
+        let catalog = await publicCatalog
+        let guru = await guruData
         var output: [String] = []
+
         for query in queries where safe(query) {
-            let terms = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
-            let matches = catalog.split(separator: "\n").map(String.init).filter { row in
-                guard row.hasPrefix("|") else { return false }
-                let lower = row.lowercased()
-                return !excluded.contains(where: { lower.contains($0) }) && terms.contains(where: { lower.contains($0) })
+            let terms = searchTerms(query)
+            var matches: [String] = []
+
+            if let catalog {
+                let rows = catalog.split(separator: "\n").map(String.init).filter { row in
+                    guard row.hasPrefix("|") else { return false }
+                    let lower = row.lowercased()
+                    return safe(lower) && terms.contains(where: { lower.contains($0) })
+                }
+                matches.append(contentsOf: rows.prefix(6))
             }
-            let rows = Array(matches.prefix(upTo: min(8, matches.count)))
-            if !rows.isEmpty { output.append("Query: \(query)\n" + rows.joined(separator: "\n")) }
+
+            if let guru,
+               let object = try? JSONSerialization.jsonObject(with: guru) as? [String: Any] {
+                for (name, raw) in object where matches.count < 10 {
+                    guard let service = raw as? [String: Any] else { continue }
+                    let lower = (name + " " + String(describing: service)).lowercased()
+                    guard safe(lower), terms.contains(where: { lower.contains($0) }) else { continue }
+                    var line = "APIs.guru: \(name)"
+                    if let preferred = service["preferred"] as? String,
+                       let versions = service["versions"] as? [String: Any],
+                       let version = versions[preferred] as? [String: Any] {
+                        if let info = version["info"] as? [String: Any], let title = info["title"] as? String { line += " — \(title)" }
+                        if let swagger = version["swaggerUrl"] as? String { line += " — OpenAPI: \(swagger)" }
+                    }
+                    matches.append(line)
+                }
+            }
+
+            if matches.isEmpty {
+                output.append("Query: \(query)\nNo matching documented public API was found in the checked catalogs. Do not invent one.")
+            } else {
+                output.append("Query: \(query)\n" + matches.joined(separator: "\n"))
+            }
         }
         return output.joined(separator: "\n\n")
     }
 
-    private static func safe(_ query: String) -> Bool {
-        let lower = query.lowercased()
+    private static func fetchText(_ url: URL) async -> String? {
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func fetchData(_ url: URL) async -> Data? {
+        try? await URLSession.shared.data(from: url).0
+    }
+
+    private static func searchTerms(_ query: String) -> [String] {
+        query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count > 2 }
+    }
+
+    private static func safe(_ text: String) -> Bool {
+        let lower = text.lowercased()
         return !excluded.contains(where: { lower.contains($0) })
     }
 }
