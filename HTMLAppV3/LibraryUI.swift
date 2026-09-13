@@ -10,6 +10,7 @@ struct LibraryView: View {
     @State private var showSettings = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
+    @State private var aiEditorApp: SavedHTMLApp?
     @State private var importingFile = false
     @State private var showReceiver = false
     @State private var senderApp: SavedHTMLApp?
@@ -55,6 +56,11 @@ struct LibraryView: View {
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
             .fullScreenCover(isPresented: $showGenerator) {
                 AIGenerationView()
+                    .environmentObject(store)
+                    .interactiveDismissDisabled(true)
+            }
+            .fullScreenCover(item: $aiEditorApp) { app in
+                AIGenerationView(existingApp: app)
                     .environmentObject(store)
                     .interactiveDismissDisabled(true)
             }
@@ -153,8 +159,10 @@ struct LibraryView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
-                    Button { editor = .edit(app) } label: { Label("Edit", systemImage: "pencil") }
+                    Button { editor = .edit(app) } label: { Label("Code", systemImage: "pencil") }
                         .tint(.orange)
+                    Button { aiEditorApp = app } label: { Label("AI Edit", systemImage: "sparkles") }
+                        .tint(.purple)
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -172,7 +180,8 @@ struct LibraryView: View {
             Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
-        Button { editor = .edit(app) } label: { Label("Update HTML", systemImage: "pencil") }
+        Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
+        Button { editor = .edit(app) } label: { Label("Edit HTML Code", systemImage: "pencil") }
         Divider()
         Button { senderApp = app } label: { Label("Send to Another Device", systemImage: "qrcode") }
         Button { store.exportHTML(app) } label: { Label("Export HTML File", systemImage: "square.and.arrow.up") }
