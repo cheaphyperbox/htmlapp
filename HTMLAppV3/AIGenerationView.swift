@@ -10,6 +10,13 @@ struct AIGenerationView: View {
     @State private var saving = false
     @State private var showCancelConfirmation = false
     @State private var uiPolishNotice: String?
+    @State private var didLoadExisting = false
+
+    let existingApp: SavedHTMLApp?
+
+    init(existingApp: SavedHTMLApp? = nil) {
+        self.existingApp = existingApp
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,7 +27,7 @@ struct AIGenerationView: View {
                     studioView
                 }
             }
-            .navigationTitle("Generate")
+            .navigationTitle(existingApp == nil ? "Generate" : "Edit with AI")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -35,16 +42,16 @@ struct AIGenerationView: View {
                 }
             }
             .confirmationDialog(
-                "Discard this AI generation?",
+                existingApp == nil ? "Discard this AI generation?" : "Discard AI edits?",
                 isPresented: $showCancelConfirmation,
                 titleVisibility: .visible
             ) {
                 Button("Discard and Close", role: .destructive) { dismiss() }
                 Button("Keep Working", role: .cancel) {}
             } message: {
-                Text("The generated preview and current AI work will be lost if you close it without saving.")
+                Text(existingApp == nil ? "The generated preview and current AI work will be lost if you close it without saving." : "Your saved HTMLApp will not be changed unless you choose Save Changes.")
             }
-            .alert("Generation Error", isPresented: Binding(
+            .alert("AI Error", isPresented: Binding(
                 get: { session.errorMessage != nil },
                 set: { if !$0 { session.errorMessage = nil } }
             )) {
@@ -52,6 +59,11 @@ struct AIGenerationView: View {
             } message: {
                 Text(session.errorMessage ?? "")
             }
+        }
+        .task {
+            guard let existingApp, !didLoadExisting else { return }
+            didLoadExisting = true
+            session.load(existing: existingApp)
         }
         .interactiveDismissDisabled(true)
     }
@@ -65,7 +77,7 @@ struct AIGenerationView: View {
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("Describe the app, its purpose, and any data you want it to use. HTMLApp will refine the idea, research suitable public APIs when useful, build a live preview, and optionally run the finished UI through your separate UI Overhaul model.")
+                Text("HTMLApp will improve your prompt, plan the app, search documented public API catalogs when real data or capabilities are needed, build a live preview, and run a final AI QA pass before you save it.")
             }
 
             Section {
@@ -89,7 +101,7 @@ struct AIGenerationView: View {
 
             if AISettingsStore.isUIOverhaulEnabled {
                 Section {
-                    Label("A separate UI Overhaul model will make a conservative visual-only refinement after the functional generation finishes.", systemImage: "paintbrush")
+                    Label("Your separate UI Overhaul model will make a conservative visual refinement, then the main AI will review the result again.", systemImage: "paintbrush")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -109,13 +121,26 @@ struct AIGenerationView: View {
                             Menu {
                                 Text(session.refinedBrief)
                             } label: {
-                                Image(systemName: "doc.text.magnifyingglass")
+                                Image(systemName: "list.bullet.clipboard")
                             }
-                            .accessibilityLabel("View refined brief")
+                            .accessibilityLabel("View AI plan")
+                        }
+                        if !session.verificationReport.isEmpty {
+                            Menu {
+                                Text(session.verificationReport)
+                            } label: {
+                                Image(systemName: "checkmark.shield")
+                            }
+                            .accessibilityLabel("View AI QA report")
                         }
                     }
                     if let uiPolishNotice {
                         Text(uiPolishNotice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if !session.verificationReport.isEmpty {
+                        Text("AI QA reviewed the generated source for mobile UI quality and likely functional issues.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -127,7 +152,7 @@ struct AIGenerationView: View {
 
                 HTMLWebView(
                     html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
-                    appID: "PREVIEW"
+                    appID: existingApp?.id ?? "PREVIEW"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -135,25 +160,23 @@ struct AIGenerationView: View {
                     VStack(spacing: 10) {
                         if showingChange {
                             HStack(spacing: 8) {
-                                TextField("What should change?", text: $changePrompt, axis: .vertical)
-                                    .lineLimit(1...3)
+                                TextField("Tell AI what to change…", text: $changePrompt, axis: .vertical)
+                                    .lineLimit(1...4)
                                     .textFieldStyle(.roundedBorder)
-                                Button("Apply") {
-                                    let change = changePrompt
-                                    changePrompt = ""
-                                    showingChange = false
-                                    uiPolishNotice = nil
-                                    Task { await session.revise(change: change) }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                Button("Apply") { applyAIChange() }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
+                            Text("AI edits use exact patches so unrelated HTML, JavaScript, APIs, storage, and behavior stay intact.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             HStack(spacing: 10) {
-                                Button("Change this…") { showingChange = true }
+                                Button(existingApp == nil ? "Change this…" : "Ask AI to edit…") { showingChange = true }
                                     .buttonStyle(.bordered)
                                     .frame(maxWidth: .infinity)
-                                Button("Looks good") { saveGeneratedApp() }
+                                Button(existingApp == nil ? "Looks good" : "Save Changes") { saveGeneratedApp() }
                                     .buttonStyle(.borderedProminent)
                                     .frame(maxWidth: .infinity)
                                     .disabled(saving)
@@ -171,7 +194,7 @@ struct AIGenerationView: View {
                         Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
                         VStack(spacing: 12) {
                             ProgressView().controlSize(.large)
-                            Text("Saving app…").font(.headline)
+                            Text(existingApp == nil ? "Saving app…" : "Saving changes…").font(.headline)
                         }
                     }
                 }
@@ -191,23 +214,42 @@ struct AIGenerationView: View {
         Task {
             await session.generate(prompt: originalPrompt)
             guard session.errorMessage == nil,
-                  !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  AISettingsStore.isUIOverhaulEnabled else { return }
+                  !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            await runOptionalUIPolish(originalPrompt: originalPrompt)
+        }
+    }
 
-            let functionalHTML = session.streamedHTML
-            session.isWorking = true
-            session.phase = "Polishing the interface"
-            do {
-                let polished = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
-                session.streamedHTML = polished
-                session.phase = "Ready to review"
-                uiPolishNotice = "UI Overhaul finished without intentionally changing app functionality."
-            } catch {
-                session.streamedHTML = functionalHTML
-                session.phase = "Ready to review"
-                uiPolishNotice = "UI Overhaul was skipped because it failed. The original functional generation was preserved."
-            }
+    private func applyAIChange() {
+        let change = changePrompt
+        changePrompt = ""
+        showingChange = false
+        uiPolishNotice = nil
+        Task {
+            await session.revise(change: change)
+            guard session.errorMessage == nil else { return }
+            await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
+        }
+    }
+
+    private func runOptionalUIPolish(originalPrompt: String) async {
+        guard AISettingsStore.isUIOverhaulEnabled else { return }
+        let functionalHTML = session.streamedHTML
+        session.isWorking = true
+        session.phase = "Polishing the interface"
+        do {
+            let polished = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
+            session.acceptExternalHTML(polished)
+            uiPolishNotice = "UI Overhaul refined the presentation. Running final AI QA…"
             session.isWorking = false
+            await session.verifyCurrent()
+            if session.errorMessage == nil {
+                uiPolishNotice = "UI Overhaul finished and the main AI completed a final source-level QA review."
+            }
+        } catch {
+            session.acceptExternalHTML(functionalHTML)
+            session.isWorking = false
+            session.phase = "Ready to review"
+            uiPolishNotice = "UI Overhaul was skipped because it failed. The verified functional version was preserved."
         }
     }
 
@@ -215,10 +257,16 @@ struct AIGenerationView: View {
         saving = true
         Task {
             var html = session.streamedHTML
-            if let icon = await AIIconRenderer.render(script: session.iconScript) {
+            if !session.iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let icon = await AIIconRenderer.render(script: session.iconScript) {
                 html = injectIcon(icon, into: html)
             }
-            await store.add(html: html, summary: session.description)
+            if let existingApp {
+                await store.update(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description)
+                store.notice = "Saved AI changes to \(existingApp.name)."
+            } else {
+                await store.add(html: html, summary: session.description)
+            }
             saving = false
             dismiss()
         }
