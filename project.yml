@@ -28,9 +28,12 @@ targets:
           ICONSET="${ROOT}/Assets.xcassets/AppIcon.appiconset"
           WORK="${DERIVED_FILE_DIR}/HTMLApp-AppIcon"
           MASTER="${WORK}/AppIcon-1024.png"
+          MACOS_SDK="$(/usr/bin/xcrun --sdk macosx --show-sdk-path)"
 
           mkdir -p "${WORK}" "${ICONSET}"
-          /usr/bin/xcrun swift "${ROOT}/GenerateAppIcon.swift" "${MASTER}"
+          /usr/bin/env -u IPHONEOS_DEPLOYMENT_TARGET -u PLATFORM_NAME \
+            SDKROOT="${MACOS_SDK}" \
+            /usr/bin/xcrun --sdk macosx swift "${ROOT}/GenerateAppIcon.swift" "${MASTER}"
 
           make_icon() {
             local pixels="$1"
