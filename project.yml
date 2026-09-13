@@ -19,12 +19,54 @@ targets:
       - path: HTMLApp/WebClipSupport.swift
     resources:
       - path: HTMLApp/Assets.xcassets
+    preBuildScripts:
+      - name: Generate AppIcon Assets
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          ROOT="${SRCROOT}/HTMLApp"
+          ICONSET="${ROOT}/Assets.xcassets/AppIcon.appiconset"
+          WORK="${DERIVED_FILE_DIR}/HTMLApp-AppIcon"
+          MASTER="${WORK}/AppIcon-1024.png"
+
+          mkdir -p "${WORK}" "${ICONSET}"
+          cat "${ROOT}/AppIconSource.part1" \
+              "${ROOT}/AppIconSource.part2" \
+              "${ROOT}/AppIconSource.part3" \
+              "${ROOT}/AppIconSource.part4" \
+            | tr -d '[:space:]' \
+            | /usr/bin/base64 -D > "${MASTER}"
+
+          make_icon() {
+            local pixels="$1"
+            local filename="$2"
+            /usr/bin/sips -z "${pixels}" "${pixels}" "${MASTER}" --out "${ICONSET}/${filename}" >/dev/null
+          }
+
+          cp "${MASTER}" "${ICONSET}/AppIcon-1024.png"
+          make_icon 20 "AppIcon-20.png"
+          make_icon 29 "AppIcon-29.png"
+          make_icon 40 "AppIcon-40.png"
+          make_icon 60 "AppIcon-20@3x.png"
+          make_icon 76 "AppIcon-76.png"
+          make_icon 87 "AppIcon-29@3x.png"
+          make_icon 120 "AppIcon-40@3x.png"
+          make_icon 120 "AppIcon-60@2x.png"
+          make_icon 152 "AppIcon-76@2x.png"
+          make_icon 167 "AppIcon-83.5@2x.png"
+          make_icon 180 "AppIcon-60@3x.png"
+          make_icon 40 "AppIcon-20@2x.png"
+          make_icon 58 "AppIcon-29@2x.png"
+          make_icon 80 "AppIcon-40@2x.png"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp
         PRODUCT_NAME: HTMLApp
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: HTMLApp
@@ -35,6 +77,8 @@ targets:
       path: HTMLApp/Info.plist
       properties:
         CFBundleDisplayName: HTMLApp
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSCameraUsageDescription: HTML apps can use the camera only after you allow that saved app and approve the iOS permission.
         NSMicrophoneUsageDescription: HTML apps can use the microphone only after you allow that saved app and approve the iOS permission.
         NSLocationWhenInUseUsageDescription: HTML apps can request your location only after you allow that saved app and approve the iOS permission.
