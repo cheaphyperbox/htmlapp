@@ -30,12 +30,7 @@ targets:
           MASTER="${WORK}/AppIcon-1024.png"
 
           mkdir -p "${WORK}" "${ICONSET}"
-          cat "${ROOT}/AppIconSource.part1" \
-              "${ROOT}/AppIconSource.part2" \
-              "${ROOT}/AppIconSource.part3" \
-              "${ROOT}/AppIconSource.part4" \
-            | tr -d '[:space:]' \
-            | /usr/bin/base64 -D > "${MASTER}"
+          /usr/bin/xcrun swift "${ROOT}/GenerateAppIcon.swift" "${MASTER}"
 
           make_icon() {
             local pixels="$1"
