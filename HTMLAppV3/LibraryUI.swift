@@ -19,6 +19,11 @@ private enum FolderDestinationOperation: Identifiable {
 struct LibraryView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("libraryLayout") private var libraryLayout = "list"
+    @AppStorage("librarySortMode") private var librarySortModeRaw = LibrarySortMode.alphabeticalAZ.rawValue
+    @AppStorage("librarySortDateBasis") private var librarySortDateBasisRaw = LibrarySortDateBasis.modified.rawValue
+    @AppStorage("libraryFoldersOnTop") private var libraryFoldersOnTop = true
+    @AppStorage("libraryFavoritesOnTop") private var libraryFavoritesOnTop = true
+
     @State private var searchText = ""
     @State private var folderPath: [LibraryFolder] = []
     @State private var editor: EditorMode?
@@ -46,161 +51,178 @@ struct LibraryView: View {
     @State private var pendingFolderDelete: LibraryFolder?
     @State private var destinationOperation: FolderDestinationOperation?
 
+    private var sortMode: LibrarySortMode {
+        LibrarySortMode(rawValue: librarySortModeRaw) ?? .alphabeticalAZ
+    }
+
+    private var sortDateBasis: LibrarySortDateBasis {
+        LibrarySortDateBasis(rawValue: librarySortDateBasisRaw) ?? .modified
+    }
+
     var body: some View {
         NavigationStack(path: $folderPath) {
             libraryPage(folderID: nil)
                 .navigationDestination(for: LibraryFolder.self) { folder in
                     libraryPage(folderID: folder.id)
                 }
-                .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
-                .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
-                .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
-                .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
-                .fullScreenCover(isPresented: $showGenerator) {
-                    AIGenerationView().environmentObject(store).interactiveDismissDisabled(true)
+        }
+        // Present from the navigation container, not the root page. This keeps
+        // dialogs/sheets active while a nested folder destination is on screen.
+        .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
+        .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
+        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
+        .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
+        .fullScreenCover(isPresented: $showGenerator) {
+            AIGenerationView().environmentObject(store).interactiveDismissDisabled(true)
+        }
+        .fullScreenCover(item: $aiEditorApp) { app in
+            AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
+        }
+        .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
+        .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
+        .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
+        .fullScreenCover(isPresented: $showReceiver) {
+            OpticalReceiverView { payload in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pendingImport = payload }
+            }
+        }
+        .sheet(item: $tintFolder) { folder in
+            FolderTintPicker(folder: folder) { hex in
+                store.setFolderTint(folder, hex: hex)
+                LibraryFolderActivityStore.markModified(folder.id)
+            }
+        }
+        .sheet(item: $destinationOperation) { operation in
+            FolderDestinationPicker(
+                title: destinationTitle(operation),
+                actionTitle: destinationActionTitle(operation),
+                excludedFolderIDs: excludedDestinationIDs(operation)
+            ) { destinationID in
+                applyDestination(operation, destinationID: destinationID)
+            }
+            .environmentObject(store)
+        }
+        .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
+            Button("Generate with AI") { showGenerator = true }
+            Button("Download Website") { showWebsiteImporter = true }
+            Button("Enter Custom Code") { editor = .new }
+            Button("Select an HTML File") { importingFile = true }
+            Button("Import from Another Device") { showReceiver = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or scan a transfer.")
+        }
+        .alert("New Folder", isPresented: $showNewFolder) {
+            TextField("Folder name", text: $newFolderName)
+            Button("Create") {
+                if let created = store.createFolder(newFolderName, parentID: newFolderParentID) {
+                    LibraryFolderActivityStore.markModified(created.id)
                 }
-                .fullScreenCover(item: $aiEditorApp) { app in
-                    AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
+                newFolderName = ""
+                newFolderParentID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                newFolderName = ""
+                newFolderParentID = nil
+            }
+        } message: {
+            Text("The new folder will be created inside the folder you are currently viewing.")
+        }
+        .alert(
+            "Rename Folder",
+            isPresented: Binding(
+                get: { renamingFolder != nil },
+                set: { if !$0 { renamingFolder = nil } }
+            )
+        ) {
+            TextField("Folder name", text: $renameFolderName)
+            Button("Rename") {
+                if let folder = renamingFolder {
+                    store.renameFolder(folder, to: renameFolderName)
+                    LibraryFolderActivityStore.markModified(folder.id)
                 }
-                .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
-                .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
-                .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
-                .fullScreenCover(isPresented: $showReceiver) {
-                    OpticalReceiverView { payload in
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pendingImport = payload }
+                renamingFolder = nil
+                renameFolderName = ""
+            }
+            Button("Cancel", role: .cancel) {
+                renamingFolder = nil
+                renameFolderName = ""
+            }
+        } message: {
+            Text("Renaming a folder does not change the apps or nested folders inside it.")
+        }
+        .fileImporter(
+            isPresented: $importingFile,
+            allowedContentTypes: [.html, .plainText],
+            allowsMultipleSelection: false,
+            onCompletion: importFile
+        )
+        .confirmationDialog(
+            "Install Home Screen Web Clip?",
+            isPresented: Binding(get: { profileApp != nil }, set: { if !$0 { profileApp = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Open Profile in Safari") {
+                if let app = profileApp { store.installWebClip(for: app) }
+                profileApp = nil
+            }
+            Button("Export .mobileconfig") {
+                if let app = profileApp { store.exportProfile(for: app) }
+                profileApp = nil
+            }
+            Button("Cancel", role: .cancel) { profileApp = nil }
+        } message: {
+            Text("Safari will open the generated profile with its embedded icon. Then follow the iOS profile installation prompts.")
+        }
+        .confirmationDialog(
+            "Delete \(pendingDelete?.name ?? "this app")?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let app = pendingDelete { store.delete(app) }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("This removes the one canonical app and all of its folder links, HTML, icon, metadata, caches, downloaded website files, and saved permission choices.")
+        }
+        .confirmationDialog(
+            "Delete \(pendingFolderDelete?.name ?? "this folder")?",
+            isPresented: Binding(get: { pendingFolderDelete != nil }, set: { if !$0 { pendingFolderDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Folder", role: .destructive) {
+                if let folder = pendingFolderDelete {
+                    store.deleteFolder(folder)
+                    LibraryFolderActivityStore.remove(folder.id)
+                }
+                pendingFolderDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingFolderDelete = nil }
+        } message: {
+            Text("The folder itself will be deleted. Its app links and nested folders will be moved up one level, so no app data is copied or lost.")
+        }
+        .alert(
+            "HTMLApp",
+            isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })
+        ) {
+            Button("OK") { store.errorMessage = nil }
+        } message: {
+            Text(store.errorMessage ?? "")
+        }
+        .overlay(alignment: .bottom) {
+            if let notice = store.notice {
+                Text(notice)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 18)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { store.notice = nil }
                     }
-                }
-                .sheet(item: $tintFolder) { folder in
-                    FolderTintPicker(folder: folder) { hex in
-                        store.setFolderTint(folder, hex: hex)
-                    }
-                }
-                .sheet(item: $destinationOperation) { operation in
-                    FolderDestinationPicker(
-                        title: destinationTitle(operation),
-                        actionTitle: destinationActionTitle(operation),
-                        excludedFolderIDs: excludedDestinationIDs(operation)
-                    ) { destinationID in
-                        applyDestination(operation, destinationID: destinationID)
-                    }
-                    .environmentObject(store)
-                }
-                .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
-                    Button("Generate with AI") { showGenerator = true }
-                    Button("Download Website") { showWebsiteImporter = true }
-                    Button("Enter Custom Code") { editor = .new }
-                    Button("Select an HTML File") { importingFile = true }
-                    Button("Import from Another Device") { showReceiver = true }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or scan a transfer.")
-                }
-                .alert("New Folder", isPresented: $showNewFolder) {
-                    TextField("Folder name", text: $newFolderName)
-                    Button("Create") {
-                        _ = store.createFolder(newFolderName, parentID: newFolderParentID)
-                        newFolderName = ""
-                        newFolderParentID = nil
-                    }
-                    Button("Cancel", role: .cancel) {
-                        newFolderName = ""
-                        newFolderParentID = nil
-                    }
-                } message: {
-                    Text("The new folder will be created inside the folder you are currently viewing.")
-                }
-                .alert(
-                    "Rename Folder",
-                    isPresented: Binding(
-                        get: { renamingFolder != nil },
-                        set: { if !$0 { renamingFolder = nil } }
-                    )
-                ) {
-                    TextField("Folder name", text: $renameFolderName)
-                    Button("Rename") {
-                        if let folder = renamingFolder {
-                            store.renameFolder(folder, to: renameFolderName)
-                        }
-                        renamingFolder = nil
-                        renameFolderName = ""
-                    }
-                    Button("Cancel", role: .cancel) {
-                        renamingFolder = nil
-                        renameFolderName = ""
-                    }
-                } message: {
-                    Text("Renaming a folder does not change the apps or nested folders inside it.")
-                }
-                .fileImporter(
-                    isPresented: $importingFile,
-                    allowedContentTypes: [.html, .plainText],
-                    allowsMultipleSelection: false,
-                    onCompletion: importFile
-                )
-                .confirmationDialog(
-                    "Install Home Screen Web Clip?",
-                    isPresented: Binding(get: { profileApp != nil }, set: { if !$0 { profileApp = nil } }),
-                    titleVisibility: .visible
-                ) {
-                    Button("Open Profile in Safari") {
-                        if let app = profileApp { store.installWebClip(for: app) }
-                        profileApp = nil
-                    }
-                    Button("Export .mobileconfig") {
-                        if let app = profileApp { store.exportProfile(for: app) }
-                        profileApp = nil
-                    }
-                    Button("Cancel", role: .cancel) { profileApp = nil }
-                } message: {
-                    Text("Safari will open the generated profile with its embedded icon. Then follow the iOS profile installation prompts.")
-                }
-                .confirmationDialog(
-                    "Delete \(pendingDelete?.name ?? "this app")?",
-                    isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) {
-                        if let app = pendingDelete { store.delete(app) }
-                        pendingDelete = nil
-                    }
-                    Button("Cancel", role: .cancel) { pendingDelete = nil }
-                } message: {
-                    Text("This removes the one canonical app and all of its folder links, HTML, icon, metadata, caches, downloaded website files, and saved permission choices.")
-                }
-                .confirmationDialog(
-                    "Delete \(pendingFolderDelete?.name ?? "this folder")?",
-                    isPresented: Binding(get: { pendingFolderDelete != nil }, set: { if !$0 { pendingFolderDelete = nil } }),
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete Folder", role: .destructive) {
-                        if let folder = pendingFolderDelete { store.deleteFolder(folder) }
-                        pendingFolderDelete = nil
-                    }
-                    Button("Cancel", role: .cancel) { pendingFolderDelete = nil }
-                } message: {
-                    Text("The folder itself will be deleted. Its app links and nested folders will be moved up one level, so no app data is copied or lost.")
-                }
-                .alert(
-                    "HTMLApp",
-                    isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })
-                ) {
-                    Button("OK") { store.errorMessage = nil }
-                } message: {
-                    Text(store.errorMessage ?? "")
-                }
-                .overlay(alignment: .bottom) {
-                    if let notice = store.notice {
-                        Text(notice)
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(.regularMaterial, in: Capsule())
-                            .padding(.bottom, 18)
-                            .onAppear {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { store.notice = nil }
-                            }
-                    }
-                }
+            }
         }
     }
 
@@ -208,14 +230,14 @@ struct LibraryView: View {
     private func libraryPage(folderID: String?) -> some View {
         let folders = visibleFolders(in: folderID)
         let apps = visibleApps(in: folderID)
+        let entries = sortedEntries(folders: folders, apps: apps)
         let folderName = folderID.flatMap { store.folder(withID: $0)?.name }
-        let hasAnyContent = !folders.isEmpty || !apps.isEmpty
         let queryIsEmpty = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         Group {
             if folderID == nil && store.apps.isEmpty && store.folders.isEmpty && queryIsEmpty {
                 EmptyLibraryView { prepareAdd(in: nil) }
-            } else if !hasAnyContent {
+            } else if entries.isEmpty {
                 ContentUnavailableViewCompat(
                     title: queryIsEmpty ? "Folder is Empty" : "No Results",
                     systemImage: queryIsEmpty ? "folder" : "magnifyingglass",
@@ -225,16 +247,14 @@ struct LibraryView: View {
                 )
             } else if libraryLayout == "grid" {
                 PagedLibraryGrid(
-                    folders: folders,
-                    apps: apps,
+                    entries: entries,
                     openFolder: openFolder,
                     openApp: store.launch,
                     folderMenu: { AnyView(folderMenu(for: $0)) },
                     appMenu: { AnyView(appMenu(for: $0, sourceFolderID: folderID)) }
                 )
-                .environmentObject(store)
             } else {
-                libraryList(folderID: folderID, folders: folders, apps: apps)
+                libraryList(folderID: folderID, entries: entries)
             }
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
@@ -265,54 +285,59 @@ struct LibraryView: View {
         }
     }
 
-    private func libraryList(folderID: String?, folders: [LibraryFolder], apps: [SavedHTMLApp]) -> some View {
-        List {
-            if !folders.isEmpty {
-                Section {
-                    ForEach(folders) { folder in
-                        Button { openFolder(folder) } label: {
-                            FolderListRow(
-                                folder: folder,
-                                appCount: store.descendantAppCount(in: folder.id),
-                                subfolderCount: store.childFolders(of: folder.id).count
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { folderMenu(for: folder) }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                    }
-                }
-            }
+    private func sortedEntries(folders: [LibraryFolder], apps: [SavedHTMLApp]) -> [LibraryDisplayItem] {
+        LibrarySorter.sortedItems(
+            folders: folders,
+            apps: apps,
+            mode: sortMode,
+            dateBasis: sortDateBasis,
+            foldersOnTop: libraryFoldersOnTop,
+            favoritesOnTop: libraryFavoritesOnTop
+        )
+    }
 
-            if !apps.isEmpty {
-                Section {
-                    ForEach(apps) { app in
-                        Button { store.launch(app) } label: {
-                            ListAppRow(app: app, refreshing: refreshingID == app.id)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { appMenu(for: app, sourceFolderID: folderID) }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            Button { store.toggleFavorite(app) } label: {
-                                Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
-                            }
-                            .tint(.yellow)
-                            Button { refresh(app) } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                                .tint(.indigo)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
-                            Button { edit(app) } label: { Label(app.websiteSourceURL == nil ? "Code" : "URL", systemImage: "pencil") }
-                                .tint(.orange)
-                            Button { aiEditorApp = app } label: { Label("AI Edit", systemImage: "sparkles") }
-                                .tint(.purple)
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+    private func libraryList(folderID: String?, entries: [LibraryDisplayItem]) -> some View {
+        List {
+            ForEach(entries) { entry in
+                switch entry {
+                case .folder(let folder):
+                    Button { openFolder(folder) } label: {
+                        FolderListRow(
+                            folder: folder,
+                            appCount: store.descendantAppCount(in: folder.id),
+                            subfolderCount: store.childFolders(of: folder.id).count
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .contextMenu { folderMenu(for: folder) }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+
+                case .app(let app):
+                    Button { store.launch(app) } label: {
+                        ListAppRow(app: app, refreshing: refreshingID == app.id)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { appMenu(for: app, sourceFolderID: folderID) }
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button { store.toggleFavorite(app) } label: {
+                            Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
+                        }
+                        .tint(.yellow)
+                        Button { refresh(app) } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                            .tint(.indigo)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
+                        Button { edit(app) } label: { Label(app.websiteSourceURL == nil ? "Code" : "URL", systemImage: "pencil") }
+                            .tint(.orange)
+                        Button { aiEditorApp = app } label: { Label("AI Edit", systemImage: "sparkles") }
+                            .tint(.purple)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 }
             }
         }
@@ -322,50 +347,24 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func folderMenu(for folder: LibraryFolder) -> some View {
-        Button {
-            destinationOperation = .moveFolder(folder)
-        } label: {
-            Label("Move To", systemImage: "folder")
-        }
-
-        Button {
-            destinationOperation = .copyFolder(folder)
-        } label: {
-            Label("Copy To", systemImage: "doc.on.doc")
-        }
-
+        Button { destinationOperation = .moveFolder(folder) } label: { Label("Move To", systemImage: "folder") }
+        Button { destinationOperation = .copyFolder(folder) } label: { Label("Copy To", systemImage: "doc.on.doc") }
         Button {
             renamingFolder = folder
             renameFolderName = folder.name
-        } label: {
-            Label("Rename", systemImage: "pencil")
-        }
-
-        Button {
-            tintFolder = folder
-        } label: {
-            Label("Choose Tint", systemImage: "paintpalette")
-        }
-
+        } label: { Label("Rename", systemImage: "pencil") }
+        Button { tintFolder = folder } label: { Label("Choose Tint", systemImage: "paintpalette") }
         Divider()
-        Button(role: .destructive) {
-            pendingFolderDelete = folder
-        } label: {
-            Label("Delete", systemImage: "trash")
-        }
+        Button(role: .destructive) { pendingFolderDelete = folder } label: { Label("Delete", systemImage: "trash") }
     }
 
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
         Button { store.launch(app) } label: { Label("Open", systemImage: "play.fill") }
         Button { store.toggleFavorite(app) } label: {
-            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
+            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
-        Button {
-            destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID)
-        } label: {
-            Label("Move To", systemImage: "folder")
-        }
+        Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: { Label("Move To", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
         Button { edit(app) } label: {
@@ -402,6 +401,7 @@ struct LibraryView: View {
 
     private func openFolder(_ folder: LibraryFolder) {
         searchText = ""
+        LibraryFolderActivityStore.markOpened(folder.id)
         folderPath.append(folder)
     }
 
@@ -438,6 +438,7 @@ struct LibraryView: View {
         switch operation {
         case .moveFolder(let folder):
             store.moveFolder(folder, toParent: destinationID)
+            LibraryFolderActivityStore.markModified(folder.id)
         case .copyFolder(let folder):
             store.copyFolder(folder, toParent: destinationID)
         case .moveApp(let app, let sourceFolderID):
@@ -610,11 +611,18 @@ struct FolderTintPicker: View {
 struct FolderDestinationPicker: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("librarySortMode") private var librarySortModeRaw = LibrarySortMode.alphabeticalAZ.rawValue
+    @AppStorage("librarySortDateBasis") private var librarySortDateBasisRaw = LibrarySortDateBasis.modified.rawValue
+    @AppStorage("libraryFavoritesOnTop") private var libraryFavoritesOnTop = true
+
     let title: String
     let actionTitle: String
     let excludedFolderIDs: Set<String>
     let choose: (String?) -> Void
     @State private var path: [String] = []
+
+    private var sortMode: LibrarySortMode { LibrarySortMode(rawValue: librarySortModeRaw) ?? .alphabeticalAZ }
+    private var sortDateBasis: LibrarySortDateBasis { LibrarySortDateBasis(rawValue: librarySortDateBasisRaw) ?? .modified }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -626,8 +634,8 @@ struct FolderDestinationPicker: View {
     }
 
     private func level(folderID: String?) -> some View {
-        let folders = store.childFolders(of: folderID)
-        let apps = store.apps(in: folderID)
+        let folders = LibrarySorter.sortedFolders(store.childFolders(of: folderID), mode: sortMode, dateBasis: sortDateBasis)
+        let apps = LibrarySorter.sortedApps(store.apps(in: folderID), mode: sortMode, dateBasis: sortDateBasis, favoritesOnTop: libraryFavoritesOnTop)
         let canChooseHere = folderID.map { !excludedFolderIDs.contains($0) } ?? true
         let currentName = folderID.flatMap { store.folder(withID: $0)?.name } ?? "HTMLApp"
 
@@ -745,21 +753,8 @@ struct ListAppRow: View {
     }
 }
 
-private enum LibraryGridEntry: Identifiable {
-    case folder(LibraryFolder)
-    case app(SavedHTMLApp)
-
-    var id: String {
-        switch self {
-        case .folder(let folder): return "folder-\(folder.id)"
-        case .app(let app): return "app-\(app.id)"
-        }
-    }
-}
-
 struct PagedLibraryGrid: View {
-    let folders: [LibraryFolder]
-    let apps: [SavedHTMLApp]
+    let entries: [LibraryDisplayItem]
     let openFolder: (LibraryFolder) -> Void
     let openApp: (SavedHTMLApp) -> Void
     let folderMenu: (LibraryFolder) -> AnyView
@@ -767,8 +762,7 @@ struct PagedLibraryGrid: View {
 
     private let itemsPerPage = 20
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-    private var entries: [LibraryGridEntry] { folders.map(LibraryGridEntry.folder) + apps.map(LibraryGridEntry.app) }
-    private var pages: [[LibraryGridEntry]] {
+    private var pages: [[LibraryDisplayItem]] {
         stride(from: 0, to: entries.count, by: itemsPerPage).map { Array(entries[$0..<min($0 + itemsPerPage, entries.count)]) }
     }
 
