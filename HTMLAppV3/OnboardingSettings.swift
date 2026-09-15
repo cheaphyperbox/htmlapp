@@ -63,6 +63,10 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("onboardingComplete") private var onboardingComplete = true
     @AppStorage("libraryLayout") private var libraryLayout = "list"
+    @AppStorage("librarySortMode") private var librarySortModeRaw = LibrarySortMode.alphabeticalAZ.rawValue
+    @AppStorage("librarySortDateBasis") private var librarySortDateBasisRaw = LibrarySortDateBasis.modified.rawValue
+    @AppStorage("libraryFoldersOnTop") private var libraryFoldersOnTop = true
+    @AppStorage("libraryFavoritesOnTop") private var libraryFavoritesOnTop = true
     @AppStorage("askBeforeSwitch") private var askBeforeSwitch = true
     @AppStorage("sourceRefreshDays") private var sourceRefreshDays = 3
     @AppStorage("autoApplyWebsiteUpdates") private var autoApplyWebsiteUpdates = false
@@ -82,6 +86,10 @@ struct SettingsView: View {
     @State private var uiKey = AISettingsStore.uiAPIKey
     @State private var aiSaved = false
 
+    private var selectedSortMode: LibrarySortMode {
+        LibrarySortMode(rawValue: librarySortModeRaw) ?? .alphabeticalAZ
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -95,6 +103,29 @@ struct SettingsView: View {
                          ? "Grid resembles an iPhone Home Screen and creates swipeable pages when needed."
                          : "List shows descriptions and supports quick swipe actions.")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Toggle("Folders on top", isOn: $libraryFoldersOnTop)
+                    Toggle("Favorite apps on top", isOn: $libraryFavoritesOnTop)
+
+                    Picker("Sort", selection: $librarySortModeRaw) {
+                        ForEach(LibrarySortMode.allCases) { mode in
+                            Text(mode.title).tag(mode.rawValue)
+                        }
+                    }
+
+                    if selectedSortMode.usesDateBasis {
+                        Picker("Latest uses", selection: $librarySortDateBasisRaw) {
+                            ForEach(LibrarySortDateBasis.allCases) { basis in
+                                Text(basis.title).tag(basis.rawValue)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Library Sorting")
+                } footer: {
+                    Text(librarySortDescription)
                 }
 
                 Section {
@@ -258,6 +289,25 @@ struct SettingsView: View {
             }
             .overlay { if working { ProgressView().controlSize(.large) } }
         }
+    }
+
+    private var librarySortDescription: String {
+        switch selectedSortMode {
+        case .alphabeticalAZ, .alphabeticalZA:
+            return libraryFoldersOnTop
+                ? "Folders are grouped above apps, then names use the selected alphabetical order."
+                : "Folders and apps are mixed together and sorted by name."
+        case .latestFirst:
+            return "The newest items appear first using \(sortDateBasisTitle.lowercased())."
+        case .latestLast:
+            return "The newest items appear last using \(sortDateBasisTitle.lowercased())."
+        case .recentlyOpened:
+            return "Recently opened apps and folders appear first. Items never opened fall back to alphabetical order."
+        }
+    }
+
+    private var sortDateBasisTitle: String {
+        (LibrarySortDateBasis(rawValue: librarySortDateBasisRaw) ?? .modified).title
     }
 
     private func saveAI(silent: Bool = false) {
