@@ -93,7 +93,7 @@ struct SavedHTMLApp: Identifiable, Codable, Hashable {
     var lastOpenedAt: Date?
     var isFavorite: Bool?
     var folderName: String? // Legacy flat-folder field; migrated into folderID.
-    var folderID: String?
+    var folderID: String?   // One primary placement. Additional placements are lightweight LibraryAppLink references.
     var websiteSourceURL: String?
     var websiteFingerprint: String?
 }
@@ -134,6 +134,10 @@ final class AppStore: ObservableObject {
         libraryURL = base.appendingPathComponent("library.json")
         load()
         loadFoldersAndMigrate()
+        FolderAppLinkStore.shared.prune(
+            validAppIDs: Set(apps.map(\.id)),
+            validFolderIDs: Set(folders.map(\.id))
+        )
     }
 
     func prepareNewItemDestination(_ folderID: String?) {
@@ -309,21 +313,23 @@ final class AppStore: ObservableObject {
             }
     }
 
+    /// Returns canonical app records for this folder. Extra folder appearances are only lightweight links.
     func apps(in folderID: String?) -> [SavedHTMLApp] {
-        orderedApps.filter { $0.folderID == folderID }
+        let linkedIDs = FolderAppLinkStore.shared.appIDs(in: folderID)
+        return orderedApps.filter { $0.folderID == folderID || linkedIDs.contains($0.id) }
     }
 
     func directAppCount(in folderID: String?) -> Int {
-        apps.reduce(into: 0) { count, app in
-            if app.folderID == folderID { count += 1 }
-        }
+        apps(in: folderID).count
     }
 
     func descendantAppCount(in folderID: String) -> Int {
-        let ids = subtreeFolderIDs(startingAt: folderID)
-        return apps.reduce(into: 0) { count, app in
-            if let appFolderID = app.folderID, ids.contains(appFolderID) { count += 1 }
+        let folderIDs = subtreeFolderIDs(startingAt: folderID)
+        var appIDs: Set<String> = []
+        for id in folderIDs {
+            appIDs.formUnion(apps(in: id).map(\.id))
         }
+        return appIDs.count
     }
 
     func subtreeFolderIDs(startingAt folderID: String) -> Set<String> {
@@ -399,6 +405,7 @@ final class AppStore: ObservableObject {
         notice = "Moved \(folders[index].name)."
     }
 
+    /// Duplicates only the folder structure and app references. App-owned storage is never copied.
     func copyFolder(_ folder: LibraryFolder, toParent destinationID: String?) {
         guard folders.contains(where: { $0.id == folder.id }) else { return }
         guard destinationID == nil || folders.contains(where: { $0.id == destinationID }) else {
@@ -412,7 +419,6 @@ final class AppStore: ObservableObject {
         }
 
         let originalFolders = folders
-        let originalApps = apps
         var mapping: [String: String] = [:]
 
         func cloneFolderTree(sourceID: String, newParentID: String?, isRoot: Bool) {
@@ -427,6 +433,7 @@ final class AppStore: ObservableObject {
             )
             folders.append(copied)
             mapping[source.id] = copied.id
+
             for child in originalFolders
                 .filter({ $0.parentID == source.id })
                 .sorted(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) {
@@ -435,26 +442,9 @@ final class AppStore: ObservableObject {
         }
 
         cloneFolderTree(sourceID: folder.id, newParentID: destinationID, isRoot: true)
-
-        let now = Date()
-        for source in originalApps where source.folderID.map({ sourceIDs.contains($0) }) == true {
-            guard let sourceFolderID = source.folderID,
-                  let copiedFolderID = mapping[sourceFolderID] else { continue }
-            var copied = source
-            copied.id = makeID()
-            copied.folderID = copiedFolderID
-            copied.folderName = nil
-            copied.createdAt = now
-            copied.updatedAt = now
-            copied.lastOpenedAt = nil
-            copied.isFavorite = false
-            apps.insert(copied, at: 0)
-            SourceCache.shared.clone(appID: source.id, to: copied.id)
-        }
-
+        FolderAppLinkStore.shared.copyPlacements(folderIDMapping: mapping, canonicalApps: apps)
         persistFolders()
-        save()
-        notice = "Copied \(folder.name) and its contents."
+        notice = "Copied \(folder.name) using shared app links."
     }
 
     func deleteFolder(_ folder: LibraryFolder) {
@@ -472,6 +462,7 @@ final class AppStore: ObservableObject {
             folders[index].parentID = parentID
         }
 
+        FolderAppLinkStore.shared.moveAliases(from: folder.id, to: parentID, canonicalApps: apps)
         for index in apps.indices where apps[index].folderID == folder.id {
             apps[index].folderID = parentID
             apps[index].folderName = nil
@@ -483,19 +474,41 @@ final class AppStore: ObservableObject {
         notice = "Deleted \(folder.name). Its contents were moved up one level."
     }
 
-    func move(_ app: SavedHTMLApp, toFolderID folderID: String?) {
-        guard folderID == nil || folders.contains(where: { $0.id == folderID }) else {
+    /// Moves only the appearance of an app from the folder the user is looking at.
+    /// If that appearance is a copied link, the canonical app and all other appearances stay untouched.
+    func movePlacement(_ app: SavedHTMLApp, fromFolderID sourceFolderID: String?, toFolderID destinationFolderID: String?) {
+        guard destinationFolderID == nil || folders.contains(where: { $0.id == destinationFolderID }) else {
             errorMessage = "The destination folder no longer exists."
             return
         }
         guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
-        apps[index].folderID = folderID
-        apps[index].folderName = nil
-        save()
-        notice = folderID.flatMap { folder(withID: $0)?.name }.map { "Moved \(apps[index].name) to \($0)." } ?? "Moved \(apps[index].name) to the library."
+
+        if apps[index].folderID == sourceFolderID {
+            FolderAppLinkStore.shared.remove(appID: app.id, folderID: destinationFolderID)
+            apps[index].folderID = destinationFolderID
+            apps[index].folderName = nil
+            save()
+        } else {
+            FolderAppLinkStore.shared.moveAlias(
+                appID: app.id,
+                from: sourceFolderID,
+                to: destinationFolderID,
+                canonicalApps: apps
+            )
+        }
+
+        notice = destinationFolderID.flatMap { folder(withID: $0)?.name }.map {
+            "Moved \(apps[index].name) to \($0)."
+        } ?? "Moved \(apps[index].name) to the library."
+    }
+
+    /// Compatibility path for callers that move the app's primary placement.
+    func move(_ app: SavedHTMLApp, toFolderID folderID: String?) {
+        movePlacement(app, fromFolderID: app.folderID, toFolderID: folderID)
     }
 
     func delete(_ app: SavedHTMLApp) {
+        FolderAppLinkStore.shared.removeAll(appID: app.id)
         apps.removeAll { $0.id == app.id }
         save()
         SourceCache.shared.remove(appID: app.id)
@@ -631,7 +644,8 @@ final class AppStore: ObservableObject {
     }
 
     private func uniqueFolderName(_ desiredName: String, parentID: String?, excludingID: String? = nil) -> String {
-        let base = desiredName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Folder" : desiredName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = desiredName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.isEmpty ? "Folder" : trimmed
         if !siblingNameExists(base, parentID: parentID, excludingID: excludingID) { return base }
         var counter = 2
         while siblingNameExists("\(base) \(counter)", parentID: parentID, excludingID: excludingID) { counter += 1 }
