@@ -90,26 +90,6 @@ actor SourceCache {
         }
     }
 
-    nonisolated func clone(appID sourceID: String, to destinationID: String) {
-        let manager = FileManager.default
-        let root = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HTMLApp/SourceCache", isDirectory: true)
-        let source = root.appendingPathComponent(sourceID, isDirectory: true)
-        let destination = root.appendingPathComponent(destinationID, isDirectory: true)
-
-        try? manager.removeItem(at: destination)
-        if manager.fileExists(atPath: source.path) {
-            do {
-                try manager.createDirectory(at: root, withIntermediateDirectories: true)
-                try manager.copyItem(at: source, to: destination)
-                return
-            } catch {
-                // If cloning cached resources fails, leave an empty cache and let normal refresh rebuild it.
-            }
-        }
-        try? manager.createDirectory(at: destination, withIntermediateDirectories: true)
-    }
-
     nonisolated func remove(appID: String) {
         try? FileManager.default.removeItem(at: baseURL(appID: appID))
     }
