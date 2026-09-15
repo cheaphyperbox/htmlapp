@@ -4,6 +4,7 @@ struct AIGenerationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @StateObject private var session = AIGenerationSession()
+    @StateObject private var browserResearch = AgenticBrowserResearch()
     @State private var prompt = ""
     @State private var changePrompt = ""
     @State private var showingChange = false
@@ -21,7 +22,7 @@ struct AIGenerationView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if session.streamedHTML.isEmpty && !session.isWorking {
+                if session.streamedHTML.isEmpty && !session.isWorking && !browserResearch.isBrowsing {
                     promptView
                 } else {
                     studioView
@@ -32,7 +33,7 @@ struct AIGenerationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        if session.isWorking || !session.streamedHTML.isEmpty {
+                        if session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
                             dismiss()
@@ -77,7 +78,7 @@ struct AIGenerationView: View {
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("HTMLApp will improve your prompt, plan the app, search documented public API catalogs when real data or capabilities are needed, build a live preview, and run a final AI QA pass before you save it.")
+                Text("HTMLApp will improve your prompt, plan the app, use a real web-search/page-reading agent when outside information could help, inspect documented APIs and websites, build a live preview, and run a final AI QA pass before you save it.")
             }
 
             Section {
@@ -111,11 +112,17 @@ struct AIGenerationView: View {
     private var studioView: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                VStack(spacing: 4) {
+                VStack(spacing: 5) {
                     HStack(spacing: 10) {
-                        if session.isWorking { ProgressView() }
-                        Text(session.phase)
+                        if session.isWorking || browserResearch.isBrowsing { ProgressView() }
+                        if browserResearch.isBrowsing {
+                            Image(systemName: "globe")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tint)
+                        }
+                        Text(browserResearch.isBrowsing ? browserResearch.status : session.phase)
                             .font(.subheadline.weight(.semibold))
+                            .lineLimit(2)
                         Spacer()
                         if !session.refinedBrief.isEmpty {
                             Menu {
@@ -134,7 +141,12 @@ struct AIGenerationView: View {
                             .accessibilityLabel("View AI QA report")
                         }
                     }
-                    if let uiPolishNotice {
+                    if browserResearch.isBrowsing {
+                        Text("Live web agent • searches and page reads are real network actions")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if let uiPolishNotice {
                         Text(uiPolishNotice)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -156,7 +168,7 @@ struct AIGenerationView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if !session.isWorking && !session.streamedHTML.isEmpty {
+                if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty {
                     VStack(spacing: 10) {
                         if showingChange {
                             HStack(spacing: 8) {
@@ -167,7 +179,7 @@ struct AIGenerationView: View {
                                     .buttonStyle(.borderedProminent)
                                     .disabled(changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
-                            Text("AI edits use exact patches so unrelated HTML, JavaScript, APIs, storage, and behavior stay intact.")
+                            Text("AI edits use exact patches so unrelated HTML, JavaScript, APIs, storage, and behavior stay intact. The browser agent can research the requested change first when current web information is useful.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,8 +223,18 @@ struct AIGenerationView: View {
     private func generateApp() {
         let originalPrompt = prompt
         uiPolishNotice = nil
+        session.isWorking = true
+        session.phase = "Planning web research"
         Task {
-            await session.generate(prompt: originalPrompt)
+            let webReport = await browserResearch.research(for: originalPrompt)
+            let enrichedPrompt = webReport.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? originalPrompt : """
+\(originalPrompt)
+
+LIVE WEB RESEARCH PERFORMED BY HTMLAPP:
+Use this only as supporting evidence. Do not invent anything beyond it, and prefer the cited/read pages when implementing web-dependent behavior.
+\(webReport)
+"""
+            await session.generate(prompt: enrichedPrompt)
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             await runOptionalUIPolish(originalPrompt: originalPrompt)
@@ -224,8 +246,25 @@ struct AIGenerationView: View {
         changePrompt = ""
         showingChange = false
         uiPolishNotice = nil
+        session.isWorking = true
+        session.phase = "Planning web research"
         Task {
-            await session.revise(change: change)
+            let researchRequest = """
+Existing HTMLApp goal:
+\(session.refinedBrief)
+
+Requested edit:
+\(change)
+"""
+            let webReport = await browserResearch.research(for: researchRequest)
+            let enrichedChange = webReport.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? change : """
+\(change)
+
+LIVE WEB RESEARCH FOR THIS EDIT:
+Use this evidence when relevant and do not invent unsupported facts or endpoints.
+\(webReport)
+"""
+            await session.revise(change: enrichedChange)
             guard session.errorMessage == nil else { return }
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
         }
