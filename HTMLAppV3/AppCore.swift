@@ -16,6 +16,7 @@ struct HTMLAppMain: App {
                 .environmentObject(store)
                 .fullScreenCover(item: $store.runningApp) { app in
                     WebRunner(app: app)
+                        .environmentObject(store)
                         .ignoresSafeArea()
                         .interactiveDismissDisabled(true)
                 }
@@ -59,16 +60,22 @@ struct SavedHTMLApp: Identifiable, Codable, Hashable {
     var updatedAt: Date
     var lastOpenedAt: Date?
     var isFavorite: Bool?
+    var folderName: String?
+    var websiteSourceURL: String?
+    var websiteFingerprint: String?
 }
 
 @MainActor
 final class AppStore: ObservableObject {
     @Published private(set) var apps: [SavedHTMLApp] = []
+    @Published private(set) var folders: [String] = []
     @Published var runningApp: SavedHTMLApp?
     @Published var pendingSwitchApp: SavedHTMLApp?
+    @Published var pendingWebsiteUpdate: SavedHTMLApp?
     @Published var errorMessage: String?
     @Published var notice: String?
     private let libraryURL: URL
+    private let folderDefaultsKey = "htmlapp.libraryFolders"
 
     var orderedApps: [SavedHTMLApp] {
         apps.filter { $0.isFavorite == true } + apps.filter { $0.isFavorite != true }
@@ -79,7 +86,10 @@ final class AppStore: ObservableObject {
             .appendingPathComponent("HTMLApp", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         libraryURL = base.appendingPathComponent("library.json")
+        folders = UserDefaults.standard.stringArray(forKey: folderDefaultsKey) ?? []
         load()
+        for folder in apps.compactMap(\.folderName) where !folders.contains(folder) { folders.append(folder) }
+        persistFolders()
     }
 
     func add(html: String, summary: String) async {
@@ -87,19 +97,43 @@ final class AppStore: ObservableObject {
         let icon = await HTMLAppIconTools.savedIcon(html: html, name: name)
         let now = Date()
         let app = SavedHTMLApp(
-            id: makeID(),
-            name: name,
+            id: makeID(), name: name,
             summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
-            html: html,
-            favicon: icon,
-            createdAt: now,
-            updatedAt: now,
-            lastOpenedAt: nil,
-            isFavorite: false
+            html: html, favicon: icon,
+            createdAt: now, updatedAt: now, lastOpenedAt: nil,
+            isFavorite: false, folderName: nil,
+            websiteSourceURL: nil, websiteFingerprint: nil
         )
         apps.insert(app, at: 0)
         save()
         await SourceCache.shared.refresh(app: app, force: false)
+    }
+
+    func addWebsite(urlString: String) async throws {
+        guard let url = WebsiteArchiveManager.shared.normalizedURL(urlString) else { throw WebsiteArchiveError.invalidURL }
+        let id = makeID()
+        let snapshot = try await WebsiteArchiveManager.shared.download(url: url, appID: id)
+        try WebsiteArchiveManager.shared.installInitial(snapshot, appID: id)
+        let name = HTMLTools.title(in: snapshot.html) ?? url.host ?? "Downloaded Website"
+        let icon = await HTMLAppIconTools.savedIcon(html: snapshot.html, name: name)
+        let now = Date()
+        let app = SavedHTMLApp(
+            id: id,
+            name: name,
+            summary: "Downloaded from \(url.host ?? url.absoluteString)",
+            html: snapshot.html,
+            favicon: icon,
+            createdAt: now,
+            updatedAt: now,
+            lastOpenedAt: nil,
+            isFavorite: false,
+            folderName: nil,
+            websiteSourceURL: url.absoluteString,
+            websiteFingerprint: snapshot.fingerprint
+        )
+        apps.insert(app, at: 0)
+        save()
+        notice = "Downloaded \(name)."
     }
 
     func update(_ app: SavedHTMLApp, html: String, summary: String) async {
@@ -114,6 +148,22 @@ final class AppStore: ObservableObject {
         await SourceCache.shared.refresh(app: apps[index], force: false)
     }
 
+    func updateWebsiteSource(_ app: SavedHTMLApp, urlString: String) async throws {
+        guard let url = WebsiteArchiveManager.shared.normalizedURL(urlString) else { throw WebsiteArchiveError.invalidURL }
+        let snapshot = try await WebsiteArchiveManager.shared.download(url: url, appID: app.id)
+        try WebsiteArchiveManager.shared.installInitial(snapshot, appID: app.id)
+        guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+        let name = HTMLTools.title(in: snapshot.html) ?? url.host ?? app.name
+        apps[index].name = name
+        apps[index].html = snapshot.html
+        apps[index].websiteSourceURL = url.absoluteString
+        apps[index].websiteFingerprint = snapshot.fingerprint
+        apps[index].favicon = await HTMLAppIconTools.savedIcon(html: snapshot.html, name: name)
+        apps[index].updatedAt = Date()
+        save()
+        notice = "Website source updated."
+    }
+
     func rebuildIcons() async {
         for index in apps.indices {
             apps[index].favicon = await HTMLAppIconTools.savedIcon(html: apps[index].html, name: apps[index].name)
@@ -123,10 +173,61 @@ final class AppStore: ObservableObject {
     }
 
     func launch(_ app: SavedHTMLApp) {
-        guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+        guard var index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+
+        if apps[index].websiteSourceURL != nil,
+           let pending = try? WebsiteArchiveManager.shared.activatePending(appID: app.id),
+           let pending {
+            apps[index].html = pending.html
+            apps[index].websiteFingerprint = pending.fingerprint
+            apps[index].websiteSourceURL = pending.sourceURL
+            apps[index].name = HTMLTools.title(in: pending.html) ?? apps[index].name
+            apps[index].updatedAt = Date()
+            save()
+            index = apps.firstIndex(where: { $0.id == app.id }) ?? index
+        }
+
         apps[index].lastOpenedAt = Date()
         save()
         runningApp = apps[index]
+
+        if apps[index].websiteSourceURL != nil {
+            let appID = apps[index].id
+            Task { await refreshWebsiteInBackground(appID: appID) }
+        }
+    }
+
+    func applyPendingWebsiteUpdate(_ app: SavedHTMLApp, relaunch: Bool) {
+        guard let pending = try? WebsiteArchiveManager.shared.activatePending(appID: app.id),
+              let pending,
+              let index = apps.firstIndex(where: { $0.id == app.id }) else {
+            pendingWebsiteUpdate = nil
+            return
+        }
+        apps[index].html = pending.html
+        apps[index].websiteFingerprint = pending.fingerprint
+        apps[index].websiteSourceURL = pending.sourceURL
+        apps[index].name = HTMLTools.title(in: pending.html) ?? apps[index].name
+        apps[index].updatedAt = Date()
+        save()
+        let updated = apps[index]
+        pendingWebsiteUpdate = nil
+        Task {
+            if let freshIcon = await HTMLAppIconTools.savedIcon(html: updated.html, name: updated.name),
+               let newIndex = apps.firstIndex(where: { $0.id == updated.id }) {
+                apps[newIndex].favicon = freshIcon
+                save()
+            }
+        }
+        if relaunch, runningApp?.id == updated.id {
+            runningApp = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.runningApp = updated }
+        }
+    }
+
+    func keepPendingWebsiteUpdateForNextLaunch() {
+        pendingWebsiteUpdate = nil
+        notice = "The downloaded website will update on its next launch."
     }
 
     func toggleFavorite(_ app: SavedHTMLApp) {
@@ -136,10 +237,33 @@ final class AppStore: ObservableObject {
         notice = apps[index].isFavorite == true ? "Pinned \(apps[index].name) to the top." : "Removed \(apps[index].name) from favorites."
     }
 
+    func createFolder(_ rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !folders.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
+        folders.append(name)
+        folders.sort { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        persistFolders()
+    }
+
+    func move(_ app: SavedHTMLApp, toFolder folder: String?) {
+        guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+        apps[index].folderName = folder
+        if let folder, !folders.contains(folder) { createFolder(folder) }
+        save()
+    }
+
+    func deleteFolder(_ folder: String) {
+        folders.removeAll { $0 == folder }
+        for index in apps.indices where apps[index].folderName == folder { apps[index].folderName = nil }
+        persistFolders()
+        save()
+    }
+
     func delete(_ app: SavedHTMLApp) {
         apps.removeAll { $0.id == app.id }
         save()
         SourceCache.shared.remove(appID: app.id)
+        WebsiteArchiveManager.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
     }
 
@@ -227,6 +351,27 @@ final class AppStore: ObservableObject {
         .map(\.0)
     }
 
+    private func refreshWebsiteInBackground(appID: String) async {
+        guard let index = apps.firstIndex(where: { $0.id == appID }),
+              let source = apps[index].websiteSourceURL,
+              let url = WebsiteArchiveManager.shared.normalizedURL(source) else { return }
+        do {
+            let changed = try await WebsiteArchiveManager.shared.stageIfChanged(
+                url: url,
+                appID: appID,
+                currentFingerprint: apps[index].websiteFingerprint
+            )
+            guard changed, let latestIndex = apps.firstIndex(where: { $0.id == appID }) else { return }
+            if UserDefaults.standard.bool(forKey: "autoApplyWebsiteUpdates") {
+                applyPendingWebsiteUpdate(apps[latestIndex], relaunch: runningApp?.id == appID)
+            } else {
+                pendingWebsiteUpdate = apps[latestIndex]
+            }
+        } catch {
+            // The current downloaded copy remains usable when refresh fails or the device is offline.
+        }
+    }
+
     private func replaceRunningApp(with app: SavedHTMLApp) {
         runningApp = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
@@ -256,5 +401,9 @@ final class AppStore: ObservableObject {
         } catch {
             errorMessage = "The library could not be saved."
         }
+    }
+
+    private func persistFolders() {
+        UserDefaults.standard.set(folders, forKey: folderDefaultsKey)
     }
 }
