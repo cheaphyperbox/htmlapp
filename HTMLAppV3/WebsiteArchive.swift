@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import CryptoKit
+import CoreFoundation
 
 struct WebsiteSnapshot {
     let sourceURL: URL
@@ -98,9 +99,13 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     func pendingSnapshot(appID: String) -> (html: String, fingerprint: String, sourceURL: String)? {
         let pending = pendingURL(appID: appID)
         guard let html = try? String(contentsOf: pending.appendingPathComponent("snapshot.html"), encoding: .utf8),
-              let fingerprint = try? String(contentsOf: pending.appendingPathComponent("fingerprint.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-              let sourceURL = try? String(contentsOf: pending.appendingPathComponent("source-url.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-        return (html, fingerprint, sourceURL)
+              let fingerprintText = try? String(contentsOf: pending.appendingPathComponent("fingerprint.txt"), encoding: .utf8),
+              let sourceText = try? String(contentsOf: pending.appendingPathComponent("source-url.txt"), encoding: .utf8) else { return nil }
+        return (
+            html,
+            fingerprintText.trimmingCharacters(in: .whitespacesAndNewlines),
+            sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
     }
 
     func activatePending(appID: String) throws -> (html: String, fingerprint: String, sourceURL: String)? {
@@ -202,8 +207,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
                 for raw in refs {
                     guard let nested = resolvedResource(raw, relativeTo: url),
                           let local = try await downloadResource(nested, context: context) else { continue }
-                    let cssLocal = "../" + local
-                    rewrittenCSS = rewrittenCSS.replacingOccurrences(of: raw, with: cssLocal)
+                    rewrittenCSS = rewrittenCSS.replacingOccurrences(of: raw, with: "../" + local)
                 }
                 try Data(rewrittenCSS.utf8).write(to: destination, options: .atomic)
             } else {
@@ -290,9 +294,12 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private func fingerprint(of folder: URL) throws -> String {
         let enumerator = fileManager.enumerator(at: folder, includingPropertiesForKeys: nil)
         var files: [URL] = []
-        while let file = enumerator?.nextObject() as? URL where file.lastPathComponent != "fingerprint.txt" {
+        while let file = enumerator?.nextObject() as? URL {
+            guard file.lastPathComponent != "fingerprint.txt" else { continue }
             var isDirectory: ObjCBool = false
-            if fileManager.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue { files.append(file) }
+            if fileManager.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+                files.append(file)
+            }
         }
         var hasher = SHA256()
         for file in files.sorted(by: { $0.path < $1.path }) {
