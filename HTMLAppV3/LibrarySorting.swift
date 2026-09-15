@@ -32,6 +32,49 @@ enum LibrarySortDateBasis: String, CaseIterable, Identifiable {
     var title: String { self == .created ? "Creation Date" : "Date Modified" }
 }
 
+enum LibraryFolderActivityStore {
+    private static let modifiedKey = "htmlapp.libraryFolderModifiedDates.v1"
+    private static let openedKey = "htmlapp.libraryFolderOpenedDates.v1"
+
+    static func markModified(_ folderID: String) {
+        setDate(Date(), for: folderID, key: modifiedKey)
+    }
+
+    static func markOpened(_ folderID: String) {
+        setDate(Date(), for: folderID, key: openedKey)
+    }
+
+    static func modifiedAt(_ folderID: String) -> Date? {
+        date(for: folderID, key: modifiedKey)
+    }
+
+    static func lastOpenedAt(_ folderID: String) -> Date? {
+        date(for: folderID, key: openedKey)
+    }
+
+    static func remove(_ folderID: String) {
+        removeDate(for: folderID, key: modifiedKey)
+        removeDate(for: folderID, key: openedKey)
+    }
+
+    private static func date(for folderID: String, key: String) -> Date? {
+        guard let timestamp = UserDefaults.standard.dictionary(forKey: key)?[folderID] as? Double else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    private static func setDate(_ date: Date, for folderID: String, key: String) {
+        var values = UserDefaults.standard.dictionary(forKey: key) ?? [:]
+        values[folderID] = date.timeIntervalSince1970
+        UserDefaults.standard.set(values, forKey: key)
+    }
+
+    private static func removeDate(for folderID: String, key: String) {
+        var values = UserDefaults.standard.dictionary(forKey: key) ?? [:]
+        values.removeValue(forKey: folderID)
+        UserDefaults.standard.set(values, forKey: key)
+    }
+}
+
 enum LibraryDisplayItem: Identifiable {
     case folder(LibraryFolder)
     case app(SavedHTMLApp)
@@ -63,7 +106,8 @@ enum LibraryDisplayItem: Identifiable {
     func date(for basis: LibrarySortDateBasis) -> Date {
         switch self {
         case .folder(let folder):
-            return basis == .created ? folder.createdAt : (folder.updatedAt ?? folder.createdAt)
+            if basis == .created { return folder.createdAt }
+            return LibraryFolderActivityStore.modifiedAt(folder.id) ?? folder.createdAt
         case .app(let app):
             return basis == .created ? app.createdAt : app.updatedAt
         }
@@ -71,7 +115,7 @@ enum LibraryDisplayItem: Identifiable {
 
     var lastOpenedAt: Date? {
         switch self {
-        case .folder(let folder): return folder.lastOpenedAt
+        case .folder(let folder): return LibraryFolderActivityStore.lastOpenedAt(folder.id)
         case .app(let app): return app.lastOpenedAt
         }
     }
