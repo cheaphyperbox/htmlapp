@@ -12,6 +12,7 @@ struct LibraryView: View {
     @State private var showGenerator = false
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var importingFile = false
+    @State private var showWebsiteImporter = false
     @State private var showReceiver = false
     @State private var senderApp: SavedHTMLApp?
     @State private var pendingImport: OpticalImportPayload?
@@ -19,8 +20,15 @@ struct LibraryView: View {
     @State private var profileApp: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
     @State private var refreshingID: String?
+    @State private var selectedFolder: String?
+    @State private var showNewFolder = false
+    @State private var newFolderName = ""
 
-    private var results: [SavedHTMLApp] { store.results(for: searchText) }
+    private var results: [SavedHTMLApp] {
+        let base = store.results(for: searchText)
+        guard let selectedFolder else { return base }
+        return base.filter { $0.folderName == selectedFolder }
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,9 +37,9 @@ struct LibraryView: View {
                     EmptyLibraryView { showAddOptions = true }
                 } else if results.isEmpty {
                     ContentUnavailableViewCompat(
-                        title: "No Results",
-                        systemImage: "magnifyingglass",
-                        message: "Try a name, description, or text from the saved HTML."
+                        title: selectedFolder == nil ? "No Results" : "Folder is Empty",
+                        systemImage: selectedFolder == nil ? "magnifyingglass" : "folder",
+                        message: selectedFolder == nil ? "Try a name, description, or text from the saved HTML." : "Move HTML apps into this folder from their context menu."
                     )
                 } else if libraryLayout == "grid" {
                     PagedAppGrid(apps: results, open: store.launch, menu: { AnyView(appMenu(for: $0)) })
@@ -40,12 +48,13 @@ struct LibraryView: View {
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle("HTMLApp")
+            .navigationTitle(selectedFolder ?? "HTMLApp")
             .searchable(text: $searchText, prompt: "Search HTML apps")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItemGroup(placement: .navigationBarLeading) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                         .accessibilityLabel("Settings")
+                    folderMenu
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showAddOptions = true } label: { Image(systemName: "plus") }
@@ -54,6 +63,7 @@ struct LibraryView: View {
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
+            .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
             .fullScreenCover(isPresented: $showGenerator) {
                 AIGenerationView()
                     .environmentObject(store)
@@ -74,12 +84,25 @@ struct LibraryView: View {
             }
             .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
                 Button("Generate with AI") { showGenerator = true }
+                Button("Download Website") { showWebsiteImporter = true }
                 Button("Enter Custom Code") { editor = .new }
                 Button("Select an HTML File") { importingFile = true }
                 Button("Import from Another Device") { showReceiver = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Generate an app, paste or write code, choose an HTML file, or scan a transfer from another device.")
+                Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or scan a transfer.")
+            }
+            .alert("New Folder", isPresented: $showNewFolder) {
+                TextField("Folder name", text: $newFolderName)
+                Button("Create") {
+                    store.createFolder(newFolderName)
+                    let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { selectedFolder = trimmed }
+                    newFolderName = ""
+                }
+                Button("Cancel", role: .cancel) { newFolderName = "" }
+            } message: {
+                Text("Folders organize HTML apps without changing their IDs or data.")
             }
             .fileImporter(
                 isPresented: $importingFile,
@@ -115,7 +138,7 @@ struct LibraryView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: {
-                Text("Its HTML, icon, metadata, cached sources, and saved permission choices will be removed.")
+                Text("Its HTML, icon, metadata, cached sources, downloaded website files, and saved permission choices will be removed.")
             }
             .alert(
                 "HTMLApp",
@@ -141,6 +164,33 @@ struct LibraryView: View {
         }
     }
 
+    private var folderMenu: some View {
+        Menu {
+            Button { selectedFolder = nil } label: {
+                Label("All Apps", systemImage: selectedFolder == nil ? "checkmark" : "square.grid.2x2")
+            }
+            if !store.folders.isEmpty {
+                Divider()
+                ForEach(store.folders, id: \.self) { folder in
+                    Button { selectedFolder = folder } label: {
+                        Label(folder, systemImage: selectedFolder == folder ? "checkmark" : "folder")
+                    }
+                }
+            }
+            Divider()
+            Button { showNewFolder = true } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+            if let selectedFolder {
+                Button(role: .destructive) {
+                    store.deleteFolder(selectedFolder)
+                    self.selectedFolder = nil
+                } label: { Label("Delete \(selectedFolder)", systemImage: "trash") }
+            }
+        } label: {
+            Image(systemName: selectedFolder == nil ? "folder" : "folder.fill")
+        }
+        .accessibilityLabel("Folders")
+    }
+
     private var appList: some View {
         List {
             ForEach(results) { app in
@@ -159,7 +209,7 @@ struct LibraryView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
-                    Button { editor = .edit(app) } label: { Label("Code", systemImage: "pencil") }
+                    Button { editor = .edit(app) } label: { Label(app.websiteSourceURL == nil ? "Code" : "URL", systemImage: "pencil") }
                         .tint(.orange)
                     Button { aiEditorApp = app } label: { Label("AI Edit", systemImage: "sparkles") }
                         .tint(.purple)
@@ -179,9 +229,21 @@ struct LibraryView: View {
         Button { store.toggleFavorite(app) } label: {
             Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
+        Menu {
+            Button { store.move(app, toFolder: nil) } label: { Label("No Folder", systemImage: app.folderName == nil ? "checkmark" : "tray") }
+            ForEach(store.folders, id: \.self) { folder in
+                Button { store.move(app, toFolder: folder) } label: {
+                    Label(folder, systemImage: app.folderName == folder ? "checkmark" : "folder")
+                }
+            }
+            Divider()
+            Button { showNewFolder = true } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+        } label: { Label("Move to Folder", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
-        Button { editor = .edit(app) } label: { Label("Edit HTML Code", systemImage: "pencil") }
+        Button { editor = .edit(app) } label: {
+            Label(app.websiteSourceURL == nil ? "Edit HTML Code" : "Edit Website URL", systemImage: app.websiteSourceURL == nil ? "pencil" : "link")
+        }
         Divider()
         Button { senderApp = app } label: { Label("Send to Another Device", systemImage: "qrcode") }
         Button { store.exportHTML(app) } label: { Label("Export HTML File", systemImage: "square.and.arrow.up") }
@@ -216,9 +278,13 @@ struct LibraryView: View {
     private func refresh(_ app: SavedHTMLApp) {
         refreshingID = app.id
         Task {
-            await SourceCache.shared.refresh(app: app, force: true)
+            if app.websiteSourceURL != nil {
+                store.launch(app)
+            } else {
+                await SourceCache.shared.refresh(app: app, force: true)
+                store.notice = "\(app.name) refreshed."
+            }
             refreshingID = nil
-            store.notice = "\(app.name) refreshed."
         }
     }
 }
@@ -245,7 +311,15 @@ struct ListAppRow: View {
                 if !app.summary.isEmpty {
                     Text(app.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 }
-                Text(app.id).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                HStack(spacing: 7) {
+                    Text(app.id).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                    if let folder = app.folderName {
+                        Label(folder, systemImage: "folder.fill").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    if app.websiteSourceURL != nil {
+                        Label("Website", systemImage: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                }
             }
             Spacer(minLength: 8)
             if refreshing { ProgressView() }
@@ -318,7 +392,7 @@ struct EmptyLibraryView: View {
         VStack(spacing: 20) {
             Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 58, weight: .semibold)).foregroundStyle(.tint)
             Text("Create your first HTML app").font(.title2.bold())
-            Text("Generate with AI, enter HTML code, select a file, or receive an app from another device.")
+            Text("Generate with AI, download a website, enter HTML code, select a file, or receive an app from another device.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 34)
             Button(action: add) { Label("Add HTML App", systemImage: "plus") }
                 .buttonStyle(.borderedProminent).controlSize(.large)
