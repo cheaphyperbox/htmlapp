@@ -2,6 +2,9 @@ name: Build Unsigned IPA
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/build-request
 
 concurrency:
   group: htmlapp-main-build
