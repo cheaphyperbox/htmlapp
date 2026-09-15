@@ -74,6 +74,8 @@ struct SettingsView: View {
     @State private var aiURL = AISettingsStore.apiURL
     @State private var aiModel = AISettingsStore.model
     @State private var aiKey = AISettingsStore.apiKey
+    @State private var aiSystemPrompt = AISettingsStore.systemPrompt
+    @State private var confirmRestoreSystemPrompt = false
     @State private var uiCompatibility = AISettingsStore.uiCompatibility
     @State private var uiURL = AISettingsStore.uiAPIURL
     @State private var uiModel = AISettingsStore.uiModel
@@ -123,6 +125,34 @@ struct SettingsView: View {
                     Text("AI App Generator")
                 } footer: {
                     Text("This is the main functional generation model. Its API key is stored in this device’s Keychain and is sent only to the API URL you configure.")
+                }
+
+                Section {
+                    TextEditor(text: $aiSystemPrompt)
+                        .font(.caption.monospaced())
+                        .frame(minHeight: 320)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("Save System Prompt") {
+                        AISettingsStore.systemPrompt = aiSystemPrompt
+                        aiSystemPrompt = AISettingsStore.systemPrompt
+                        aiSaved = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
+                    }
+                    .disabled(aiSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Restore Default System Prompt", role: .destructive) {
+                        confirmRestoreSystemPrompt = true
+                    }
+                } header: {
+                    HStack {
+                        Text("App Generation System Prompt")
+                        Spacer()
+                        Text(AISettingsStore.isUsingCustomSystemPrompt ? "Custom" : "Default")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("This prompt controls initial app generation. Keep {{HTMLAPP_RESEARCH_RESULTS}} where you want HTMLApp to inject the agentic browser/API research. If you remove it, HTMLApp appends the research automatically.")
                 }
 
                 Section {
@@ -217,6 +247,15 @@ struct SettingsView: View {
                     }
                 }
             }
+            .confirmationDialog("Restore the default AI system prompt?", isPresented: $confirmRestoreSystemPrompt, titleVisibility: .visible) {
+                Button("Restore Default", role: .destructive) {
+                    AISettingsStore.restoreDefaultSystemPrompt()
+                    aiSystemPrompt = AISettingsStore.defaultSystemPrompt
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your custom app-generation system prompt will be replaced by HTMLApp’s built-in default prompt.")
+            }
             .overlay { if working { ProgressView().controlSize(.large) } }
         }
     }
@@ -226,6 +265,7 @@ struct SettingsView: View {
         AISettingsStore.apiURL = aiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.model = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.apiKey = aiKey
+        AISettingsStore.systemPrompt = aiSystemPrompt
         AISettingsStore.uiCompatibility = uiCompatibility
         AISettingsStore.uiAPIURL = uiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.uiModel = uiModel.trimmingCharacters(in: .whitespacesAndNewlines)
