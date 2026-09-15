@@ -5,9 +5,10 @@ struct OnboardingView: View {
     @State private var page = 0
 
     private let pages = [
-        ("Create an HTML app", "rectangle.stack.badge.plus", "Tap + to generate an app with AI, paste or write HTML, select a file, or receive one from another device."),
+        ("Create an HTML app", "rectangle.stack.badge.plus", "Tap + to generate an app with AI, download a website, paste or write HTML, select a file, or receive one from another device."),
         ("Generate with AI", "sparkles", "Configure an OpenAI-compatible or Anthropic-compatible API in Settings. Describe what you want, watch the app appear live, then keep it or ask for changes."),
         ("Optional UI polish", "paintbrush", "You can configure a second AI model just for presentation. It receives the finished app and is told to improve only the UI while preserving every feature and behavior."),
+        ("Downloaded websites", "arrow.down.circle", "Save a website and its referenced resources for offline use. HTMLApp opens the saved copy first and checks for a newer version in the background."),
         ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold anywhere for the full menu."),
         ("Choose your layout", "square.grid.3x3", "Use List for details or Grid for an iPhone-style Home Screen. Grid apps automatically continue onto swipeable pages."),
         ("Device capabilities", "gyroscope", "Each app can have separate camera, microphone, location, notification, and motion/orientation choices. Haptics are available after user interaction without a per-app permission."),
@@ -64,6 +65,7 @@ struct SettingsView: View {
     @AppStorage("libraryLayout") private var libraryLayout = "list"
     @AppStorage("askBeforeSwitch") private var askBeforeSwitch = true
     @AppStorage("sourceRefreshDays") private var sourceRefreshDays = 3
+    @AppStorage("autoApplyWebsiteUpdates") private var autoApplyWebsiteUpdates = false
     @AppStorage("webClipFullScreen") private var webClipFullScreen = true
     @AppStorage("webClipPrecomposed") private var webClipPrecomposed = false
     @AppStorage("allowJavaScript") private var allowJavaScript = true
@@ -157,8 +159,17 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
+                Section("Downloaded Websites") {
+                    Toggle("Always apply website updates immediately", isOn: $autoApplyWebsiteUpdates)
+                    Text(autoApplyWebsiteUpdates
+                         ? "When a newer downloaded website snapshot finishes in the background, HTMLApp automatically restarts that app into the new version."
+                         : "When a newer snapshot is found, HTMLApp asks whether to restart now or use it on the next launch.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
                 Section("Library") {
                     LabeledContent("Saved apps", value: "\(store.apps.count)")
+                    LabeledContent("Folders", value: "\(store.folders.count)")
                     Button("Refresh All External Sources") { refreshAll() }.disabled(working || store.apps.isEmpty)
                     Button("Rebuild All Saved Icons") { rebuildIcons() }.disabled(working || store.apps.isEmpty)
                     Button("Clear All Source Caches", role: .destructive) { SourceCache.shared.clearAll() }
