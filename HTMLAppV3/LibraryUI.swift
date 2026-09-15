@@ -165,13 +165,13 @@ struct LibraryView: View {
     private var folderMenu: some View {
         Menu {
             Button { selectedFolder = nil } label: {
-                Label("All Apps", systemImage: selectedFolder == nil ? "checkmark" : "square.grid.2x2")
+                Label("All Apps (\(store.apps.count))", systemImage: selectedFolder == nil ? "checkmark" : "square.grid.2x2")
             }
             if !store.folders.isEmpty {
                 Divider()
                 ForEach(store.folders, id: \.self) { folder in
                     Button { selectedFolder = folder } label: {
-                        Label(folder, systemImage: selectedFolder == folder ? "checkmark" : "folder")
+                        Label("\(folder) (\(store.apps.filter { $0.folderName == folder }.count))", systemImage: selectedFolder == folder ? "checkmark" : "folder")
                     }
                 }
             }
@@ -228,10 +228,12 @@ struct LibraryView: View {
             Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
         Menu {
-            Button { store.move(app, toFolder: nil) } label: { Label("No Folder", systemImage: app.folderName == nil ? "checkmark" : "tray") }
+            Button { store.move(app, toFolder: nil) } label: {
+                Label("No Folder (\(store.apps.filter { $0.folderName == nil }.count))", systemImage: app.folderName == nil ? "checkmark" : "tray")
+            }
             ForEach(store.folders, id: \.self) { folder in
                 Button { store.move(app, toFolder: folder) } label: {
-                    Label(folder, systemImage: app.folderName == folder ? "checkmark" : "folder")
+                    Label("\(folder) (\(store.apps.filter { $0.folderName == folder }.count))", systemImage: app.folderName == folder ? "checkmark" : "folder")
                 }
             }
             Divider()
