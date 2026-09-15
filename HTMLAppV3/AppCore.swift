@@ -92,22 +92,36 @@ struct SavedHTMLApp: Identifiable, Codable, Hashable {
     var updatedAt: Date
     var lastOpenedAt: Date?
     var isFavorite: Bool?
-    var folderName: String?
+    var folderName: String? // Legacy flat-folder field; migrated into folderID.
+    var folderID: String?
     var websiteSourceURL: String?
     var websiteFingerprint: String?
+}
+
+struct LibraryFolder: Identifiable, Codable, Hashable {
+    static let defaultTintHex = "#5B9DFF"
+
+    var id: String
+    var name: String
+    var parentID: String?
+    var tintHex: String
+    var createdAt: Date
 }
 
 @MainActor
 final class AppStore: ObservableObject {
     @Published private(set) var apps: [SavedHTMLApp] = []
-    @Published private(set) var folders: [String] = []
+    @Published private(set) var folders: [LibraryFolder] = []
     @Published var runningApp: SavedHTMLApp?
     @Published var pendingSwitchApp: SavedHTMLApp?
     @Published var pendingWebsiteUpdate: SavedHTMLApp?
     @Published var errorMessage: String?
     @Published var notice: String?
+
     private let libraryURL: URL
-    private let folderDefaultsKey = "htmlapp.libraryFolders"
+    private let folderRecordsDefaultsKey = "htmlapp.libraryFolderRecords.v2"
+    private let legacyFolderDefaultsKey = "htmlapp.libraryFolders"
+    private var pendingInsertionFolderID: String?
 
     var orderedApps: [SavedHTMLApp] {
         apps.filter { $0.isFavorite == true } + apps.filter { $0.isFavorite != true }
@@ -118,24 +132,32 @@ final class AppStore: ObservableObject {
             .appendingPathComponent("HTMLApp", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         libraryURL = base.appendingPathComponent("library.json")
-        folders = UserDefaults.standard.stringArray(forKey: folderDefaultsKey) ?? []
         load()
-        for folder in apps.compactMap(\.folderName) where !folders.contains(folder) { folders.append(folder) }
-        persistFolders()
+        loadFoldersAndMigrate()
+    }
+
+    func prepareNewItemDestination(_ folderID: String?) {
+        if let folderID, folders.contains(where: { $0.id == folderID }) {
+            pendingInsertionFolderID = folderID
+        } else {
+            pendingInsertionFolderID = nil
+        }
     }
 
     func add(html: String, summary: String) async {
         let name = HTMLTools.title(in: html) ?? "Untitled App"
         let icon = await HTMLAppIconTools.savedIcon(html: html, name: name)
         let now = Date()
+        let destination = validPendingInsertionFolderID()
         let app = SavedHTMLApp(
             id: makeID(), name: name,
             summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
             html: html, favicon: icon,
             createdAt: now, updatedAt: now, lastOpenedAt: nil,
-            isFavorite: false, folderName: nil,
+            isFavorite: false, folderName: nil, folderID: destination,
             websiteSourceURL: nil, websiteFingerprint: nil
         )
+        pendingInsertionFolderID = nil
         apps.insert(app, at: 0)
         save()
         await SourceCache.shared.refresh(app: app, force: false)
@@ -149,6 +171,7 @@ final class AppStore: ObservableObject {
         let name = HTMLTools.title(in: snapshot.html) ?? url.host ?? "Downloaded Website"
         let icon = await HTMLAppIconTools.savedIcon(html: snapshot.html, name: name)
         let now = Date()
+        let destination = validPendingInsertionFolderID()
         let app = SavedHTMLApp(
             id: id,
             name: name,
@@ -160,9 +183,11 @@ final class AppStore: ObservableObject {
             lastOpenedAt: nil,
             isFavorite: false,
             folderName: nil,
+            folderID: destination,
             websiteSourceURL: url.absoluteString,
             websiteFingerprint: snapshot.fingerprint
         )
+        pendingInsertionFolderID = nil
         apps.insert(app, at: 0)
         save()
         notice = "Downloaded \(name)."
@@ -271,26 +296,203 @@ final class AppStore: ObservableObject {
         notice = apps[index].isFavorite == true ? "Pinned \(apps[index].name) to the top." : "Removed \(apps[index].name) from favorites."
     }
 
-    func createFolder(_ rawName: String) {
+    func folder(withID id: String?) -> LibraryFolder? {
+        guard let id else { return nil }
+        return folders.first(where: { $0.id == id })
+    }
+
+    func childFolders(of parentID: String?) -> [LibraryFolder] {
+        folders
+            .filter { $0.parentID == parentID }
+            .sorted { left, right in
+                left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+            }
+    }
+
+    func apps(in folderID: String?) -> [SavedHTMLApp] {
+        orderedApps.filter { $0.folderID == folderID }
+    }
+
+    func directAppCount(in folderID: String?) -> Int {
+        apps.reduce(into: 0) { count, app in
+            if app.folderID == folderID { count += 1 }
+        }
+    }
+
+    func descendantAppCount(in folderID: String) -> Int {
+        let ids = subtreeFolderIDs(startingAt: folderID)
+        return apps.reduce(into: 0) { count, app in
+            if let appFolderID = app.folderID, ids.contains(appFolderID) { count += 1 }
+        }
+    }
+
+    func subtreeFolderIDs(startingAt folderID: String) -> Set<String> {
+        guard folders.contains(where: { $0.id == folderID }) else { return [] }
+        var result: Set<String> = [folderID]
+        var frontier = [folderID]
+        while let current = frontier.popLast() {
+            let children = folders.filter { $0.parentID == current }.map(\.id)
+            for child in children where !result.contains(child) {
+                result.insert(child)
+                frontier.append(child)
+            }
+        }
+        return result
+    }
+
+    @discardableResult
+    func createFolder(_ rawName: String, parentID: String? = nil) -> LibraryFolder? {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !folders.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
-        folders.append(name)
-        folders.sort { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        guard !name.isEmpty else { return nil }
+        guard parentID == nil || folders.contains(where: { $0.id == parentID }) else {
+            errorMessage = "The destination folder no longer exists."
+            return nil
+        }
+        guard !siblingNameExists(name, parentID: parentID) else {
+            errorMessage = "A folder named \(name) already exists here."
+            return nil
+        }
+        let folder = LibraryFolder(
+            id: UUID().uuidString,
+            name: name,
+            parentID: parentID,
+            tintHex: LibraryFolder.defaultTintHex,
+            createdAt: Date()
+        )
+        folders.append(folder)
+        persistFolders()
+        return folder
+    }
+
+    func renameFolder(_ folder: LibraryFolder, to rawName: String) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        guard !siblingNameExists(name, parentID: folders[index].parentID, excludingID: folder.id) else {
+            errorMessage = "A folder named \(name) already exists here."
+            return
+        }
+        folders[index].name = name
         persistFolders()
     }
 
-    func move(_ app: SavedHTMLApp, toFolder folder: String?) {
+    func setFolderTint(_ folder: LibraryFolder, hex: String) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        folders[index].tintHex = hex
+        persistFolders()
+    }
+
+    func moveFolder(_ folder: LibraryFolder, toParent destinationID: String?) {
+        guard let index = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        guard destinationID == nil || folders.contains(where: { $0.id == destinationID }) else {
+            errorMessage = "The destination folder no longer exists."
+            return
+        }
+        let blocked = subtreeFolderIDs(startingAt: folder.id)
+        if let destinationID, blocked.contains(destinationID) {
+            errorMessage = "A folder cannot be moved inside itself."
+            return
+        }
+        folders[index].name = uniqueFolderName(folders[index].name, parentID: destinationID, excludingID: folder.id)
+        folders[index].parentID = destinationID
+        persistFolders()
+        notice = "Moved \(folders[index].name)."
+    }
+
+    func copyFolder(_ folder: LibraryFolder, toParent destinationID: String?) {
+        guard folders.contains(where: { $0.id == folder.id }) else { return }
+        guard destinationID == nil || folders.contains(where: { $0.id == destinationID }) else {
+            errorMessage = "The destination folder no longer exists."
+            return
+        }
+        let sourceIDs = subtreeFolderIDs(startingAt: folder.id)
+        if let destinationID, sourceIDs.contains(destinationID) {
+            errorMessage = "A folder cannot be copied inside itself."
+            return
+        }
+
+        let originalFolders = folders
+        let originalApps = apps
+        var mapping: [String: String] = [:]
+
+        func cloneFolderTree(sourceID: String, newParentID: String?, isRoot: Bool) {
+            guard let source = originalFolders.first(where: { $0.id == sourceID }) else { return }
+            let desiredName = isRoot ? source.name + " Copy" : source.name
+            let copied = LibraryFolder(
+                id: UUID().uuidString,
+                name: uniqueFolderName(desiredName, parentID: newParentID),
+                parentID: newParentID,
+                tintHex: source.tintHex,
+                createdAt: Date()
+            )
+            folders.append(copied)
+            mapping[source.id] = copied.id
+            for child in originalFolders
+                .filter({ $0.parentID == source.id })
+                .sorted(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) {
+                cloneFolderTree(sourceID: child.id, newParentID: copied.id, isRoot: false)
+            }
+        }
+
+        cloneFolderTree(sourceID: folder.id, newParentID: destinationID, isRoot: true)
+
+        let now = Date()
+        for source in originalApps where source.folderID.map({ sourceIDs.contains($0) }) == true {
+            guard let sourceFolderID = source.folderID,
+                  let copiedFolderID = mapping[sourceFolderID] else { continue }
+            var copied = source
+            copied.id = makeID()
+            copied.folderID = copiedFolderID
+            copied.folderName = nil
+            copied.createdAt = now
+            copied.updatedAt = now
+            copied.lastOpenedAt = nil
+            copied.isFavorite = false
+            apps.insert(copied, at: 0)
+            SourceCache.shared.clone(appID: source.id, to: copied.id)
+        }
+
+        persistFolders()
+        save()
+        notice = "Copied \(folder.name) and its contents."
+    }
+
+    func deleteFolder(_ folder: LibraryFolder) {
+        guard let folderIndex = folders.firstIndex(where: { $0.id == folder.id }) else { return }
+        let parentID = folders[folderIndex].parentID
+
+        let childIDs = folders.filter { $0.parentID == folder.id }.map(\.id)
+        for childID in childIDs {
+            guard let index = folders.firstIndex(where: { $0.id == childID }) else { continue }
+            folders[index].name = uniqueFolderName(
+                folders[index].name,
+                parentID: parentID,
+                excludingID: folders[index].id
+            )
+            folders[index].parentID = parentID
+        }
+
+        for index in apps.indices where apps[index].folderID == folder.id {
+            apps[index].folderID = parentID
+            apps[index].folderName = nil
+        }
+
+        folders.removeAll { $0.id == folder.id }
+        persistFolders()
+        save()
+        notice = "Deleted \(folder.name). Its contents were moved up one level."
+    }
+
+    func move(_ app: SavedHTMLApp, toFolderID folderID: String?) {
+        guard folderID == nil || folders.contains(where: { $0.id == folderID }) else {
+            errorMessage = "The destination folder no longer exists."
+            return
+        }
         guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
-        apps[index].folderName = folder
-        if let folder, !folders.contains(folder) { createFolder(folder) }
+        apps[index].folderID = folderID
+        apps[index].folderName = nil
         save()
-    }
-
-    func deleteFolder(_ folder: String) {
-        folders.removeAll { $0 == folder }
-        for index in apps.indices where apps[index].folderName == folder { apps[index].folderName = nil }
-        persistFolders()
-        save()
+        notice = folderID.flatMap { folder(withID: $0)?.name }.map { "Moved \(apps[index].name) to \($0)." } ?? "Moved \(apps[index].name) to the library."
     }
 
     func delete(_ app: SavedHTMLApp) {
@@ -299,6 +501,7 @@ final class AppStore: ObservableObject {
         SourceCache.shared.remove(appID: app.id)
         WebsiteArchiveManager.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
+        HTMLSensorPermissionPolicy.reset(appID: app.id)
     }
 
     func exportHTML(_ app: SavedHTMLApp) {
@@ -413,6 +616,28 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func validPendingInsertionFolderID() -> String? {
+        guard let pendingInsertionFolderID,
+              folders.contains(where: { $0.id == pendingInsertionFolderID }) else { return nil }
+        return pendingInsertionFolderID
+    }
+
+    private func siblingNameExists(_ name: String, parentID: String?, excludingID: String? = nil) -> Bool {
+        folders.contains { folder in
+            folder.id != excludingID &&
+            folder.parentID == parentID &&
+            folder.name.caseInsensitiveCompare(name) == .orderedSame
+        }
+    }
+
+    private func uniqueFolderName(_ desiredName: String, parentID: String?, excludingID: String? = nil) -> String {
+        let base = desiredName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Folder" : desiredName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !siblingNameExists(base, parentID: parentID, excludingID: excludingID) { return base }
+        var counter = 2
+        while siblingNameExists("\(base) \(counter)", parentID: parentID, excludingID: excludingID) { counter += 1 }
+        return "\(base) \(counter)"
+    }
+
     private func makeID() -> String {
         let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
         var value = ""
@@ -437,7 +662,110 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func loadFoldersAndMigrate() {
+        if let data = UserDefaults.standard.data(forKey: folderRecordsDefaultsKey),
+           let decoded = try? JSONDecoder().decode([LibraryFolder].self, from: data) {
+            folders = decoded
+        }
+
+        var changed = false
+        let legacyStored = UserDefaults.standard.stringArray(forKey: legacyFolderDefaultsKey) ?? []
+        var legacyNames = legacyStored
+        legacyNames.append(contentsOf: apps.compactMap(\.folderName))
+
+        var rootNameToID: [String: String] = [:]
+        for folder in folders where folder.parentID == nil {
+            rootNameToID[folder.name.lowercased()] = folder.id
+        }
+
+        for rawName in legacyNames {
+            let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            let key = name.lowercased()
+            if rootNameToID[key] == nil {
+                let folder = LibraryFolder(
+                    id: UUID().uuidString,
+                    name: uniqueFolderName(name, parentID: nil),
+                    parentID: nil,
+                    tintHex: LibraryFolder.defaultTintHex,
+                    createdAt: Date()
+                )
+                folders.append(folder)
+                rootNameToID[key] = folder.id
+                changed = true
+            }
+        }
+
+        for index in folders.indices {
+            if let parentID = folders[index].parentID,
+               parentID == folders[index].id || !folders.contains(where: { $0.id == parentID }) {
+                folders[index].parentID = nil
+                changed = true
+            }
+        }
+
+        for index in folders.indices {
+            var seen: Set<String> = [folders[index].id]
+            var parentID = folders[index].parentID
+            while let current = parentID {
+                if seen.contains(current) {
+                    folders[index].parentID = nil
+                    changed = true
+                    break
+                }
+                seen.insert(current)
+                parentID = folders.first(where: { $0.id == current })?.parentID
+            }
+        }
+
+        for index in apps.indices {
+            if let folderID = apps[index].folderID,
+               folders.contains(where: { $0.id == folderID }) {
+                if apps[index].folderName != nil {
+                    apps[index].folderName = nil
+                    changed = true
+                }
+                continue
+            }
+
+            if let legacy = apps[index].folderName?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !legacy.isEmpty {
+                let key = legacy.lowercased()
+                if let folderID = rootNameToID[key] {
+                    apps[index].folderID = folderID
+                } else {
+                    let folder = LibraryFolder(
+                        id: UUID().uuidString,
+                        name: uniqueFolderName(legacy, parentID: nil),
+                        parentID: nil,
+                        tintHex: LibraryFolder.defaultTintHex,
+                        createdAt: Date()
+                    )
+                    folders.append(folder)
+                    rootNameToID[key] = folder.id
+                    apps[index].folderID = folder.id
+                }
+                apps[index].folderName = nil
+                changed = true
+            } else if apps[index].folderID != nil {
+                apps[index].folderID = nil
+                changed = true
+            }
+        }
+
+        persistFolders()
+        if changed { save() }
+        UserDefaults.standard.removeObject(forKey: legacyFolderDefaultsKey)
+    }
+
     private func persistFolders() {
-        UserDefaults.standard.set(folders, forKey: folderDefaultsKey)
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(folders)
+            UserDefaults.standard.set(data, forKey: folderRecordsDefaultsKey)
+        } catch {
+            errorMessage = "The folder layout could not be saved."
+        }
     }
 }
