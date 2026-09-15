@@ -19,6 +19,13 @@ struct HTMLAppMain: App {
                         .environmentObject(store)
                         .ignoresSafeArea()
                         .interactiveDismissDisabled(true)
+                        .overlay(alignment: .top) {
+                            if store.pendingWebsiteUpdate?.id == app.id {
+                                WebsiteUpdateBanner(app: app)
+                                    .environmentObject(store)
+                                    .padding(.top, 12)
+                            }
+                        }
                 }
                 .fullScreenCover(isPresented: Binding(
                     get: { !onboardingComplete },
@@ -47,6 +54,31 @@ struct HTMLAppMain: App {
                     }
                 }
         }
+    }
+}
+
+struct WebsiteUpdateBanner: View {
+    @EnvironmentObject private var store: AppStore
+    let app: SavedHTMLApp
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Website Update Ready")
+                .font(.headline)
+            Text("A newer downloaded copy of \(app.name) is ready.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Next Launch") { store.keepPendingWebsiteUpdateForNextLaunch() }
+                    .buttonStyle(.bordered)
+                Button("Update Now") { store.applyPendingWebsiteUpdate(app, relaunch: true) }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(radius: 8)
+        .padding(.horizontal, 16)
     }
 }
 
@@ -176,8 +208,7 @@ final class AppStore: ObservableObject {
         guard var index = apps.firstIndex(where: { $0.id == app.id }) else { return }
 
         if apps[index].websiteSourceURL != nil,
-           let pending = try? WebsiteArchiveManager.shared.activatePending(appID: app.id),
-           let pending {
+           let pending = try? WebsiteArchiveManager.shared.activatePending(appID: app.id) {
             apps[index].html = pending.html
             apps[index].websiteFingerprint = pending.fingerprint
             apps[index].websiteSourceURL = pending.sourceURL
@@ -199,7 +230,6 @@ final class AppStore: ObservableObject {
 
     func applyPendingWebsiteUpdate(_ app: SavedHTMLApp, relaunch: Bool) {
         guard let pending = try? WebsiteArchiveManager.shared.activatePending(appID: app.id),
-              let pending,
               let index = apps.firstIndex(where: { $0.id == app.id }) else {
             pendingWebsiteUpdate = nil
             return
@@ -221,7 +251,11 @@ final class AppStore: ObservableObject {
         }
         if relaunch, runningApp?.id == updated.id {
             runningApp = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.runningApp = updated }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self,
+                      let latest = self.apps.first(where: { $0.id == updated.id }) else { return }
+                self.runningApp = latest
+            }
         }
     }
 
@@ -368,7 +402,7 @@ final class AppStore: ObservableObject {
                 pendingWebsiteUpdate = apps[latestIndex]
             }
         } catch {
-            // The current downloaded copy remains usable when refresh fails or the device is offline.
+            // Keep the current downloaded copy when offline or refreshing fails.
         }
     }
 
