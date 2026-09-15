@@ -7,6 +7,7 @@ struct LibraryView: View {
     @AppStorage("libraryLayout") private var libraryLayout = "list"
     @State private var searchText = ""
     @State private var editor: EditorMode?
+    @State private var websiteEditorApp: SavedHTMLApp?
     @State private var showSettings = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
@@ -62,17 +63,14 @@ struct LibraryView: View {
                 }
             }
             .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
+            .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
             .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
             .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
             .fullScreenCover(isPresented: $showGenerator) {
-                AIGenerationView()
-                    .environmentObject(store)
-                    .interactiveDismissDisabled(true)
+                AIGenerationView().environmentObject(store).interactiveDismissDisabled(true)
             }
             .fullScreenCover(item: $aiEditorApp) { app in
-                AIGenerationView(existingApp: app)
-                    .environmentObject(store)
-                    .interactiveDismissDisabled(true)
+                AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
             }
             .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
             .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
@@ -209,7 +207,7 @@ struct LibraryView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
-                    Button { editor = .edit(app) } label: { Label(app.websiteSourceURL == nil ? "Code" : "URL", systemImage: "pencil") }
+                    Button { edit(app) } label: { Label(app.websiteSourceURL == nil ? "Code" : "URL", systemImage: "pencil") }
                         .tint(.orange)
                     Button { aiEditorApp = app } label: { Label("AI Edit", systemImage: "sparkles") }
                         .tint(.purple)
@@ -241,7 +239,7 @@ struct LibraryView: View {
         } label: { Label("Move to Folder", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
-        Button { editor = .edit(app) } label: {
+        Button { edit(app) } label: {
             Label(app.websiteSourceURL == nil ? "Edit HTML Code" : "Edit Website URL", systemImage: app.websiteSourceURL == nil ? "pencil" : "link")
         }
         Divider()
@@ -256,6 +254,11 @@ struct LibraryView: View {
             .disabled(true)
         Divider()
         Button(role: .destructive) { pendingDelete = app } label: { Label("Delete HTML App", systemImage: "trash") }
+    }
+
+    private func edit(_ app: SavedHTMLApp) {
+        if app.websiteSourceURL != nil { websiteEditorApp = app }
+        else { editor = .edit(app) }
     }
 
     private func importFile(_ result: Result<[URL], Error>) {
