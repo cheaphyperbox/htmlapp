@@ -32,8 +32,8 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private let fileManager = FileManager.default
     private let pendingRoot: URL
     private let temporaryRoot: URL
-    private let maximumResources = 160
-    private let maximumPackageBytes = 60 * 1024 * 1024
+    private let maximumResources = 500
+    private let maximumPackageBytes = 150 * 1024 * 1024
 
     private init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -66,7 +66,9 @@ final class WebsiteArchiveManager: @unchecked Sendable {
             guard let html = decodeText(pageData, response: response) else { throw WebsiteArchiveError.unreadableHTML }
             context.totalBytes += pageData.count
 
-            let rewritten = try await rewriteHTML(html, pageURL: url, context: context)
+            // Relative references must resolve against the URL after redirects, not only the URL the user typed.
+            let pageURL = response.url ?? url
+            let rewritten = try await rewriteHTML(html, pageURL: pageURL, context: context)
             try Data(rewritten.utf8).write(to: staging.appendingPathComponent("snapshot.html"), options: .atomic)
             let fingerprint = try fingerprint(of: staging)
             try fingerprint.write(to: staging.appendingPathComponent("fingerprint.txt"), atomically: true, encoding: .utf8)
@@ -152,12 +154,19 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private func rewriteHTML(_ html: String, pageURL: URL, context: CrawlContext) async throws -> String {
         var rewritten = html
         var references = Set<String>()
+
+        // Standard HTML resources, including third-party/CDN URLs.
         for pattern in [
-            #"(?i)\b(?:src|poster)\s*=\s*[\"']([^\"']+)[\"']"#,
+            #"(?i)\b(?:src|poster|data)\s*=\s*[\"']([^\"']+)[\"']"#,
             #"(?i)<link\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>"#,
             #"(?i)url\(\s*[\"']?([^\"')]+)[\"']?\s*\)"#
         ] {
             references.formUnion(captures(pattern: pattern, in: html))
+        }
+
+        // srcset/imagesrcset can contain several URLs in one attribute.
+        for value in captures(pattern: #"(?i)\b(?:srcset|imagesrcset)\s*=\s*[\"']([^\"']+)[\"']"#, in: html) {
+            for candidate in srcsetURLs(value) { references.insert(candidate) }
         }
 
         var replacements: [String: String] = [:]
@@ -168,22 +177,27 @@ final class WebsiteArchiveManager: @unchecked Sendable {
             }
         }
 
+        // Replace references anywhere they occur. This intentionally also catches static URL strings
+        // used by scripts in the document, not just src/href attributes.
         for (raw, local) in replacements.sorted(by: { $0.key.count > $1.key.count }) {
-            rewritten = rewritten.replacingOccurrences(of: "\"\(raw)\"", with: "\"\(local)\"")
-            rewritten = rewritten.replacingOccurrences(of: "'\(raw)'", with: "'\(local)'")
-            rewritten = rewritten.replacingOccurrences(of: "url(\(raw))", with: "url(\(local))")
-            rewritten = rewritten.replacingOccurrences(of: "url(\"\(raw)\")", with: "url(\"\(local)\")")
-            rewritten = rewritten.replacingOccurrences(of: "url('\(raw)')", with: "url('\(local)')")
+            rewritten = rewritten.replacingOccurrences(of: raw, with: local)
         }
+
+        // A remote <base> would make our local domain/file paths resolve back to the network.
+        rewritten = rewritten.replacingOccurrences(
+            of: #"(?i)<base\b[^>]*>"#,
+            with: "",
+            options: .regularExpression
+        )
         return rewritten
     }
 
     private func downloadResource(_ url: URL, context: CrawlContext) async throws -> String? {
-        let key = url.absoluteString
+        let key = canonicalKey(url)
         if let existing = context.mapping[key] { return existing }
         guard context.mapping.count < context.maximumResources,
               context.totalBytes < context.maximumBytes else { return nil }
-        guard !context.inProgress.contains(key) else { return nil }
+        guard !context.inProgress.contains(key) else { return context.mapping[key] }
         context.inProgress.insert(key)
         defer { context.inProgress.remove(key) }
 
@@ -192,24 +206,24 @@ final class WebsiteArchiveManager: @unchecked Sendable {
             guard context.totalBytes + data.count <= context.maximumBytes else { return nil }
             context.totalBytes += data.count
 
-            let host = sanitize(url.host ?? "unknown-domain")
-            let ext = fileExtension(url: url, response: response)
+            let finalURL = response.url ?? url
+            let host = sanitize(finalURL.host ?? url.host ?? "unknown-domain")
+            let ext = fileExtension(url: finalURL, response: response)
             let name = stableName(for: key) + (ext.isEmpty ? "" : "." + ext)
             let relative = host + "/" + name
             context.mapping[key] = relative
+            context.mapping[canonicalKey(finalURL)] = relative
+
             let folder = context.root.appendingPathComponent(host, isDirectory: true)
             try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
             let destination = folder.appendingPathComponent(name)
 
-            if ext.lowercased() == "css", let css = decodeText(data, response: response) {
-                var rewrittenCSS = css
-                let refs = Set(captures(pattern: #"(?i)(?:url\(\s*[\"']?([^\"')]+)[\"']?\s*\)|@import\s+[\"']([^\"']+)[\"'])"#, in: css, allCaptureGroups: true))
-                for raw in refs {
-                    guard let nested = resolvedResource(raw, relativeTo: url),
-                          let local = try await downloadResource(nested, context: context) else { continue }
-                    rewrittenCSS = rewrittenCSS.replacingOccurrences(of: raw, with: "../" + local)
-                }
+            if isCSS(response: response, ext: ext), let css = decodeText(data, response: response) {
+                let rewrittenCSS = try await rewriteCSS(css, sourceURL: finalURL, context: context)
                 try Data(rewrittenCSS.utf8).write(to: destination, options: .atomic)
+            } else if isJavaScript(response: response, ext: ext), let script = decodeText(data, response: response) {
+                let rewrittenScript = try await rewriteJavaScript(script, sourceURL: finalURL, context: context)
+                try Data(rewrittenScript.utf8).write(to: destination, options: .atomic)
             } else {
                 try data.write(to: destination, options: .atomic)
             }
@@ -220,9 +234,51 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         }
     }
 
+    private func rewriteCSS(_ css: String, sourceURL: URL, context: CrawlContext) async throws -> String {
+        var rewritten = css
+        let patterns = [
+            #"(?i)url\(\s*[\"']?([^\"')]+)[\"']?\s*\)"#,
+            #"(?i)@import\s+(?:url\()?\s*[\"']([^\"']+)[\"']"#
+        ]
+        var references = Set<String>()
+        for pattern in patterns { references.formUnion(captures(pattern: pattern, in: css)) }
+
+        for raw in references.sorted(by: { $0.count > $1.count }) {
+            guard let nested = resolvedResource(raw, relativeTo: sourceURL),
+                  let local = try await downloadResource(nested, context: context) else { continue }
+            rewritten = rewritten.replacingOccurrences(of: raw, with: "../" + local)
+        }
+        return rewritten
+    }
+
+    private func rewriteJavaScript(_ script: String, sourceURL: URL, context: CrawlContext) async throws -> String {
+        var rewritten = script
+        var references = Set<String>()
+
+        // ES modules, dynamic imports, workers, importScripts, and literal fetches commonly point
+        // at additional JS/CSS/JSON/assets that are required for the downloaded app to run.
+        for pattern in [
+            #"(?m)\b(?:import|export)\s+(?:[^\"']*?\s+from\s+)?[\"']([^\"']+)[\"']"#,
+            #"(?m)\bimport\s*\(\s*[\"']([^\"']+)[\"']\s*\)"#,
+            #"(?m)\bimportScripts\s*\(\s*[\"']([^\"']+)[\"']"#,
+            #"(?m)\b(?:new\s+)?(?:Worker|SharedWorker)\s*\(\s*[\"']([^\"']+)[\"']"#,
+            #"(?m)\bfetch\s*\(\s*[\"']([^\"']+)[\"']"#
+        ] {
+            references.formUnion(captures(pattern: pattern, in: script))
+        }
+
+        for raw in references.sorted(by: { $0.count > $1.count }) {
+            guard let nested = resolvedResource(raw, relativeTo: sourceURL),
+                  let local = try await downloadResource(nested, context: context) else { continue }
+            rewritten = rewritten.replacingOccurrences(of: raw, with: "../" + local)
+        }
+        return rewritten
+    }
+
     private func fetch(_ url: URL) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 35)
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 HTMLApp/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html,application/xhtml+xml,text/css,application/javascript,application/json,image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { throw WebsiteArchiveError.invalidResponse }
         return (data, response)
@@ -246,44 +302,71 @@ final class WebsiteArchiveManager: @unchecked Sendable {
               !value.lowercased().hasPrefix("data:"),
               !value.lowercased().hasPrefix("blob:"),
               !value.lowercased().hasPrefix("javascript:"),
-              !value.lowercased().hasPrefix("mailto:") else { return nil }
+              !value.lowercased().hasPrefix("mailto:"),
+              !value.lowercased().hasPrefix("tel:") else { return nil }
         guard let url = URL(string: value, relativeTo: base)?.absoluteURL,
               ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
         return url
     }
 
-    private func captures(pattern: String, in text: String, allCaptureGroups: Bool = false) -> [String] {
+    private func srcsetURLs(_ value: String) -> [String] {
+        value.split(separator: ",").compactMap { item in
+            let value = item.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return nil }
+            return value.split(whereSeparator: { $0.isWhitespace }).first.map(String.init)
+        }
+    }
+
+    private func captures(pattern: String, in text: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         var output: [String] = []
         for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-            let groups = allCaptureGroups ? Array(1..<match.numberOfRanges) : [1]
-            for group in groups where match.range(at: group).location != NSNotFound {
-                if let range = Range(match.range(at: group), in: text) { output.append(String(text[range])) }
-            }
+            guard match.numberOfRanges > 1,
+                  match.range(at: 1).location != NSNotFound,
+                  let range = Range(match.range(at: 1), in: text) else { continue }
+            output.append(String(text[range]))
         }
         return output
     }
 
     private func fileExtension(url: URL, response: URLResponse) -> String {
         let pathExt = url.pathExtension.lowercased()
-        if !pathExt.isEmpty && pathExt.count <= 8 { return sanitizeExtension(pathExt) }
+        if !pathExt.isEmpty && pathExt.count <= 10 { return sanitizeExtension(pathExt) }
         let mime = response.mimeType?.lowercased() ?? ""
         let map: [String: String] = [
-            "text/css": "css", "text/javascript": "js", "application/javascript": "js",
-            "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg",
-            "font/woff": "woff", "font/woff2": "woff2", "application/font-woff": "woff",
-            "video/mp4": "mp4", "audio/mpeg": "mp3", "application/json": "json"
+            "text/css": "css", "text/javascript": "js", "application/javascript": "js", "application/x-javascript": "js",
+            "application/json": "json", "application/manifest+json": "json", "application/wasm": "wasm",
+            "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/avif": "avif", "image/svg+xml": "svg", "image/x-icon": "ico",
+            "font/woff": "woff", "font/woff2": "woff2", "application/font-woff": "woff", "application/vnd.ms-fontobject": "eot", "font/ttf": "ttf", "font/otf": "otf",
+            "video/mp4": "mp4", "video/webm": "webm", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/ogg": "ogg"
         ]
         return map[mime] ?? "resource"
     }
 
+    private func isCSS(response: URLResponse, ext: String) -> Bool {
+        ext.lowercased() == "css" || response.mimeType?.lowercased() == "text/css"
+    }
+
+    private func isJavaScript(response: URLResponse, ext: String) -> Bool {
+        let value = ext.lowercased()
+        if value == "js" || value == "mjs" { return true }
+        let mime = response.mimeType?.lowercased() ?? ""
+        return ["text/javascript", "application/javascript", "application/x-javascript"].contains(mime)
+    }
+
     private func sanitizeExtension(_ value: String) -> String {
-        String(value.filter { $0.isLetter || $0.isNumber }.prefix(8))
+        String(value.filter { $0.isLetter || $0.isNumber }.prefix(10))
     }
 
     private func sanitize(_ value: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
         return value.unicodeScalars.map { allowed.contains($0) ? Character(String($0)) : "_" }.reduce(into: "", { $0.append($1) })
+    }
+
+    private func canonicalKey(_ url: URL) -> String {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.fragment = nil
+        return components?.url?.absoluteString ?? url.absoluteString
     }
 
     private func stableName(for value: String) -> String {
@@ -327,7 +410,7 @@ struct WebsiteImportView: View {
                         .keyboardType(.URL)
                 }
                 Section {
-                    Text("HTMLApp downloads the page and its directly referenced scripts, styles, fonts, images, and media. Files from the same domain are stored together in that domain’s cache folder. The downloaded copy opens immediately and refreshes in the background later.")
+                    Text("HTMLApp downloads the page plus its required local and third-party dependencies, including stylesheets, scripts and module imports, fonts, images, media, workers, and other directly referenced files. Each domain gets its own cache folder. The downloaded copy opens immediately and refreshes in the background later.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
