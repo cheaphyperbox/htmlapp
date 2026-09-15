@@ -5,13 +5,13 @@ import UniformTypeIdentifiers
 private enum FolderDestinationOperation: Identifiable {
     case moveFolder(LibraryFolder)
     case copyFolder(LibraryFolder)
-    case moveApp(SavedHTMLApp)
+    case moveApp(SavedHTMLApp, sourceFolderID: String?)
 
     var id: String {
         switch self {
         case .moveFolder(let folder): return "move-folder-\(folder.id)"
         case .copyFolder(let folder): return "copy-folder-\(folder.id)"
-        case .moveApp(let app): return "move-app-\(app.id)"
+        case .moveApp(let app, let sourceFolderID): return "move-app-\(app.id)-\(sourceFolderID ?? "root")"
         }
     }
 }
@@ -165,7 +165,7 @@ struct LibraryView: View {
                     }
                     Button("Cancel", role: .cancel) { pendingDelete = nil }
                 } message: {
-                    Text("Its HTML, icon, metadata, cached sources, downloaded website files, and saved permission choices will be removed.")
+                    Text("This removes the one canonical app and all of its folder links, HTML, icon, metadata, caches, downloaded website files, and saved permission choices.")
                 }
                 .confirmationDialog(
                     "Delete \(pendingFolderDelete?.name ?? "this folder")?",
@@ -178,7 +178,7 @@ struct LibraryView: View {
                     }
                     Button("Cancel", role: .cancel) { pendingFolderDelete = nil }
                 } message: {
-                    Text("The folder itself will be deleted. Its apps and nested folders will be moved up one level so no app data is lost.")
+                    Text("The folder itself will be deleted. Its app links and nested folders will be moved up one level, so no app data is copied or lost.")
                 }
                 .alert(
                     "HTMLApp",
@@ -230,11 +230,11 @@ struct LibraryView: View {
                     openFolder: openFolder,
                     openApp: store.launch,
                     folderMenu: { AnyView(folderMenu(for: $0)) },
-                    appMenu: { AnyView(appMenu(for: $0)) }
+                    appMenu: { AnyView(appMenu(for: $0, sourceFolderID: folderID)) }
                 )
                 .environmentObject(store)
             } else {
-                libraryList(folders: folders, apps: apps)
+                libraryList(folderID: folderID, folders: folders, apps: apps)
             }
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
@@ -265,7 +265,7 @@ struct LibraryView: View {
         }
     }
 
-    private func libraryList(folders: [LibraryFolder], apps: [SavedHTMLApp]) -> some View {
+    private func libraryList(folderID: String?, folders: [LibraryFolder], apps: [SavedHTMLApp]) -> some View {
         List {
             if !folders.isEmpty {
                 Section {
@@ -293,7 +293,7 @@ struct LibraryView: View {
                             ListAppRow(app: app, refreshing: refreshingID == app.id)
                         }
                         .buttonStyle(.plain)
-                        .contextMenu { appMenu(for: app) }
+                        .contextMenu { appMenu(for: app, sourceFolderID: folderID) }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             Button { store.toggleFavorite(app) } label: {
                                 Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
@@ -356,13 +356,13 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func appMenu(for app: SavedHTMLApp) -> some View {
+    private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
         Button { store.launch(app) } label: { Label("Open", systemImage: "play.fill") }
         Button { store.toggleFavorite(app) } label: {
             Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite and Pin to Top", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
         }
         Button {
-            destinationOperation = .moveApp(app)
+            destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID)
         } label: {
             Label("Move To", systemImage: "folder")
         }
@@ -393,7 +393,11 @@ struct LibraryView: View {
     }
 
     private func visibleApps(in folderID: String?) -> [SavedHTMLApp] {
-        store.results(for: searchText).filter { $0.folderID == folderID }
+        let appsHere = store.apps(in: folderID)
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return appsHere }
+        let matchingIDs = Set(store.results(for: searchText).map(\.id))
+        return appsHere.filter { matchingIDs.contains($0.id) }
     }
 
     private func openFolder(_ folder: LibraryFolder) {
@@ -410,7 +414,7 @@ struct LibraryView: View {
         switch operation {
         case .moveFolder(let folder): return "Move \(folder.name)"
         case .copyFolder(let folder): return "Copy \(folder.name)"
-        case .moveApp(let app): return "Move \(app.name)"
+        case .moveApp(let app, _): return "Move \(app.name)"
         }
     }
 
@@ -436,8 +440,8 @@ struct LibraryView: View {
             store.moveFolder(folder, toParent: destinationID)
         case .copyFolder(let folder):
             store.copyFolder(folder, toParent: destinationID)
-        case .moveApp(let app):
-            store.move(app, toFolderID: destinationID)
+        case .moveApp(let app, let sourceFolderID):
+            store.movePlacement(app, fromFolderID: sourceFolderID, toFolderID: destinationID)
         }
         destinationOperation = nil
     }
