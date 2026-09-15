@@ -13,7 +13,7 @@ extension SavedHTMLApp {
 }
 
 enum HTMLAppIconTools {
-    static func savedIcon(html: String, name: String) async -> Data {
+    static func savedIcon(html: String, name: String) async -> Data? {
         if let source = faviconSource(in: html),
            let data = await loadIcon(source),
            let image = UIImage(data: data),
