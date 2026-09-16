@@ -15,7 +15,7 @@ enum LibrarySortMode: String, CaseIterable, Identifiable {
         case .alphabeticalZA: return "Alphabetical (Z–A)"
         case .latestFirst: return "Latest at Top"
         case .latestLast: return "Latest at Bottom"
-        case .recentlyOpened: return "Recently Opened"
+        case .recentlyOpened: return "Recently Used"
         }
     }
 
@@ -113,10 +113,14 @@ enum LibraryDisplayItem: Identifiable {
         }
     }
 
-    var lastOpenedAt: Date? {
+    /// "Recently Used" treats creation as activity. A brand-new app therefore
+    /// appears immediately at the top without requiring the user to open it first.
+    var recentActivityAt: Date {
         switch self {
-        case .folder(let folder): return LibraryFolderActivityStore.lastOpenedAt(folder.id)
-        case .app(let app): return app.lastOpenedAt
+        case .folder(let folder):
+            return max(folder.createdAt, LibraryFolderActivityStore.lastOpenedAt(folder.id) ?? .distantPast)
+        case .app(let app):
+            return max(app.createdAt, app.lastOpenedAt ?? .distantPast)
         }
     }
 }
@@ -192,7 +196,11 @@ enum LibrarySorter {
             return left.isFolder
         }
 
+        // Recently Used is intentionally strict activity ordering. Otherwise an
+        // old favorite could stay above a newly-created app even though the user
+        // explicitly selected Recently Used.
         if favoritesOnTop,
+           mode != .recentlyOpened,
            !left.isFolder,
            !right.isFolder,
            left.isFavoriteApp != right.isFavoriteApp {
@@ -215,16 +223,9 @@ enum LibrarySorter {
             if l != r { return l < r }
             return nameCompare(left, right, ascending: true)
         case .recentlyOpened:
-            switch (left.lastOpenedAt, right.lastOpenedAt) {
-            case let (l?, r?):
-                if l != r { return l > r }
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            case (nil, nil):
-                break
-            }
+            let l = left.recentActivityAt
+            let r = right.recentActivityAt
+            if l != r { return l > r }
             return nameCompare(left, right, ascending: true)
         }
     }
