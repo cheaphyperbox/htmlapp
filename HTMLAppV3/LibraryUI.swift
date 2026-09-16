@@ -29,6 +29,7 @@ struct LibraryView: View {
     @State private var editor: EditorMode?
     @State private var websiteEditorApp: SavedHTMLApp?
     @State private var showSettings = false
+    @State private var showAllApps = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
     @State private var aiEditorApp: SavedHTMLApp?
@@ -59,6 +60,10 @@ struct LibraryView: View {
         LibrarySortDateBasis(rawValue: librarySortDateBasisRaw) ?? .modified
     }
 
+    private var globalSearchActive: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         NavigationStack(path: $folderPath) {
             libraryPage(folderID: nil)
@@ -71,6 +76,7 @@ struct LibraryView: View {
         .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
         .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
+        .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
         .fullScreenCover(isPresented: $showGenerator) {
             AIGenerationView().environmentObject(store).interactiveDismissDisabled(true)
@@ -243,7 +249,7 @@ struct LibraryView: View {
                     systemImage: queryIsEmpty ? "folder" : "magnifyingglass",
                     message: queryIsEmpty
                         ? "Create a folder or add an HTML app here."
-                        : "Try another name or search term in this folder."
+                        : "Search checks every saved HTML app, including apps inside nested folders."
                 )
             } else if libraryLayout == "grid" {
                 PagedLibraryGrid(
@@ -251,7 +257,9 @@ struct LibraryView: View {
                     openFolder: openFolder,
                     openApp: store.launch,
                     folderMenu: { AnyView(folderMenu(for: $0)) },
-                    appMenu: { AnyView(appMenu(for: $0, sourceFolderID: folderID)) }
+                    appMenu: { app in
+                        AnyView(appMenu(for: app, sourceFolderID: sourceFolderID(for: app, pageFolderID: folderID)))
+                    }
                 )
             } else {
                 libraryList(folderID: folderID, entries: entries)
@@ -259,7 +267,7 @@ struct LibraryView: View {
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(folderName ?? "HTMLApp")
-        .searchable(text: $searchText, prompt: "Search this folder")
+        .searchable(text: $searchText, prompt: "Search all HTML apps")
         .toolbar {
             if folderID == nil {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -268,6 +276,11 @@ struct LibraryView: View {
                 }
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button { showAllApps = true } label: {
+                    Image(systemName: "square.stack.3d.up")
+                }
+                .accessibilityLabel("All HTML Apps")
+
                 Button {
                     newFolderParentID = folderID
                     newFolderName = ""
@@ -319,7 +332,9 @@ struct LibraryView: View {
                         ListAppRow(app: app, refreshing: refreshingID == app.id)
                     }
                     .buttonStyle(.plain)
-                    .contextMenu { appMenu(for: app, sourceFolderID: folderID) }
+                    .contextMenu {
+                        appMenu(for: app, sourceFolderID: sourceFolderID(for: app, pageFolderID: folderID))
+                    }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button { store.toggleFavorite(app) } label: {
                             Label(app.isFavorite == true ? "Unfavorite" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star")
@@ -385,18 +400,21 @@ struct LibraryView: View {
     }
 
     private func visibleFolders(in parentID: String?) -> [LibraryFolder] {
-        let folders = store.childFolders(of: parentID)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return folders }
-        return folders.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        guard query.isEmpty else { return [] }
+        return store.childFolders(of: parentID)
     }
 
     private func visibleApps(in folderID: String?) -> [SavedHTMLApp] {
-        let appsHere = store.apps(in: folderID)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return appsHere }
-        let matchingIDs = Set(store.results(for: searchText).map(\.id))
-        return appsHere.filter { matchingIDs.contains($0.id) }
+        guard !query.isEmpty else { return store.apps(in: folderID) }
+        // Search is global rather than scoped to the currently-open folder.
+        // store.results returns canonical apps, so linked folder appearances do not duplicate results.
+        return store.results(for: query)
+    }
+
+    private func sourceFolderID(for app: SavedHTMLApp, pageFolderID: String?) -> String? {
+        globalSearchActive ? app.folderID : pageFolderID
     }
 
     private func openFolder(_ folder: LibraryFolder) {
@@ -840,8 +858,8 @@ struct EmptyLibraryView: View {
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 58, weight: .semibold)).foregroundStyle(.tint)
-            Text("Create your first HTML app").font(.title2.bold())
-            Text("Generate with AI, download a website, enter HTML code, select a file, or receive an app from another device.")
+            Text("Create your first HTML app").font(.title2.bold()).multilineTextAlignment(.center)
+            Text("Generate with AI, download a website, enter HTML code, select a file, or receive one from another device.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 34)
             Button(action: add) { Label("Add HTML App", systemImage: "plus") }
                 .buttonStyle(.borderedProminent).controlSize(.large)
