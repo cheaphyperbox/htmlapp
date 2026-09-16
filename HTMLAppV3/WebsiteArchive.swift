@@ -154,11 +154,17 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private func rewriteHTML(_ html: String, pageURL: URL, context: CrawlContext) async throws -> String {
         var rewritten = html
         var references = Set<String>()
+        let effectiveBaseURL = htmlBaseURL(in: html, pageURL: pageURL) ?? pageURL
 
-        // Standard HTML resources, including third-party/CDN URLs.
+        // Standard HTML resources, including third-party/CDN URLs and root-relative paths
+        // such as /assets/icon.png. Both quoted and common unquoted attributes are handled.
         for pattern in [
             #"(?i)\b(?:src|poster|data)\s*=\s*[\"']([^\"']+)[\"']"#,
+            #"(?i)\b(?:src|poster|data)\s*=\s*(?![\"'])([^\s\"'<>`]+)"#,
             #"(?i)<link\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>"#,
+            #"(?i)<link\b[^>]*\bhref\s*=\s*(?![\"'])([^\s\"'<>`]+)[^>]*>"#,
+            #"(?i)<(?:use|image)\b[^>]*\b(?:href|xlink:href)\s*=\s*[\"']([^\"']+)[\"'][^>]*>"#,
+            #"(?i)<(?:use|image)\b[^>]*\b(?:href|xlink:href)\s*=\s*(?![\"'])([^\s\"'<>`]+)[^>]*>"#,
             #"(?i)url\(\s*[\"']?([^\"')]+)[\"']?\s*\)"#
         ] {
             references.formUnion(captures(pattern: pattern, in: html))
@@ -171,7 +177,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
 
         var replacements: [String: String] = [:]
         for raw in references {
-            guard let remote = resolvedResource(raw, relativeTo: pageURL) else { continue }
+            guard let remote = resolvedResource(raw, relativeTo: effectiveBaseURL) else { continue }
             if let local = try await downloadResource(remote, context: context) {
                 replacements[raw] = local
             }
@@ -255,14 +261,15 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         var rewritten = script
         var references = Set<String>()
 
-        // ES modules, dynamic imports, workers, importScripts, and literal fetches commonly point
-        // at additional JS/CSS/JSON/assets that are required for the downloaded app to run.
+        // ES modules, dynamic imports, workers, importScripts, literal fetches, and
+        // new URL("/asset", import.meta.url) commonly point at additional resources.
         for pattern in [
             #"(?m)\b(?:import|export)\s+(?:[^\"']*?\s+from\s+)?[\"']([^\"']+)[\"']"#,
             #"(?m)\bimport\s*\(\s*[\"']([^\"']+)[\"']\s*\)"#,
             #"(?m)\bimportScripts\s*\(\s*[\"']([^\"']+)[\"']"#,
             #"(?m)\b(?:new\s+)?(?:Worker|SharedWorker)\s*\(\s*[\"']([^\"']+)[\"']"#,
-            #"(?m)\bfetch\s*\(\s*[\"']([^\"']+)[\"']"#
+            #"(?m)\bfetch\s*\(\s*[\"']([^\"']+)[\"']"#,
+            #"(?m)\bnew\s+URL\s*\(\s*[\"']([^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)"#
         ] {
             references.formUnion(captures(pattern: pattern, in: script))
         }
@@ -295,8 +302,21 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
     }
 
+    private func htmlBaseURL(in html: String, pageURL: URL) -> URL? {
+        let quoted = captures(
+            pattern: #"(?i)<base\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>"#,
+            in: html
+        ).first
+        let unquoted = captures(
+            pattern: #"(?i)<base\b[^>]*\bhref\s*=\s*(?![\"'])([^\s\"'<>`]+)[^>]*>"#,
+            in: html
+        ).first
+        guard let raw = quoted ?? unquoted else { return nil }
+        return resolvedResource(raw, relativeTo: pageURL)
+    }
+
     private func resolvedResource(_ raw: String, relativeTo base: URL) -> URL? {
-        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = decodeHTMLAttribute(raw).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty,
               !value.hasPrefix("#"),
               !value.lowercased().hasPrefix("data:"),
@@ -304,9 +324,37 @@ final class WebsiteArchiveManager: @unchecked Sendable {
               !value.lowercased().hasPrefix("javascript:"),
               !value.lowercased().hasPrefix("mailto:"),
               !value.lowercased().hasPrefix("tel:") else { return nil }
-        guard let url = URL(string: value, relativeTo: base)?.absoluteURL,
+
+        let candidate: URL?
+        if value.hasPrefix("//") {
+            candidate = URL(string: "\(base.scheme ?? "https"):\(value)")
+        } else if value.hasPrefix("/") {
+            // Explicitly resolve root-relative references against the website origin.
+            // This covers /assets/icon.png even when the page itself is nested deeply.
+            var origin = URLComponents(url: base.absoluteURL, resolvingAgainstBaseURL: true)
+            origin?.path = ""
+            origin?.query = nil
+            origin?.fragment = nil
+            if let originURL = origin?.url {
+                candidate = URL(string: value, relativeTo: originURL)?.absoluteURL
+            } else {
+                candidate = URL(string: value, relativeTo: base)?.absoluteURL
+            }
+        } else {
+            candidate = URL(string: value, relativeTo: base)?.absoluteURL
+        }
+
+        guard let url = candidate,
               ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
         return url
+    }
+
+    private func decodeHTMLAttribute(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&amp;", with: "&", options: .caseInsensitive)
+            .replacingOccurrences(of: "&quot;", with: "\"", options: .caseInsensitive)
+            .replacingOccurrences(of: "&#39;", with: "'", options: .caseInsensitive)
+            .replacingOccurrences(of: "&#x27;", with: "'", options: .caseInsensitive)
     }
 
     private func srcsetURLs(_ value: String) -> [String] {
@@ -410,7 +458,7 @@ struct WebsiteImportView: View {
                         .keyboardType(.URL)
                 }
                 Section {
-                    Text("HTMLApp downloads the page plus its required local and third-party dependencies, including stylesheets, scripts and module imports, fonts, images, media, workers, and other directly referenced files. Each domain gets its own cache folder. The downloaded copy opens immediately and refreshes in the background later.")
+                    Text("HTMLApp downloads the page plus its required local and third-party dependencies, including root-relative paths such as /assets/icon.png, stylesheets, scripts and module imports, fonts, images, media, workers, and other directly referenced files. Each domain gets its own cache folder. The downloaded copy opens immediately and refreshes in the background later.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
