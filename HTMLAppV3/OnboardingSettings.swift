@@ -108,6 +108,7 @@ struct SettingsView: View {
                 Section {
                     Toggle("Folders on top", isOn: $libraryFoldersOnTop)
                     Toggle("Favorite apps on top", isOn: $libraryFavoritesOnTop)
+                        .disabled(selectedSortMode == .recentlyOpened)
 
                     Picker("Sort", selection: $librarySortModeRaw) {
                         ForEach(LibrarySortMode.allCases) { mode in
@@ -302,7 +303,7 @@ struct SettingsView: View {
         case .latestLast:
             return "The newest items appear last using \(sortDateBasisTitle.lowercased())."
         case .recentlyOpened:
-            return "Recently opened apps and folders appear first. Items never opened fall back to alphabetical order."
+            return "Recently used items appear first. Creating a new app counts as recent activity, so it appears at the top of the app ordering immediately."
         }
     }
 
