@@ -251,14 +251,11 @@ struct AIGenerationView: View {
                 webReport = await browserResearch.research(for: originalPrompt)
                 AIDebugTraceStore.shared.append("WEB RESEARCH", webReport.isEmpty ? "No browser research result." : webReport)
             }
-            let enrichedPrompt = webReport.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? originalPrompt : """
-\(originalPrompt)
-
-LIVE WEB RESEARCH PERFORMED BY HTMLAPP:
-Use this only as supporting evidence. Do not invent anything beyond it, and prefer the cited/read pages when implementing web-dependent behavior.
-\(webReport)
-"""
-            await session.generate(prompt: enrichedPrompt, originalUserPrompt: originalPrompt)
+            await session.generate(
+                prompt: originalPrompt,
+                originalUserPrompt: originalPrompt,
+                researchReport: webReport
+            )
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             await runOptionalUIPolish(originalPrompt: originalPrompt)
@@ -281,14 +278,7 @@ Requested edit:
 \(change)
 """
             let webReport = await browserResearch.research(for: researchRequest)
-            let enrichedChange = webReport.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? change : """
-\(change)
-
-LIVE WEB RESEARCH FOR THIS EDIT:
-Use this evidence when relevant and do not invent unsupported facts or endpoints.
-\(webReport)
-"""
-            await session.revise(change: enrichedChange)
+            await session.revise(change: change, researchReport: webReport)
             guard session.errorMessage == nil else { return }
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
         }
@@ -343,7 +333,7 @@ Use this evidence when relevant and do not invent unsupported facts or endpoints
     }
 
     private func injectIcon(_ data: Data, into html: String) -> String {
-        let tag = "<link rel=\"apple-touch-icon icon\" href=\"data:image/jpeg;base64,\(data.base64EncodedString())\">"
+        let tag = "<link rel=\"apple-touch-icon icon\" href=\"data:image/png;base64,\(data.base64EncodedString())\">"
         if let range = html.range(of: "</head>", options: .caseInsensitive) {
             var result = html
             result.insert(contentsOf: tag + "\n", at: range.lowerBound)
