@@ -28,6 +28,7 @@ struct LibraryView: View {
     @State private var folderPath: [LibraryFolder] = []
     @State private var editor: EditorMode?
     @State private var websiteEditorApp: SavedHTMLApp?
+    @State private var websiteSourcesApp: SavedHTMLApp?
     @State private var showSettings = false
     @State private var showAllApps = false
     @State private var showAddOptions = false
@@ -75,6 +76,7 @@ struct LibraryView: View {
         // dialogs/sheets active while a nested folder destination is on screen.
         .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
         .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
+        .sheet(item: $websiteSourcesApp) { WebsiteSourcesView(app: $0).environmentObject(store) }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
@@ -384,6 +386,9 @@ struct LibraryView: View {
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
         Button { edit(app) } label: {
             Label(app.websiteSourceURL == nil ? "Edit HTML Code" : "Edit Website URL", systemImage: app.websiteSourceURL == nil ? "pencil" : "link")
+        }
+        if app.websiteSourceURL != nil {
+            Button { websiteSourcesApp = app } label: { Label("Downloaded Sources", systemImage: "externaldrive") }
         }
         Divider()
         Button { senderApp = app } label: { Label("Send to Another Device", systemImage: "qrcode") }
