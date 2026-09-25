@@ -359,32 +359,44 @@ enum AIProviderClient {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
-        var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false))
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response, data: data)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AIGenerationError.provider("The AI provider returned invalid JSON.") }
-        let text: String?
-        switch config.compatibility {
-        case .openAI:
-            if let choices = object["choices"] as? [[String: Any]],
-               let message = choices.first?["message"] as? [String: Any] {
-                text = message["content"] as? String
-            } else {
-                text = nil
+
+        do {
+            var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
+            request.httpBody = try JSONSerialization.data(
+                withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false)
+            )
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validate(response, data: data)
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw AIGenerationError.provider("The AI provider returned invalid JSON.")
             }
-        case .anthropic:
-            if let blocks = object["content"] as? [[String: Any]] {
-                text = blocks.compactMap { $0["text"] as? String }.joined()
-            } else {
-                text = nil
+
+            let text: String?
+            switch config.compatibility {
+            case .openAI:
+                if let choices = object["choices"] as? [[String: Any]],
+                   let message = choices.first?["message"] as? [String: Any] {
+                    text = message["content"] as? String
+                } else {
+                    text = nil
+                }
+            case .anthropic:
+                if let blocks = object["content"] as? [[String: Any]] {
+                    text = blocks.compactMap { $0["text"] as? String }.joined()
+                } else {
+                    text = nil
+                }
             }
+
+            guard let text, !text.isEmpty else {
+                throw AIGenerationError.provider("The AI provider response did not contain text.")
+            }
+            await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
+            return text
+        } catch {
+            await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST ERROR", error.localizedDescription) }
+            throw error
         }
-        guard let text, !text.isEmpty else {
-            throw AIGenerationError.provider("The AI provider response did not contain text.")
-        }
-        await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
-        return text
     }
 
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
