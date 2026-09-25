@@ -78,6 +78,7 @@ struct SettingsView: View {
     @State private var aiURL = AISettingsStore.apiURL
     @State private var aiModel = AISettingsStore.model
     @State private var aiKey = AISettingsStore.apiKey
+    @State private var aiRequestDelay = AISettingsStore.requestDelaySeconds
     @State private var aiSystemPrompt = AISettingsStore.systemPrompt
     @State private var confirmRestoreSystemPrompt = false
     @State private var uiCompatibility = AISettingsStore.uiCompatibility
@@ -153,6 +154,18 @@ struct SettingsView: View {
                             AISettingsStore.apiKey = ""
                         }
                     }
+                    Stepper(value: $aiRequestDelay, in: 0...60, step: 0.1) {
+                        HStack {
+                            Text("Minimum time between AI requests")
+                            Spacer()
+                            Text("\(aiRequestDelay, specifier: "%.1f") s")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                    Text("HTMLApp waits at least this long between provider requests. The default is 0.2 seconds. Increase it if your provider returns rate-limit errors.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 } header: {
                     Text("AI App Generator")
                 } footer: {
@@ -316,6 +329,7 @@ struct SettingsView: View {
         AISettingsStore.apiURL = aiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.model = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.apiKey = aiKey
+        AISettingsStore.requestDelaySeconds = aiRequestDelay
         AISettingsStore.systemPrompt = aiSystemPrompt
         AISettingsStore.uiCompatibility = uiCompatibility
         AISettingsStore.uiAPIURL = uiURL.trimmingCharacters(in: .whitespacesAndNewlines)
