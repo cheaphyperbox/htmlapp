@@ -65,9 +65,10 @@ final class AIGenerationSession: ObservableObject {
             lastResearch = await SafePublicAPIResearch.research(queries: queries)
 
             phase = "Generating live preview"
+            let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
             let stream = try await AIProviderClient.stream(
                 config: config,
-                system: AIHTMLAgent.systemPrompt(research: lastResearch),
+                system: systemPrompt,
                 messages: [("user", improved)]
             )
             var full = ""
@@ -75,7 +76,16 @@ final class AIGenerationSession: ObservableObject {
                 full += piece
                 apply(AIHTMLAgent.parsePartial(full), partial: true)
             }
-            let final = AIHTMLAgent.parse(full)
+
+            var final = AIHTMLAgent.parse(full)
+            if final.html.trimmed.isEmpty {
+                final = try await recoverIncompleteGeneration(
+                    fullResponse: &full,
+                    brief: improved,
+                    systemPrompt: systemPrompt,
+                    config: config
+                )
+            }
             guard !final.html.trimmed.isEmpty else { throw AIGenerationError.missingHTML }
             apply(final, partial: false)
             try await verifyAndRepair(config: config)
@@ -160,6 +170,56 @@ Requested change:
         isWorking = false
     }
 
+    private func recoverIncompleteGeneration(
+        fullResponse: inout String,
+        brief: String,
+        systemPrompt: String,
+        config: AIProviderConfiguration
+    ) async throws -> AIGenerationOutput {
+        var partial = AIHTMLAgent.parsePartial(fullResponse)
+        guard !partial.html.trimmed.isEmpty else {
+            phase = "Repairing AI output"
+            let repaired = try await AIHTMLAgent.recoverGeneration(
+                response: fullResponse,
+                brief: brief,
+                research: lastResearch,
+                config: config
+            )
+            return AIHTMLAgent.parse(repaired)
+        }
+
+        for _ in 0..<2 {
+            phase = "Continuing unfinished generation"
+            let continuation = try await AIProviderClient.complete(
+                config: config,
+                system: systemPrompt,
+                messages: [
+                    ("user", brief),
+                    ("assistant", fullResponse),
+                    ("user", """
+Your previous response was cut off before the HTMLApp output was complete. Continue exactly from the character where you stopped. Do not restart, repeat earlier sections, or wrap the continuation in Markdown. Finish the remaining HTML/CSS/JavaScript and close </htmlapp_code>.
+""")
+                ]
+            )
+            fullResponse += continuation
+            partial = AIHTMLAgent.parsePartial(fullResponse)
+            apply(partial, partial: true)
+            let parsed = AIHTMLAgent.parse(fullResponse)
+            if !parsed.html.trimmed.isEmpty { return parsed }
+        }
+
+        phase = "Repairing incomplete output"
+        let repaired = try await AIHTMLAgent.recoverGeneration(
+            response: fullResponse,
+            brief: brief,
+            research: lastResearch,
+            config: config
+        )
+        let parsed = AIHTMLAgent.parse(repaired)
+        if !parsed.html.trimmed.isEmpty { return parsed }
+        throw AIGenerationError.missingHTML
+    }
+
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         phase = "Verifying design and behavior"
         let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
@@ -186,8 +246,29 @@ Requested change:
     }
 }
 
+actor AIRequestGate {
+    static let shared = AIRequestGate()
+    private var lastRequestAt = Date.distantPast
+
+    func waitIfNeeded() async {
+        let minimum = AISettingsStore.requestDelaySeconds
+        guard minimum > 0 else {
+            lastRequestAt = Date()
+            return
+        }
+        let elapsed = Date().timeIntervalSince(lastRequestAt)
+        let remaining = minimum - elapsed
+        if remaining > 0 {
+            let nanoseconds = UInt64((remaining * 1_000_000_000).rounded())
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        }
+        lastRequestAt = Date()
+    }
+}
+
 enum AIProviderClient {
     static func complete(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> String {
+        await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         var request = makeRequest(config: config, endpoint: endpoint)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false))
@@ -204,6 +285,7 @@ enum AIProviderClient {
     }
 
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
+        await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         var request = makeRequest(config: config, endpoint: endpoint)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true))
@@ -366,6 +448,35 @@ HTML to review:
 <htmlapp_existing>
 \(html)
 </htmlapp_existing>
+"""
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+    }
+
+    static func recoverGeneration(
+        response: String,
+        brief: String,
+        research: String,
+        config: AIProviderConfiguration
+    ) async throws -> String {
+        let system = """
+You are HTMLApp's recovery editor. The previous app-generation response was truncated or malformed. Reconstruct it into one complete, valid HTMLApp response while preserving all useful work already present. Fix unclosed HTML/CSS/JavaScript, missing required sections, duplicated cutoff text, and obvious source errors. Do not invent APIs or data. Return exactly:
+<thinking>concise implementation plan</thinking>
+<description>one sentence</description>
+<icon_script>static icon drawing script</icon_script>
+<htmlapp_code><!DOCTYPE html>...one complete self-contained app...</htmlapp_code>
+No Markdown fences and no text outside those sections.
+"""
+        let user = """
+Original brief:
+(brief)
+
+Research evidence:
+(research.isEmpty ? "None." : research)
+
+Interrupted/malformed response:
+<interrupted_response>
+(response)
+</interrupted_response>
 """
         return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
     }
