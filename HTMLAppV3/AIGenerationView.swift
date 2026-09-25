@@ -5,6 +5,7 @@ struct AIGenerationView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
+    @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @State private var prompt = ""
     @State private var changePrompt = ""
     @State private var showingChange = false
@@ -12,6 +13,7 @@ struct AIGenerationView: View {
     @State private var showCancelConfirmation = false
     @State private var uiPolishNotice: String?
     @State private var didLoadExisting = false
+    @State private var showDebug = false
 
     let existingApp: SavedHTMLApp?
 
@@ -36,18 +38,31 @@ struct AIGenerationView: View {
                         if session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
+                            AIDebugTraceStore.shared.clear()
                             dismiss()
                         }
                     }
                     .disabled(saving)
                 }
+                if debugTrace.isActive {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button { showDebug = true } label: { Image(systemName: "ladybug") }
+                            .accessibilityLabel("View AI debug trace")
+                    }
+                }
+            }
+            .sheet(isPresented: $showDebug) {
+                AIDebugTraceView()
             }
             .confirmationDialog(
                 existingApp == nil ? "Discard this AI generation?" : "Discard AI edits?",
                 isPresented: $showCancelConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Discard and Close", role: .destructive) { dismiss() }
+                Button("Discard and Close", role: .destructive) {
+                    AIDebugTraceStore.shared.clear()
+                    dismiss()
+                }
                 Button("Keep Working", role: .cancel) {}
             } message: {
                 Text(existingApp == nil ? "The generated preview and current AI work will be lost if you close it without saving." : "Your saved HTMLApp will not be changed unless you choose Save Changes.")
@@ -191,7 +206,7 @@ struct AIGenerationView: View {
                                 Button(existingApp == nil ? "Looks good" : "Save Changes") { saveGeneratedApp() }
                                     .buttonStyle(.borderedProminent)
                                     .frame(maxWidth: .infinity)
-                                    .disabled(saving)
+                                    .disabled(saving || (existingApp == nil && session.renderedIconData == nil))
                             }
                         }
                     }
@@ -223,10 +238,19 @@ struct AIGenerationView: View {
     private func generateApp() {
         let originalPrompt = prompt
         uiPolishNotice = nil
+        AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.isWorking = true
-        session.phase = "Planning web research"
         Task {
-            let webReport = await browserResearch.research(for: originalPrompt)
+            let webReport: String
+            if AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
+                session.phase = "Generating live preview"
+                webReport = ""
+                AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this appears to be a simple local app request.")
+            } else {
+                session.phase = "Planning web research"
+                webReport = await browserResearch.research(for: originalPrompt)
+                AIDebugTraceStore.shared.append("WEB RESEARCH", webReport.isEmpty ? "No browser research result." : webReport)
+            }
             let enrichedPrompt = webReport.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? originalPrompt : """
 \(originalPrompt)
 
@@ -234,7 +258,7 @@ LIVE WEB RESEARCH PERFORMED BY HTMLAPP:
 Use this only as supporting evidence. Do not invent anything beyond it, and prefer the cited/read pages when implementing web-dependent behavior.
 \(webReport)
 """
-            await session.generate(prompt: enrichedPrompt)
+            await session.generate(prompt: enrichedPrompt, originalUserPrompt: originalPrompt)
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             await runOptionalUIPolish(originalPrompt: originalPrompt)
@@ -293,19 +317,26 @@ Use this evidence when relevant and do not invent unsupported facts or endpoints
     }
 
     private func saveGeneratedApp() {
+        if existingApp == nil && session.renderedIconData == nil {
+            session.errorMessage = "The generated app does not have a valid rendered icon yet."
+            return
+        }
         saving = true
         Task {
             var html = session.streamedHTML
-            if !session.iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               let icon = await AIIconRenderer.render(script: session.iconScript) {
+            if let icon = session.renderedIconData {
                 html = injectIcon(icon, into: html)
             }
             if let existingApp {
                 await store.update(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description)
+                if let icon = session.renderedIconData {
+                    store.setGeneratedIcon(icon, for: existingApp)
+                }
                 store.notice = "Saved AI changes to \(existingApp.name)."
             } else {
                 await store.add(html: html, summary: session.description)
             }
+            AIDebugTraceStore.shared.clear()
             saving = false
             dismiss()
         }
