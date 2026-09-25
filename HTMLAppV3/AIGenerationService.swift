@@ -431,12 +431,12 @@ enum AIProviderClient {
         }
     }
 
-    static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
+    static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)], maxTokens: Int? = nil) async throws -> AsyncThrowingStream<String, Error> {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "STREAM", config: config, endpoint: endpoint, system: system, messages: messages)
         var request = makeRequest(config: config, endpoint: endpoint, timeout: 90)
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true, maxTokens: nil))
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true, maxTokens: maxTokens))
         return AsyncThrowingStream { continuation in
             let activity = AIStreamActivity()
 
@@ -680,13 +680,29 @@ REPAIR NOTE, IF ANY:
                 AIDebugTraceStore.shared.append("ICON CONTEXT", "Compacted HTML from \(html.count) to \(context.count) characters before the dedicated icon request.")
             }
         }
-        let response = try await AIProviderClient.complete(
-            config: config,
-            system: system,
-            messages: [("user", user)],
-            timeout: 45,
-            maxTokens: 900
-        )
+        var response = ""
+        do {
+            let stream = try await AIProviderClient.stream(
+                config: config,
+                system: system,
+                messages: [("user", user)],
+                maxTokens: 900
+            )
+            for try await piece in stream {
+                response += piece
+            }
+        } catch {
+            await MainActor.run {
+                AIDebugTraceStore.shared.append("ICON STREAM FALLBACK", error.localizedDescription)
+            }
+            response = try await AIProviderClient.complete(
+                config: config,
+                system: system,
+                messages: [("user", user)],
+                timeout: 20,
+                maxTokens: 900
+            )
+        }
         return value("icon_script", in: response)
     }
 
@@ -735,7 +751,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 45, maxTokens: 1600)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 15, maxTokens: 1200)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
