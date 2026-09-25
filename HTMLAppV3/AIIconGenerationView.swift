@@ -12,6 +12,8 @@ struct AIIconGenerationView: View {
     @State private var working = false
     @State private var status = "Ready"
     @State private var errorMessage: String?
+    @ObservedObject private var debugTrace = AIDebugTraceStore.shared
+    @State private var showDebug = false
 
     var body: some View {
         NavigationStack {
@@ -52,7 +54,7 @@ struct AIIconGenerationView: View {
                 } header: {
                     Text("Optional Direction")
                 } footer: {
-                    Text("The AI always receives this app's complete HTML so the icon can match the app even when this field is empty.")
+                    Text("The AI receives this app's HTML design and content context so the icon can match the app even when this field is empty.")
                 }
 
                 Section {
@@ -85,16 +87,27 @@ struct AIIconGenerationView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        AIDebugTraceStore.shared.clear()
+                        dismiss()
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    if debugTrace.isActive {
+                        Button { showDebug = true } label: { Image(systemName: "ladybug") }
+                            .accessibilityLabel("View AI debug trace")
+                    }
                     Button("Use Icon") {
                         guard let rendered else { return }
                         store.setGeneratedIcon(rendered, for: app)
+                        AIDebugTraceStore.shared.clear()
                         dismiss()
                     }
                     .disabled(rendered == nil || working)
                 }
+            }
+            .sheet(isPresented: $showDebug) {
+                AIDebugTraceView()
             }
             .alert("Icon Generation Failed", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -112,38 +125,60 @@ struct AIIconGenerationView: View {
         rendered = nil
         errorMessage = nil
         status = "Designing icon…"
-        Task {
-            let config = AISettingsStore.configuration
-            var candidate = script
-            let direction = guidance.trimmingCharacters(in: .whitespacesAndNewlines)
-            let purpose = """
+
+        let config = AISettingsStore.configuration
+        let direction = guidance.trimmingCharacters(in: .whitespacesAndNewlines)
+        let purpose = """
 Generate a new icon for the existing HTMLApp named \(app.name).
 \(app.summary.isEmpty ? "" : "App summary: " + app.summary)
 \(direction.isEmpty ? "" : "User direction: " + direction)
 """
-            do {
-                for attempt in 0..<3 {
-                    status = attempt == 0 ? "Designing icon…" : "Repairing icon script…"
+        AIDebugTraceStore.shared.begin(originalPrompt: purpose, config: config)
+        AIDebugTraceStore.shared.append("ICON SOURCE", "App: \(app.name)\nHTML characters: \(app.html.count)")
+
+        Task {
+            var candidate = script.trimmingCharacters(in: .whitespacesAndNewlines)
+            var repairReason: String?
+            var lastError: Error?
+
+            for attempt in 0..<3 {
+                status = attempt == 0 ? "Designing icon…" : "Repairing icon script…"
+                do {
                     candidate = try await AIHTMLAgent.generateIconScript(
                         html: app.html,
                         originalPrompt: purpose,
                         previousScript: candidate,
+                        repairReason: repairReason,
                         config: config
-                    )
+                    ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    guard !candidate.isEmpty else {
+                        repairReason = "The previous response omitted the mandatory icon script. Return a complete replacement."
+                        AIDebugTraceStore.shared.append("ICON ATTEMPT", "Attempt \(attempt + 1) returned an empty icon script.")
+                        continue
+                    }
+
                     if let image = await AIIconRenderer.render(script: candidate) {
                         script = candidate
                         rendered = image
                         status = "Icon ready"
+                        AIDebugTraceStore.shared.append("ICON RENDER", "Rendered locally on attempt \(attempt + 1).")
                         working = false
                         return
                     }
+
+                    repairReason = "The previous icon script failed HTMLApp's local renderer. Repair or replace it using only supported commands."
+                    AIDebugTraceStore.shared.append("ICON ATTEMPT", "Attempt \(attempt + 1) produced a script that did not render locally.")
+                } catch {
+                    lastError = error
+                    repairReason = "The previous icon-generation request failed: \(error.localizedDescription). Return only a compact valid icon script."
+                    AIDebugTraceStore.shared.append("ICON ATTEMPT", "Attempt \(attempt + 1) request failed: \(error.localizedDescription)")
                 }
-                throw AIGenerationError.missingIcon
-            } catch {
-                status = "Icon generation stopped"
-                errorMessage = error.localizedDescription
-                working = false
             }
+
+            status = "Icon generation stopped"
+            errorMessage = (lastError ?? AIGenerationError.missingIcon).localizedDescription
+            working = false
         }
     }
 }
