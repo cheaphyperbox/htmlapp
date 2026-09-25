@@ -196,11 +196,7 @@ enum LibrarySorter {
             return left.isFolder
         }
 
-        // Recently Used is intentionally strict activity ordering. Otherwise an
-        // old favorite could stay above a newly-created app even though the user
-        // explicitly selected Recently Used.
         if favoritesOnTop,
-           mode != .recentlyOpened,
            !left.isFolder,
            !right.isFolder,
            left.isFavoriteApp != right.isFavoriteApp {
