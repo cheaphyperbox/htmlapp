@@ -109,7 +109,6 @@ struct SettingsView: View {
                 Section {
                     Toggle("Folders on top", isOn: $libraryFoldersOnTop)
                     Toggle("Favorite apps on top", isOn: $libraryFavoritesOnTop)
-                        .disabled(selectedSortMode == .recentlyOpened)
 
                     Picker("Sort", selection: $librarySortModeRaw) {
                         ForEach(LibrarySortMode.allCases) { mode in
