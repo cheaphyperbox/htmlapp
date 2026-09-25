@@ -49,7 +49,7 @@ final class AIGenerationSession: ObservableObject {
         phase = "Ready for AI edits"
     }
 
-    func generate(prompt: String, originalUserPrompt: String? = nil) async {
+    func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "") async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         originalPrompt = originalUserPrompt ?? prompt
@@ -57,21 +57,26 @@ final class AIGenerationSession: ObservableObject {
         errorMessage = nil
         verificationReport = ""
         do {
+            let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             let improved: String
             if AIHTMLAgent.canSkipPreflight(for: prompt) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
-                lastResearch = ""
+                lastResearch = suppliedResearch
                 phase = "Generating live preview"
             } else {
                 phase = "Improving your prompt"
                 improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
                 refinedBrief = improved
 
-                phase = "Planning APIs and capabilities"
-                let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
-                phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
-                lastResearch = await SafePublicAPIResearch.research(queries: queries)
+                if !suppliedResearch.isEmpty {
+                    lastResearch = suppliedResearch
+                } else {
+                    phase = "Planning APIs and capabilities"
+                    let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+                    phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
+                    lastResearch = await SafePublicAPIResearch.research(queries: queries)
+                }
                 phase = "Generating live preview"
             }
 
@@ -118,7 +123,7 @@ final class AIGenerationSession: ObservableObject {
         isWorking = false
     }
 
-    func revise(change: String) async {
+    func revise(change: String, researchReport: String = "") async {
         guard !streamedHTML.trimmed.isEmpty else { return }
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
@@ -129,10 +134,15 @@ final class AIGenerationSession: ObservableObject {
             phase = "Improving the requested change"
             let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: config)
 
-            phase = "Checking APIs for this change"
-            let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
-            let research = await SafePublicAPIResearch.research(queries: queries)
-            if !research.isEmpty { lastResearch = research }
+            let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !suppliedResearch.isEmpty {
+                lastResearch = suppliedResearch
+            } else {
+                phase = "Checking APIs for this change"
+                let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
+                let research = await SafePublicAPIResearch.research(queries: queries)
+                if !research.isEmpty { lastResearch = research }
+            }
 
             phase = "Patching the app"
             let user = """
@@ -247,27 +257,48 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         phase = iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Generating app icon" : "Checking app icon"
 
         var candidate = iconScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        var repairReason: String?
+        var lastError: Error?
+
         for attempt in 0..<3 {
-            if !candidate.isEmpty, let rendered = await AIIconRenderer.render(script: candidate) {
-                iconScript = candidate
-                renderedIconData = rendered
-                return
+            if !candidate.isEmpty {
+                if let rendered = await AIIconRenderer.render(script: candidate) {
+                    iconScript = candidate
+                    renderedIconData = rendered
+                    AIDebugTraceStore.shared.append("ICON RENDER", "Rendered locally on attempt \(attempt + 1).")
+                    return
+                }
+                repairReason = "The previous icon script did not render successfully in HTMLApp. Repair or replace it using only the supported icon commands."
+                AIDebugTraceStore.shared.append("ICON RENDER", "Local render failed on attempt \(attempt + 1). Asking the AI to repair the script.")
             }
 
-            phase = attempt == 0 ? "Generating app icon" : "Repairing app icon"
-            candidate = try await AIHTMLAgent.generateIconScript(
-                html: streamedHTML,
-                originalPrompt: originalPrompt,
-                previousScript: candidate,
-                config: config
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            phase = candidate.isEmpty ? "Generating app icon" : "Repairing app icon"
+            do {
+                candidate = try await AIHTMLAgent.generateIconScript(
+                    html: streamedHTML,
+                    originalPrompt: originalPrompt,
+                    previousScript: candidate,
+                    repairReason: repairReason,
+                    config: config
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                if candidate.isEmpty {
+                    repairReason = "The previous response omitted the mandatory <icon_script>. Return a complete replacement icon script."
+                }
+            } catch {
+                lastError = error
+                repairReason = "The previous icon-generation request failed: \(error.localizedDescription). Return only a compact valid icon script."
+                AIDebugTraceStore.shared.append("ICON GENERATION RETRY", "Attempt \(attempt + 1) failed: \(error.localizedDescription)")
+            }
         }
 
         if !candidate.isEmpty, let rendered = await AIIconRenderer.render(script: candidate) {
             iconScript = candidate
             renderedIconData = rendered
+            AIDebugTraceStore.shared.append("ICON RENDER", "Rendered locally after the final repair attempt.")
             return
         }
+
+        if let lastError { throw lastError }
         throw AIGenerationError.missingIcon
     }
 
@@ -354,7 +385,8 @@ enum AIProviderClient {
         config: AIProviderConfiguration,
         system: String,
         messages: [(String, String)],
-        timeout: TimeInterval = 180
+        timeout: TimeInterval = 180,
+        maxTokens: Int? = nil
     ) async throws -> String {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
@@ -363,7 +395,7 @@ enum AIProviderClient {
         do {
             var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
             request.httpBody = try JSONSerialization.data(
-                withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false)
+                withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false, maxTokens: maxTokens)
             )
             let (data, response) = try await URLSession.shared.data(for: request)
             try validate(response, data: data)
@@ -404,7 +436,7 @@ enum AIProviderClient {
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "STREAM", config: config, endpoint: endpoint, system: system, messages: messages)
         var request = makeRequest(config: config, endpoint: endpoint, timeout: 90)
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true))
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true, maxTokens: nil))
         return AsyncThrowingStream { continuation in
             let activity = AIStreamActivity()
 
@@ -492,15 +524,29 @@ enum AIProviderClient {
         await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST", requestTrace) }
     }
 
-    private static func requestBody(config: AIProviderConfiguration, system: String, messages: [(String, String)], stream: Bool) -> [String: Any] {
+    private static func requestBody(
+        config: AIProviderConfiguration,
+        system: String,
+        messages: [(String, String)],
+        stream: Bool,
+        maxTokens: Int?
+    ) -> [String: Any] {
         switch config.compatibility {
         case .openAI:
             var list: [[String: String]] = [["role": "system", "content": system]]
             list.append(contentsOf: messages.map { ["role": $0.0, "content": $0.1] })
-            return ["model": config.model, "messages": list, "stream": stream]
+            var body: [String: Any] = ["model": config.model, "messages": list, "stream": stream]
+            if let maxTokens { body["max_tokens"] = max(64, maxTokens) }
+            return body
         case .anthropic:
             let list: [[String: String]] = messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] }
-            return ["model": config.model, "max_tokens": 32000, "system": system, "messages": list, "stream": stream]
+            return [
+                "model": config.model,
+                "max_tokens": maxTokens.map { max(64, $0) } ?? 32000,
+                "system": system,
+                "messages": list,
+                "stream": stream
+            ]
         }
     }
 
@@ -554,13 +600,13 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
         let system = """
 Turn the user's app idea into a stronger, concise implementation brief. Preserve the user's intent and do not add unsupported requirements. Clarify likely screens, interactions, data needs, mobile behavior, animation/motion, empty/loading/error states, and what must be real versus local. Do not invent data or APIs. Return only <brief>...</brief>.
 """
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)])
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 45, maxTokens: 1400)
         return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
     }
 
     static func refineRevision(_ change: String, appBrief: String, config: AIProviderConfiguration) async throws -> String {
         let system = "Return a precise patch request that preserves everything not explicitly changed. Resolve ambiguity conservatively. Include mobile animation/state implications when relevant. Never invent facts or fake live data. Return only <brief>...</brief>."
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")])
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 45, maxTokens: 1400)
         return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
     }
 
@@ -569,7 +615,7 @@ Turn the user's app idea into a stronger, concise implementation brief. Preserve
 Return zero to six concise public-API discovery queries, each inside <query>. Search whenever the requested app or revision needs real-world/live/current data, a remote capability, or a capability you are not confident can be implemented locally. If unsure whether a capability exists, search rather than making it up. Prefer documented no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If the app truly needs no external data or service, return no queries.
 """
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 700)
         let values = values("query", in: text)
         return Array(values.prefix(upTo: min(6, values.count)))
     }
@@ -609,23 +655,54 @@ RESEARCH RESULTS:
         html: String,
         originalPrompt: String,
         previousScript: String,
+        repairReason: String? = nil,
         config: AIProviderConfiguration
     ) async throws -> String {
         let system = """
-Create a valid HTMLApp icon drawing script for the supplied app. The icon is mandatory and must visually match the app's purpose and visual language. Return only <icon_script>...</icon_script>. Use only these commands: SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE, FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown, SVG, HTML, or explanatory text.
+Create a valid HTMLApp icon drawing script for the supplied app. The icon is mandatory and must visually match the app's purpose and visual language. Return only <icon_script>...</icon_script>. Keep the script compact. Use only these commands: SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE, FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown, SVG, HTML, or explanatory text.
 """
+        let context = iconHTMLContext(html)
         let user = """
 USER'S ORIGINAL PROMPT:
 \(originalPrompt)
 
-APP HTML:
-\(html)
+APP HTML CONTEXT:
+\(context)
 
 PREVIOUS ICON SCRIPT, IF ANY:
 \(previousScript.isEmpty ? "None. Generate a new icon." : previousScript)
+
+REPAIR NOTE, IF ANY:
+\(repairReason ?? "None.")
 """
-        let response = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+        await MainActor.run {
+            if context.count < html.count {
+                AIDebugTraceStore.shared.append("ICON CONTEXT", "Compacted HTML from \(html.count) to \(context.count) characters before the dedicated icon request.")
+            }
+        }
+        let response = try await AIProviderClient.complete(
+            config: config,
+            system: system,
+            messages: [("user", user)],
+            timeout: 45,
+            maxTokens: 900
+        )
         return value("icon_script", in: response)
+    }
+
+    private static func iconHTMLContext(_ html: String) -> String {
+        var compact = html.replacingOccurrences(
+            of: #"data:[^;\s"']+;base64,[A-Za-z0-9+/=\r\n]+"#,
+            with: "data:embedded-asset-omitted",
+            options: .regularExpression
+        )
+        compact = compact.replacingOccurrences(of: #"<!--(?s:.*?)-->"#, with: " ", options: .regularExpression)
+        compact = compact.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        let limit = 28_000
+        guard compact.count > limit else { return compact }
+        let head = String(compact.prefix(20_000))
+        let tail = String(compact.suffix(7_000))
+        return head + "\n<!-- middle omitted only for icon-design context -->\n" + tail
     }
 
     static func reviewArtifact(
@@ -658,7 +735,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 45)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 45, maxTokens: 1600)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
@@ -892,20 +969,6 @@ enum HTMLStreamRepair {
         return html
     }
     private static func count(_ needle: String, _ haystack: String) -> Int { haystack.lowercased().components(separatedBy: needle).count - 1 }
-}
-
-enum AIIconRenderer {
-    static func render(script: String) async -> Data? {
-        let code = script.trimmed
-        guard !code.isEmpty, let url = URL(string: "https://mekapc.hostish.site/api/image") else { return nil }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 45
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["code": code])
-        guard let (data, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), !data.isEmpty else { return nil }
-        return data
-    }
 }
 
 private extension String {
