@@ -10,7 +10,7 @@ struct AIGenerationOutput {
 }
 
 enum AIGenerationError: LocalizedError {
-    case notConfigured, invalidEndpoint, missingHTML, invalidPatch
+    case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon
     case provider(String)
 
     var errorDescription: String? {
@@ -19,6 +19,7 @@ enum AIGenerationError: LocalizedError {
         case .invalidEndpoint: return "The configured AI API URL is invalid."
         case .missingHTML: return "The AI response did not contain a complete HTML app."
         case .invalidPatch: return "The AI returned a patch that could not be applied safely."
+        case .missingIcon: return "The AI could not produce a valid, renderable app icon."
         case .provider(let message): return message
         }
     }
@@ -31,6 +32,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var refinedBrief = ""
     @Published var description = ""
     @Published var iconScript = ""
+    @Published var renderedIconData: Data?
     @Published var verificationReport = ""
     @Published var errorMessage: String?
     @Published var isWorking = false
@@ -106,6 +108,7 @@ final class AIGenerationSession: ObservableObject {
             }
             guard !final.html.trimmed.isEmpty else { throw AIGenerationError.missingHTML }
             apply(final, partial: false)
+            try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
@@ -159,6 +162,7 @@ Requested change:
             if !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
 
+            try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
@@ -179,6 +183,7 @@ Requested change:
         isWorking = true
         errorMessage = nil
         do {
+            try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
@@ -238,21 +243,56 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         throw AIGenerationError.missingHTML
     }
 
+    private func ensureValidIcon(config: AIProviderConfiguration) async throws {
+        phase = iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Generating app icon" : "Checking app icon"
+
+        var candidate = iconScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        for attempt in 0..<3 {
+            if !candidate.isEmpty, let rendered = await AIIconRenderer.render(script: candidate) {
+                iconScript = candidate
+                renderedIconData = rendered
+                return
+            }
+
+            phase = attempt == 0 ? "Generating app icon" : "Repairing app icon"
+            candidate = try await AIHTMLAgent.generateIconScript(
+                html: streamedHTML,
+                originalPrompt: originalPrompt,
+                previousScript: candidate,
+                config: config
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if !candidate.isEmpty, let rendered = await AIIconRenderer.render(script: candidate) {
+            iconScript = candidate
+            renderedIconData = rendered
+            return
+        }
+        throw AIGenerationError.missingIcon
+    }
+
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
-        phase = "Verifying design and behavior"
-        let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
-        let response = try await AIHTMLAgent.review(
+        phase = "Verifying everything is in place"
+        let response = try await AIHTMLAgent.reviewArtifact(
             html: streamedHTML,
+            iconScript: iconScript,
             originalPrompt: originalPrompt,
-            research: lastResearch,
-            localIssues: localIssues,
             config: config
         )
         verificationReport = AIHTMLAgent.verification(from: response)
+
         let patch = AIHTMLAgent.patch(from: response)
         if !patch.trimmed.isEmpty, let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
             streamedHTML = repaired
-            verificationReport += verificationReport.isEmpty ? "AI QA applied a repair patch." : "\nAI QA applied a repair patch."
+            verificationReport += verificationReport.isEmpty ? "Verification repaired the HTML." : "\nVerification repaired the HTML."
+        }
+
+        let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !correctedIcon.isEmpty, correctedIcon != iconScript {
+            iconScript = correctedIcon
+            renderedIconData = nil
+            try await ensureValidIcon(config: config)
+            verificationReport += verificationReport.isEmpty ? "Verification repaired the icon." : "\nVerification repaired the icon."
         }
     }
 
@@ -500,6 +540,62 @@ RESEARCH RESULTS:
 """
     }
 
+    static func generateIconScript(
+        html: String,
+        originalPrompt: String,
+        previousScript: String,
+        config: AIProviderConfiguration
+    ) async throws -> String {
+        let system = """
+Create a valid HTMLApp icon drawing script for the supplied app. The icon is mandatory and must visually match the app's purpose and visual language. Return only <icon_script>...</icon_script>. Use only these commands: SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE, FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown, SVG, HTML, or explanatory text.
+"""
+        let user = """
+USER'S ORIGINAL PROMPT:
+(originalPrompt)
+
+APP HTML:
+(html)
+
+PREVIOUS ICON SCRIPT, IF ANY:
+(previousScript.isEmpty ? "None. Generate a new icon." : previousScript)
+"""
+        let response = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+        return value("icon_script", in: response)
+    }
+
+    static func reviewArtifact(
+        html: String,
+        iconScript: String,
+        originalPrompt: String,
+        config: AIProviderConfiguration
+    ) async throws -> String {
+        let system = """
+You are a fresh final artifact verifier. You have no access to any previous AI conversation, research, planning, or generation context. Judge only the three artifacts supplied by the user: their original prompt, the finished HTML app, and its icon drawing script.
+
+Check whether the HTML substantially fulfills the original prompt, is structurally complete, and has obvious source-level functional errors. Check whether the icon is valid in concept and appropriately represents the same app. Do not redesign working code merely for preference. If a concrete HTML defect prevents the request from being fulfilled, return a minimal exact SEARCH/REPLACE patch. If the icon is missing, malformed, or mismatched, return a complete replacement icon script.
+
+Return only:
+<verification>brief result</verification>
+<htmlapp_patch>optional exact SEARCH/REPLACE blocks</htmlapp_patch>
+<icon_script>optional complete replacement icon script</icon_script>
+"""
+        let user = """
+ORIGINAL PROMPT:
+(originalPrompt)
+
+HTML:
+<htmlapp_existing>
+(html)
+</htmlapp_existing>
+
+ICON:
+<icon_script_existing>
+(iconScript)
+</icon_script_existing>
+"""
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+    }
+
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
         let system = """
 You are HTMLApp's final QA reviewer. Review the complete HTML/CSS/JavaScript source for likely functional defects and mobile UI quality problems. Check that controls have actions, navigation and state transitions make sense, APIs are not fabricated, error/loading/empty states are honest, permissions require gestures, touch targets are usable, light/dark layouts are coherent, and motion makes the app feel alive without being distracting. Also check for obvious syntax/DOM-reference problems.
@@ -579,6 +675,7 @@ Interrupted/malformed response:
 
     static func verification(from text: String) -> String { value("verification", in: text).trimmed }
     static func patch(from text: String) -> String { value("htmlapp_patch", in: text) }
+    static func iconScript(from text: String) -> String { value("icon_script", in: text) }
 
     private static func values(_ tag: String, in text: String) -> [String] {
         var result: [String] = []
