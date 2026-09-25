@@ -65,7 +65,22 @@ BROWSER NOTEBOOK:
 
 Pick the single best next action.
 """
-            let decision = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 30, maxTokens: 450)
+            let decision: String
+            do {
+                decision = try await AIProviderClient.complete(
+                    config: config,
+                    system: system,
+                    messages: [("user", user)],
+                    timeout: 30,
+                    maxTokens: 450
+                )
+            } catch {
+                if !notebook.isEmpty {
+                    await status("Using gathered research…")
+                    return fallbackReport(notebook: notebook, request: request)
+                }
+                throw error
+            }
 
             if let query = tagged("search", in: decision), !query.isEmpty {
                 await status("Looking up \(short(query, limit: 58))…")
@@ -102,14 +117,37 @@ Pick the single best next action.
         let summarySystem = """
 Summarize the browser notebook for an HTML app generator. Include only supported facts, useful URLs, documented endpoints/capabilities, authentication/CORS constraints when visible, and concrete implementation guidance. Do not invent anything that is not present in the notebook. Be concise.
 """
-        let final = try await AIProviderClient.complete(
-            config: config,
-            system: summarySystem,
-            messages: [("user", "Request: \(request)\n\nNotebook:\n\(notebook)")],
-            timeout: 45,
-            maxTokens: 1600
-        )
-        return final.trimmingCharacters(in: .whitespacesAndNewlines) + (notebook.isEmpty ? "" : "\n\nBrowsed evidence:\n" + compactEvidence(notebook))
+        do {
+            let final = try await AIProviderClient.complete(
+                config: config,
+                system: summarySystem,
+                messages: [("user", "Request: \(request)\n\nNotebook:\n\(notebook)")],
+                timeout: 45,
+                maxTokens: 1600
+            )
+            return final.trimmingCharacters(in: .whitespacesAndNewlines) + (notebook.isEmpty ? "" : "\n\nBrowsed evidence:\n" + compactEvidence(notebook))
+        } catch {
+            guard !notebook.isEmpty else { throw error }
+            await status("Using gathered research…")
+            return fallbackReport(notebook: notebook, request: request)
+        }
+    }
+
+    private static func fallbackReport(notebook: String, request: String) -> String {
+        let evidence: String
+        if notebook.count <= 14_000 {
+            evidence = notebook
+        } else {
+            evidence = String(notebook.prefix(5_000))
+                + "\n\n[earlier notebook content compacted]\n\n"
+                + String(notebook.suffix(8_500))
+        }
+        return """
+Browser research gathered usable evidence for: \(request)
+The research model stopped before writing its final summary. Use only the concrete documentation and page text below; do not infer undocumented endpoints, parameters, fields, or capabilities.
+
+\(evidence)
+"""
     }
 
     private static func append(_ observation: String, to notebook: inout String) {

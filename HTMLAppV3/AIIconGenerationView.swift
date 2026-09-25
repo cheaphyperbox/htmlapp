@@ -176,6 +176,19 @@ Generate a new icon for the existing HTMLApp named \(app.name).
                 }
             }
 
+            let fallback = AIHTMLAgent.fallbackIconScript(html: app.html, originalPrompt: purpose)
+            if let image = await AIIconRenderer.render(script: fallback) {
+                script = fallback
+                rendered = image
+                status = "Icon ready"
+                AIDebugTraceStore.shared.append(
+                    "ICON FALLBACK",
+                    "The provider did not return a usable icon, so HTMLApp created a local purpose-aware fallback instead of failing."
+                )
+                working = false
+                return
+            }
+
             status = "Icon generation stopped"
             errorMessage = (lastError ?? AIGenerationError.missingIcon).localizedDescription
             working = false
