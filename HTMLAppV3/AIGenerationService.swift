@@ -49,10 +49,10 @@ final class AIGenerationSession: ObservableObject {
         phase = "Ready for AI edits"
     }
 
-    func generate(prompt: String) async {
+    func generate(prompt: String, originalUserPrompt: String? = nil) async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
-        originalPrompt = prompt
+        originalPrompt = originalUserPrompt ?? prompt
         isWorking = true
         errorMessage = nil
         verificationReport = ""
@@ -273,26 +273,34 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         phase = "Verifying everything is in place"
-        let response = try await AIHTMLAgent.reviewArtifact(
-            html: streamedHTML,
-            iconScript: iconScript,
-            originalPrompt: originalPrompt,
-            config: config
-        )
-        verificationReport = AIHTMLAgent.verification(from: response)
+        do {
+            let response = try await AIHTMLAgent.reviewArtifact(
+                html: streamedHTML,
+                iconScript: iconScript,
+                originalPrompt: originalPrompt,
+                config: config
+            )
+            verificationReport = AIHTMLAgent.verification(from: response)
 
-        let patch = AIHTMLAgent.patch(from: response)
-        if !patch.trimmed.isEmpty, let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
-            streamedHTML = repaired
-            verificationReport += verificationReport.isEmpty ? "Verification repaired the HTML." : "\nVerification repaired the HTML."
-        }
+            let patch = AIHTMLAgent.patch(from: response)
+            if !patch.trimmed.isEmpty, let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
+                streamedHTML = repaired
+                verificationReport += verificationReport.isEmpty ? "Verification repaired the HTML." : "\nVerification repaired the HTML."
+            }
 
-        let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
-        if !correctedIcon.isEmpty, correctedIcon != iconScript {
-            iconScript = correctedIcon
-            renderedIconData = nil
-            try await ensureValidIcon(config: config)
-            verificationReport += verificationReport.isEmpty ? "Verification repaired the icon." : "\nVerification repaired the icon."
+            let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !correctedIcon.isEmpty, correctedIcon != iconScript {
+                iconScript = correctedIcon
+                renderedIconData = nil
+                try await ensureValidIcon(config: config)
+                verificationReport += verificationReport.isEmpty ? "Verification repaired the icon." : "\nVerification repaired the icon."
+            }
+        } catch {
+            let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
+            verificationReport = localIssues.isEmpty
+                ? "Independent verifier was unavailable or timed out. Local structural checks passed."
+                : "Independent verifier was unavailable or timed out. Local checks: " + localIssues.joined(separator: " ")
+            AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription)
         }
     }
 
