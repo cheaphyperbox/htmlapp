@@ -33,8 +33,8 @@ final class AgenticBrowserResearch: ObservableObject {
 }
 
 enum WebResearchAgent {
-    private static let maximumSteps = 8
-    private static let maximumNotebookCharacters = 48_000
+    private static let maximumSteps = 5
+    private static let maximumNotebookCharacters = 24_000
 
     static func run(
         request: String,
@@ -54,7 +54,7 @@ Choose exactly ONE next action and output only one of these forms:
 <open>https://public.example/page</open>
 <done>concise research summary with useful facts, URLs, API constraints, and implementation guidance supported by the notebook</done>
 
-Search before guessing. Open promising search results and official documentation when possible. You may navigate by opening links surfaced in pages. Prefer primary/official documentation. Do not browse private/local-network addresses. Do not research age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition topics. Finish as soon as you have enough reliable information; do not browse for its own sake.
+Search before guessing. Open promising search results and official documentation when possible. You may navigate by opening links surfaced in pages. Prefer primary/official documentation. Do not browse private/local-network addresses. Do not research age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition topics. Normally finish within 2–4 actions. Once the notebook has enough authoritative evidence for the core implementation, return <done> instead of continuing to browse.
 """
             let user = """
 APP REQUEST:
@@ -65,7 +65,7 @@ BROWSER NOTEBOOK:
 
 Pick the single best next action.
 """
-            let decision = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+            let decision = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 30, maxTokens: 450)
 
             if let query = tagged("search", in: decision), !query.isEmpty {
                 await status("Looking up \(short(query, limit: 58))…")
@@ -105,7 +105,9 @@ Summarize the browser notebook for an HTML app generator. Include only supported
         let final = try await AIProviderClient.complete(
             config: config,
             system: summarySystem,
-            messages: [("user", "Request: \(request)\n\nNotebook:\n\(notebook)")]
+            messages: [("user", "Request: \(request)\n\nNotebook:\n\(notebook)")],
+            timeout: 45,
+            maxTokens: 1600
         )
         return final.trimmingCharacters(in: .whitespacesAndNewlines) + (notebook.isEmpty ? "" : "\n\nBrowsed evidence:\n" + compactEvidence(notebook))
     }
