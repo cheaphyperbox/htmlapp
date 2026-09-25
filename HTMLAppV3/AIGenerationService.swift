@@ -390,12 +390,14 @@ enum AIProviderClient {
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
-        var request = makeRequest(config: config, endpoint: endpoint)
+        await logRequest(kind: "STREAM", config: config, endpoint: endpoint, system: system, messages: messages)
+        var request = makeRequest(config: config, endpoint: endpoint, timeout: 90)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true))
         return AsyncThrowingStream { continuation in
             let activity = AIStreamActivity()
 
             let worker = Task {
+                var rawResponse = ""
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -410,13 +412,18 @@ enum AIProviderClient {
                               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
                         if let text = streamedText(object, type: config.compatibility), !text.isEmpty {
                             await activity.markContent()
+                            rawResponse += text
                             continuation.yield(text)
                         }
                     }
                     await activity.markFinished()
+                    await MainActor.run { AIDebugTraceStore.shared.append("AI STREAM RESPONSE", rawResponse) }
                     continuation.finish()
                 } catch {
                     await activity.markFinished()
+                    await MainActor.run {
+                        AIDebugTraceStore.shared.append("AI STREAM ERROR", error.localizedDescription + "\nPartial response:\n" + rawResponse)
+                    }
                     continuation.finish(throwing: error)
                 }
             }
