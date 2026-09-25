@@ -350,21 +350,41 @@ actor AIStreamActivity {
 }
 
 enum AIProviderClient {
-    static func complete(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> String {
+    static func complete(
+        config: AIProviderConfiguration,
+        system: String,
+        messages: [(String, String)],
+        timeout: TimeInterval = 180
+    ) async throws -> String {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
-        var request = makeRequest(config: config, endpoint: endpoint)
+        await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
+        var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false))
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response, data: data)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AIGenerationError.provider("The AI provider returned invalid JSON.") }
+        let text: String?
         switch config.compatibility {
         case .openAI:
-            if let choices = object["choices"] as? [[String: Any]], let message = choices.first?["message"] as? [String: Any], let text = message["content"] as? String { return text }
+            if let choices = object["choices"] as? [[String: Any]],
+               let message = choices.first?["message"] as? [String: Any] {
+                text = message["content"] as? String
+            } else {
+                text = nil
+            }
         case .anthropic:
-            if let blocks = object["content"] as? [[String: Any]] { return blocks.compactMap { $0["text"] as? String }.joined() }
+            if let blocks = object["content"] as? [[String: Any]] {
+                text = blocks.compactMap { $0["text"] as? String }.joined()
+            } else {
+                text = nil
+            }
         }
-        throw AIGenerationError.provider("The AI provider response did not contain text.")
+        guard let text, !text.isEmpty else {
+            throw AIGenerationError.provider("The AI provider response did not contain text.")
+        }
+        await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
+        return text
     }
 
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> AsyncThrowingStream<String, Error> {
@@ -420,10 +440,10 @@ enum AIProviderClient {
         }
     }
 
-    private static func makeRequest(config: AIProviderConfiguration, endpoint: URL) -> URLRequest {
+    private static func makeRequest(config: AIProviderConfiguration, endpoint: URL, timeout: TimeInterval = 180) -> URLRequest {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 180
+        request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         switch config.compatibility {
         case .openAI:
@@ -433,6 +453,20 @@ enum AIProviderClient {
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         }
         return request
+    }
+
+    private static func logRequest(
+        kind: String,
+        config: AIProviderConfiguration,
+        endpoint: URL,
+        system: String,
+        messages: [(String, String)]
+    ) async {
+        var value = "Type: \(kind)\nAPI URL: \(config.apiURL)\nEndpoint: \(endpoint.absoluteString)\nModel: \(config.model)\nCompatibility: \(config.compatibility.rawValue)\n\n[SYSTEM]\n\(system)"
+        for (role, content) in messages {
+            value += "\n\n[\(role.uppercased())]\n\(content)"
+        }
+        await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST", value) }
     }
 
     private static func requestBody(config: AIProviderConfiguration, system: String, messages: [(String, String)], stream: Bool) -> [String: Any] {
