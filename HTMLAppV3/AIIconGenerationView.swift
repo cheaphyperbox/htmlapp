@@ -46,9 +46,11 @@ struct AIIconGenerationView: View {
                     .padding(.vertical, 8)
                 }
 
-                Section("Optional Direction") {
+                Section {
                     TextField("e.g. simpler, blue, emphasize calculator keys", text: $guidance, axis: .vertical)
                         .lineLimit(2...4)
+                } header: {
+                    Text("Optional Direction")
                 } footer: {
                     Text("The AI always receives this app's complete HTML so the icon can match the app even when this field is empty.")
                 }
