@@ -600,13 +600,13 @@ Create a valid HTMLApp icon drawing script for the supplied app. The icon is man
 """
         let user = """
 USER'S ORIGINAL PROMPT:
-(originalPrompt)
+\(originalPrompt)
 
 APP HTML:
-(html)
+\(html)
 
 PREVIOUS ICON SCRIPT, IF ANY:
-(previousScript.isEmpty ? "None. Generate a new icon." : previousScript)
+\(previousScript.isEmpty ? "None. Generate a new icon." : previousScript)
 """
         let response = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
         return value("icon_script", in: response)
@@ -630,19 +630,19 @@ Return only:
 """
         let user = """
 ORIGINAL PROMPT:
-(originalPrompt)
+\(originalPrompt)
 
 HTML:
 <htmlapp_existing>
-(html)
+\(html)
 </htmlapp_existing>
 
 ICON:
 <icon_script_existing>
-(iconScript)
+\(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 45)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
@@ -689,14 +689,14 @@ No Markdown fences and no text outside those sections.
 """
         let user = """
 Original brief:
-(brief)
+\(brief)
 
 Research evidence:
-(research.isEmpty ? "None." : research)
+\(research.isEmpty ? "None." : research)
 
 Interrupted/malformed response:
 <interrupted_response>
-(response)
+\(response)
 </interrupted_response>
 """
         return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
