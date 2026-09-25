@@ -239,8 +239,8 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         var replacements: [String: String] = [:]
         for raw in references {
             guard let remote = resolvedResource(raw, relativeTo: effectiveBaseURL) else { continue }
-            if let local = try await downloadResource(remote, context: context) {
-                replacements[raw] = local
+            if let replacement = try await replacementForResource(remote, context: context, fromNestedFile: false) {
+                replacements[raw] = replacement
             }
         }
 
@@ -262,7 +262,6 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private func downloadResource(_ url: URL, context: CrawlContext) async throws -> String? {
         let key = canonicalKey(url)
         context.discovered.insert(key)
-        if context.disabledURLs.contains(key) { return nil }
         if let existing = context.mapping[key] { return existing }
         guard context.mapping.count < context.maximumResources,
               context.totalBytes < context.maximumBytes else { return nil }
@@ -314,8 +313,8 @@ final class WebsiteArchiveManager: @unchecked Sendable {
 
         for raw in references.sorted(by: { $0.count > $1.count }) {
             guard let nested = resolvedResource(raw, relativeTo: sourceURL),
-                  let local = try await downloadResource(nested, context: context) else { continue }
-            rewritten = rewritten.replacingOccurrences(of: raw, with: "../" + local)
+                  let replacement = try await replacementForResource(nested, context: context, fromNestedFile: true) else { continue }
+            rewritten = rewritten.replacingOccurrences(of: raw, with: replacement)
         }
         return rewritten
     }
@@ -339,10 +338,22 @@ final class WebsiteArchiveManager: @unchecked Sendable {
 
         for raw in references.sorted(by: { $0.count > $1.count }) {
             guard let nested = resolvedResource(raw, relativeTo: sourceURL),
-                  let local = try await downloadResource(nested, context: context) else { continue }
-            rewritten = rewritten.replacingOccurrences(of: raw, with: "../" + local)
+                  let replacement = try await replacementForResource(nested, context: context, fromNestedFile: true) else { continue }
+            rewritten = rewritten.replacingOccurrences(of: raw, with: replacement)
         }
         return rewritten
+    }
+
+    private func replacementForResource(_ url: URL, context: CrawlContext, fromNestedFile: Bool) async throws -> String? {
+        let key = canonicalKey(url)
+        context.discovered.insert(key)
+        if context.disabledURLs.contains(key) {
+            // A disabled relative URL must become absolute because archived HTML/CSS/JS
+            // runs from local storage and would otherwise resolve /api/... against file://.
+            return url.absoluteString
+        }
+        guard let local = try await downloadResource(url, context: context) else { return nil }
+        return fromNestedFile ? "../" + local : local
     }
 
     private func fetch(_ url: URL) async throws -> (Data, URLResponse) {
