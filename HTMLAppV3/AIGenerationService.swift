@@ -82,6 +82,9 @@ final class AIGenerationSession: ObservableObject {
 
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
             var full = ""
+            var receivedCharacters = 0
+            var lastPreviewCharacters = 0
+            var lastPreviewAt = Date.distantPast
             do {
                 let stream = try await AIProviderClient.stream(
                     config: config,
@@ -90,7 +93,21 @@ final class AIGenerationSession: ObservableObject {
                 )
                 for try await piece in stream {
                     full += piece
-                    apply(AIHTMLAgent.parsePartial(full), partial: true)
+                    receivedCharacters += piece.count
+                    let now = Date()
+                    if receivedCharacters - lastPreviewCharacters >= 8_000,
+                       now.timeIntervalSince(lastPreviewAt) >= 0.8 {
+                        let partial = AIHTMLAgent.parsePartial(full)
+                        if HTMLStreamRepair.isSafeForLivePreview(partial.html) {
+                            apply(partial, partial: true)
+                            lastPreviewCharacters = receivedCharacters
+                            lastPreviewAt = now
+                        }
+                    }
+                }
+                let partial = AIHTMLAgent.parsePartial(full)
+                if HTMLStreamRepair.isSafeForLivePreview(partial.html) {
+                    apply(partial, partial: true)
                 }
             } catch {
                 phase = "Retrying generation without streaming"
@@ -298,6 +315,14 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             return
         }
 
+        let fallback = AIHTMLAgent.fallbackIconScript(html: streamedHTML, originalPrompt: originalPrompt)
+        if let rendered = await AIIconRenderer.render(script: fallback) {
+            iconScript = fallback
+            renderedIconData = rendered
+            AIDebugTraceStore.shared.append("ICON FALLBACK", "The provider could not produce a usable icon, so HTMLApp created a local purpose-aware fallback instead of blocking the app.")
+            return
+        }
+
         if let lastError { throw lastError }
         throw AIGenerationError.missingIcon
     }
@@ -460,6 +485,9 @@ enum AIProviderClient {
                             continuation.yield(text)
                         }
                     }
+                    guard !rawResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        throw AIGenerationError.provider("The AI stream completed without text. Retrying without streaming.")
+                    }
                     await activity.markFinished()
                     let completedResponse = rawResponse
                     await MainActor.run { AIDebugTraceStore.shared.append("AI STREAM RESPONSE", completedResponse) }
@@ -616,12 +644,25 @@ Return zero to six concise public-API discovery queries, each inside <query>. Se
 """
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
         let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 700)
-        let values = values("query", in: text)
-        return Array(values.prefix(upTo: min(6, values.count)))
+        let completeValues = values("query", in: text)
+        if !completeValues.isEmpty {
+            return Array(completeValues.prefix(upTo: min(6, completeValues.count)))
+        }
+        let partialQuery = partial("query", in: text)
+            .replacingOccurrences(of: "</", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return partialQuery.isEmpty ? [] : [partialQuery]
     }
 
     static func systemPrompt(research: String) -> String {
-        AISettingsStore.resolvedSystemPrompt(research: research)
+        AISettingsStore.resolvedSystemPrompt(research: research) + """
+
+HTMLAPP FACT-CHECK OVERRIDES:
+- Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or standard browser APIs.
+- Never invent a reverse-geocoding mode, endpoint variant, search parameter, or response field because a related API has a similar feature.
+- If device coordinates or other user data are sent to a remote API, do not claim that information stays only on the device.
+- Prefer a slightly simpler app with verified behavior over a richer app built on guessed network behavior.
+"""
     }
 
     static func patchSystemPrompt(research: String) -> String {
@@ -680,7 +721,8 @@ REPAIR NOTE, IF ANY:
                 AIDebugTraceStore.shared.append("ICON CONTEXT", "Compacted HTML from \(html.count) to \(context.count) characters before the dedicated icon request.")
             }
         }
-        var response = ""
+
+        var streamedResponse = ""
         do {
             let stream = try await AIProviderClient.stream(
                 config: config,
@@ -688,22 +730,138 @@ REPAIR NOTE, IF ANY:
                 messages: [("user", user)],
                 maxTokens: 900
             )
-            for try await piece in stream {
-                response += piece
+            for try await piece in stream { streamedResponse += piece }
+            let parsed = iconScriptFromProviderResponse(streamedResponse)
+            if !parsed.isEmpty { return parsed }
+            await MainActor.run {
+                AIDebugTraceStore.shared.append("ICON STREAM FALLBACK", "The stream ended without a usable icon script. Retrying without streaming.")
             }
         } catch {
             await MainActor.run {
                 AIDebugTraceStore.shared.append("ICON STREAM FALLBACK", error.localizedDescription)
             }
-            response = try await AIProviderClient.complete(
-                config: config,
-                system: system,
-                messages: [("user", user)],
-                timeout: 20,
-                maxTokens: 900
-            )
         }
-        return value("icon_script", in: response)
+
+        var lastError: Error?
+        for retry in 1...2 {
+            do {
+                let response = try await AIProviderClient.complete(
+                    config: config,
+                    system: system,
+                    messages: [("user", user)],
+                    timeout: 30,
+                    maxTokens: 900
+                )
+                let parsed = iconScriptFromProviderResponse(response)
+                if !parsed.isEmpty { return parsed }
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Non-streaming attempt \(retry) returned no usable icon script.")
+                }
+            } catch {
+                lastError = error
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Non-streaming attempt \(retry) failed: \(error.localizedDescription)")
+                }
+            }
+        }
+        if let lastError { throw lastError }
+        return ""
+    }
+
+    private static func iconScriptFromProviderResponse(_ response: String) -> String {
+        let tagged = value("icon_script", in: response).trimmed
+        if !tagged.isEmpty { return tagged }
+        var bare = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let start = bare.range(of: "SIZE ", options: .caseInsensitive) {
+            bare = String(bare[start.lowerBound...]).trimmed
+        }
+        let upper = bare.uppercased()
+        guard upper.contains("SIZE "),
+              ["BG ", "RECT ", "CIRCLE ", "LINE ", "TRIANGLE "].contains(where: { upper.contains($0) }),
+              !upper.contains("<HTML") else { return "" }
+        return bare
+    }
+
+    static func fallbackIconScript(html: String, originalPrompt: String) -> String {
+        let palette = fallbackIconPalette(html)
+        let background = palette.0, accent = palette.1, light = palette.2
+        let intent = (originalPrompt + " " + String(html.prefix(2_000))).lowercased()
+
+        if intent.contains("weather") || intent.contains("forecast") {
+            return """
+SIZE 1024 1024
+BG \(background)
+CIRCLE 350 350 150 \(accent)
+CIRCLE 535 590 185 \(light)
+CIRCLE 700 585 145 \(light)
+RECT 360 585 480 170 \(light)
+LINE 350 120 350 190 30 \(accent)
+LINE 120 350 190 350 30 \(accent)
+LINE 510 190 560 140 30 \(accent)
+"""
+        }
+        if intent.contains("game") || intent.contains("engine") || intent.contains("synapse") {
+            return """
+SIZE 1024 1024
+BG \(background)
+LINE 300 320 512 512 34 \(accent)
+LINE 724 320 512 512 34 \(accent)
+LINE 300 704 512 512 34 \(accent)
+LINE 724 704 512 512 34 \(accent)
+CIRCLE 512 512 128 \(accent)
+CIRCLE 300 320 74 \(light)
+CIRCLE 724 320 74 \(light)
+CIRCLE 300 704 74 \(light)
+CIRCLE 724 704 74 \(light)
+CIRCLE 512 512 48 \(light)
+"""
+        }
+        if intent.contains("music") || intent.contains("audio") || intent.contains("sound") {
+            return """
+SIZE 1024 1024
+BG \(background)
+CIRCLE 390 690 120 \(accent)
+CIRCLE 700 620 120 \(accent)
+RECT 485 245 82 450 \(accent)
+RECT 565 245 300 82 \(accent)
+LINE 565 410 815 350 44 \(light)
+"""
+        }
+        if intent.contains("map") || intent.contains("location") || intent.contains("place") {
+            return """
+SIZE 1024 1024
+BG \(background)
+CIRCLE 512 440 250 \(accent)
+TRIANGLE 330 560 694 560 512 860 \(accent)
+CIRCLE 512 440 105 \(background)
+CIRCLE 512 440 54 \(light)
+"""
+        }
+        return """
+SIZE 1024 1024
+BG \(background)
+CIRCLE 512 512 300 \(accent)
+CIRCLE 512 512 190 \(background)
+TRIANGLE 512 270 735 650 289 650 \(light)
+CIRCLE 512 512 74 \(accent)
+"""
+    }
+
+    private static func fallbackIconPalette(_ html: String) -> (String, String, String) {
+        guard let regex = try? NSRegularExpression(pattern: "#[0-9A-Fa-f]{6}") else {
+            return ("#111827", "#7C3AED", "#F8FAFC")
+        }
+        let range = NSRange(html.startIndex..., in: html)
+        var colors: [String] = []
+        for match in regex.matches(in: html, range: range) {
+            guard let swiftRange = Range(match.range, in: html) else { continue }
+            let color = String(html[swiftRange])
+            if !colors.contains(where: { $0.caseInsensitiveCompare(color) == .orderedSame }) {
+                colors.append(color)
+            }
+            if colors.count == 6 { break }
+        }
+        return (colors.first ?? "#111827", colors.dropFirst().first ?? "#7C3AED", colors.dropFirst(2).first ?? "#F8FAFC")
     }
 
     private static func iconHTMLContext(_ html: String) -> String {
@@ -714,11 +872,9 @@ REPAIR NOTE, IF ANY:
         )
         compact = compact.replacingOccurrences(of: #"<!--(?s:.*?)-->"#, with: " ", options: .regularExpression)
         compact = compact.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
-        let limit = 28_000
+        let limit = 12_000
         guard compact.count > limit else { return compact }
-        let head = String(compact.prefix(20_000))
-        let tail = String(compact.suffix(7_000))
-        return head + "\n<!-- middle omitted only for icon-design context -->\n" + tail
+        return String(compact.prefix(8_500)) + "\n<!-- middle omitted only for icon-design context -->\n" + String(compact.suffix(2_500))
     }
 
     static func reviewArtifact(
@@ -971,6 +1127,11 @@ enum SafePublicAPIResearch {
 }
 
 enum HTMLStreamRepair {
+    static func isSafeForLivePreview(_ fragment: String) -> Bool {
+        guard !fragment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return count("<script", fragment) == count("</script>", fragment)
+    }
+
     static func previewDocument(_ fragment: String) -> String {
         var html = fragment
         let lower = html.lowercased()
