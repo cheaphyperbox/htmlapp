@@ -55,25 +55,43 @@ final class AIGenerationSession: ObservableObject {
         errorMessage = nil
         verificationReport = ""
         do {
-            phase = "Improving your prompt"
-            let improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
-            refinedBrief = improved
+            let improved: String
+            if AIHTMLAgent.canSkipPreflight(for: prompt) {
+                improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                refinedBrief = improved
+                lastResearch = ""
+                phase = "Generating live preview"
+            } else {
+                phase = "Improving your prompt"
+                improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
+                refinedBrief = improved
 
-            phase = "Planning APIs and capabilities"
-            let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
-            phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
-            lastResearch = await SafePublicAPIResearch.research(queries: queries)
+                phase = "Planning APIs and capabilities"
+                let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+                phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
+                lastResearch = await SafePublicAPIResearch.research(queries: queries)
+                phase = "Generating live preview"
+            }
 
-            phase = "Generating live preview"
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
-            let stream = try await AIProviderClient.stream(
-                config: config,
-                system: systemPrompt,
-                messages: [("user", improved)]
-            )
             var full = ""
-            for try await piece in stream {
-                full += piece
+            do {
+                let stream = try await AIProviderClient.stream(
+                    config: config,
+                    system: systemPrompt,
+                    messages: [("user", improved)]
+                )
+                for try await piece in stream {
+                    full += piece
+                    apply(AIHTMLAgent.parsePartial(full), partial: true)
+                }
+            } catch {
+                phase = "Retrying generation without streaming"
+                full = try await AIProviderClient.complete(
+                    config: config,
+                    system: systemPrompt,
+                    messages: [("user", improved)]
+                )
                 apply(AIHTMLAgent.parsePartial(full), partial: true)
             }
 
@@ -266,6 +284,23 @@ actor AIRequestGate {
     }
 }
 
+actor AIStreamActivity {
+    private var lastContentAt = Date()
+    private var finished = false
+
+    func markContent() {
+        lastContentAt = Date()
+    }
+
+    func markFinished() {
+        finished = true
+    }
+
+    func shouldTimeout(after seconds: TimeInterval) -> Bool {
+        !finished && Date().timeIntervalSince(lastContentAt) >= seconds
+    }
+}
+
 enum AIProviderClient {
     static func complete(config: AIProviderConfiguration, system: String, messages: [(String, String)]) async throws -> String {
         await AIRequestGate.shared.waitIfNeeded()
@@ -290,21 +325,49 @@ enum AIProviderClient {
         var request = makeRequest(config: config, endpoint: endpoint)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true))
         return AsyncThrowingStream { continuation in
-            Task {
+            let activity = AIStreamActivity()
+
+            let worker = Task {
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                         throw AIGenerationError.provider("The AI provider returned an HTTP error.")
                     }
                     for try await line in bytes.lines {
+                        try Task.checkCancellation()
                         guard line.hasPrefix("data:") else { continue }
                         let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                         if payload == "[DONE]" { break }
-                        guard let data = payload.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                        if let text = streamedText(object, type: config.compatibility), !text.isEmpty { continuation.yield(text) }
+                        guard let data = payload.data(using: .utf8),
+                              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                        if let text = streamedText(object, type: config.compatibility), !text.isEmpty {
+                            await activity.markContent()
+                            continuation.yield(text)
+                        }
                     }
+                    await activity.markFinished()
                     continuation.finish()
-                } catch { continuation.finish(throwing: error) }
+                } catch {
+                    await activity.markFinished()
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            let watchdog = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    if Task.isCancelled { break }
+                    if await activity.shouldTimeout(after: 25) {
+                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 25 seconds. Retrying without streaming."))
+                        worker.cancel()
+                        break
+                    }
+                }
+            }
+
+            continuation.onTermination = { _ in
+                worker.cancel()
+                watchdog.cancel()
             }
         }
     }
@@ -368,6 +431,19 @@ Permission-requiring APIs may only activate after an explicit user gesture. Neve
     static let iconGuide = """
 Inside <icon_script>, output only a static drawing script. Commands: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Use absolute coordinates and CSS/HEX colors, draw back-to-front, and never use ANIM, GROUP or FPS.
 """
+
+    static func canSkipPreflight(for prompt: String) -> Bool {
+        let value = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= 160 else { return false }
+        let lower = value.lowercased()
+        let remoteSignals = [
+            "api", "website", "web site", "url", "current", "live", "latest", "weather",
+            "news", "stock", "crypto", "price", "map", "location", "restaurant", "flight",
+            "sports", "score", "search the web", "internet", "online", "remote", "database",
+            "login", "account", "oauth", "server", "fetch", "download"
+        ]
+        return !remoteSignals.contains(where: { lower.contains($0) })
+    }
 
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
         let system = """
