@@ -43,6 +43,7 @@ enum AISettingsStore {
     private static let uiURLKey = "ai.ui.apiURL"
     private static let uiModelKey = "ai.ui.model"
     private static let systemPromptKey = "ai.appSystemPrompt"
+    private static let requestDelayKey = "ai.requestDelaySeconds"
 
     static let researchPlaceholder = "{{HTMLAPP_RESEARCH_RESULTS}}"
 
@@ -185,6 +186,16 @@ The finished app must use real researched data whenever the UI presents somethin
 
     static var configuration: AIProviderConfiguration {
         AIProviderConfiguration(compatibility: compatibility, apiURL: apiURL, model: model, apiKey: apiKey)
+    }
+
+    static var requestDelaySeconds: Double {
+        get {
+            if UserDefaults.standard.object(forKey: requestDelayKey) == nil { return 0.2 }
+            return max(0, min(60, UserDefaults.standard.double(forKey: requestDelayKey)))
+        }
+        set {
+            UserDefaults.standard.set(max(0, min(60, newValue)), forKey: requestDelayKey)
+        }
     }
 
     static var systemPrompt: String {
