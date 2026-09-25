@@ -3,6 +3,14 @@ import SwiftUI
 import CryptoKit
 import CoreFoundation
 
+struct WebsiteSourceRecord: Codable, Hashable, Identifiable {
+    let sourceURL: String
+    let localPath: String?
+
+    var id: String { sourceURL }
+    var isCached: Bool { localPath != nil }
+}
+
 struct WebsiteSnapshot {
     let sourceURL: URL
     let html: String
@@ -32,6 +40,8 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     private let fileManager = FileManager.default
     private let pendingRoot: URL
     private let temporaryRoot: URL
+    private let manifestRoot: URL
+    private let disabledSourcesKeyPrefix = "htmlapp.websiteDisabledSources."
     private let maximumResources = 500
     private let maximumPackageBytes = 150 * 1024 * 1024
 
@@ -40,8 +50,30 @@ final class WebsiteArchiveManager: @unchecked Sendable {
             .appendingPathComponent("HTMLApp", isDirectory: true)
         pendingRoot = base.appendingPathComponent("WebsitePending", isDirectory: true)
         temporaryRoot = base.appendingPathComponent("WebsiteDownloads", isDirectory: true)
+        manifestRoot = base.appendingPathComponent("WebsiteSourceManifests", isDirectory: true)
         try? fileManager.createDirectory(at: pendingRoot, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: manifestRoot, withIntermediateDirectories: true)
+    }
+
+    func sourceRecords(appID: String) -> [WebsiteSourceRecord] {
+        let url = manifestRoot.appendingPathComponent(appID + ".json")
+        guard let data = try? Data(contentsOf: url),
+              let records = try? JSONDecoder().decode([WebsiteSourceRecord].self, from: data) else { return [] }
+        return records.sorted { $0.sourceURL.localizedCaseInsensitiveCompare($1.sourceURL) == .orderedAscending }
+    }
+
+    func isDownloadEnabled(appID: String, sourceURL: String) -> Bool {
+        !disabledSources(appID: appID).contains(canonicalString(sourceURL))
+    }
+
+    func setDownloadEnabled(_ enabled: Bool, appID: String, sourceURL: String) {
+        let key = disabledSourcesKeyPrefix + appID
+        var disabled = disabledSources(appID: appID)
+        let canonical = canonicalString(sourceURL)
+        if enabled { disabled.remove(canonical) }
+        else { disabled.insert(canonical) }
+        UserDefaults.standard.set(Array(disabled).sorted(), forKey: key)
     }
 
     func normalizedURL(_ string: String) -> URL? {
@@ -59,7 +91,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         try? fileManager.removeItem(at: staging)
         try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
 
-        let context = CrawlContext(root: staging, maximumResources: maximumResources, maximumBytes: maximumPackageBytes)
+        let context = CrawlContext(root: staging, maximumResources: maximumResources, maximumBytes: maximumPackageBytes, disabledURLs: disabledSources(appID: appID))
         do {
             let (pageData, response) = try await fetch(url)
             guard pageData.count <= maximumPackageBytes else { throw WebsiteArchiveError.pageTooLarge }
@@ -70,6 +102,11 @@ final class WebsiteArchiveManager: @unchecked Sendable {
             let pageURL = response.url ?? url
             let rewritten = try await rewriteHTML(html, pageURL: pageURL, context: context)
             try Data(rewritten.utf8).write(to: staging.appendingPathComponent("snapshot.html"), options: .atomic)
+            let sourceRecords = context.discovered.sorted().map { key in
+                WebsiteSourceRecord(sourceURL: key, localPath: context.mapping[key])
+            }
+            let manifestData = try JSONEncoder().encode(sourceRecords)
+            try manifestData.write(to: staging.appendingPathComponent("sources-manifest.json"), options: .atomic)
             let fingerprint = try fingerprint(of: staging)
             try fingerprint.write(to: staging.appendingPathComponent("fingerprint.txt"), atomically: true, encoding: .utf8)
             try url.absoluteString.write(to: staging.appendingPathComponent("source-url.txt"), atomically: true, encoding: .utf8)
@@ -83,6 +120,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
     func installInitial(_ snapshot: WebsiteSnapshot, appID: String) throws {
         let live = SourceCache.shared.baseURL(appID: appID)
         try replaceLiveContents(from: snapshot.stagingURL, live: live)
+        try persistManifest(from: snapshot.stagingURL, appID: appID)
         try? fileManager.removeItem(at: snapshot.stagingURL)
     }
 
@@ -115,12 +153,32 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         let pending = pendingURL(appID: appID)
         let live = SourceCache.shared.baseURL(appID: appID)
         try replaceLiveContents(from: pending, live: live)
+        try persistManifest(from: pending, appID: appID)
         try? fileManager.removeItem(at: pending)
         return metadata
     }
 
     func remove(appID: String) {
         try? fileManager.removeItem(at: pendingURL(appID: appID))
+        try? fileManager.removeItem(at: manifestRoot.appendingPathComponent(appID + ".json"))
+        UserDefaults.standard.removeObject(forKey: disabledSourcesKeyPrefix + appID)
+    }
+
+    private func disabledSources(appID: String) -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: disabledSourcesKeyPrefix + appID) ?? [])
+    }
+
+    private func canonicalString(_ value: String) -> String {
+        guard let url = URL(string: value) else { return value }
+        return canonicalKey(url)
+    }
+
+    private func persistManifest(from staged: URL, appID: String) throws {
+        let source = staged.appendingPathComponent("sources-manifest.json")
+        let destination = manifestRoot.appendingPathComponent(appID + ".json")
+        guard fileManager.fileExists(atPath: source.path) else { return }
+        try? fileManager.removeItem(at: destination)
+        try fileManager.copyItem(at: source, to: destination)
     }
 
     private func pendingURL(appID: String) -> URL {
@@ -131,7 +189,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         try? fileManager.removeItem(at: live)
         try fileManager.createDirectory(at: live, withIntermediateDirectories: true)
         let names = try fileManager.contentsOfDirectory(atPath: staged.path)
-        for name in names where !["snapshot.html", "fingerprint.txt", "source-url.txt"].contains(name) {
+        for name in names where !["snapshot.html", "fingerprint.txt", "source-url.txt", "sources-manifest.json"].contains(name) {
             try fileManager.copyItem(at: staged.appendingPathComponent(name), to: live.appendingPathComponent(name))
         }
     }
@@ -143,11 +201,14 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         var totalBytes = 0
         var mapping: [String: String] = [:]
         var inProgress = Set<String>()
+        var discovered = Set<String>()
+        let disabledURLs: Set<String>
 
-        init(root: URL, maximumResources: Int, maximumBytes: Int) {
+        init(root: URL, maximumResources: Int, maximumBytes: Int, disabledURLs: Set<String>) {
             self.root = root
             self.maximumResources = maximumResources
             self.maximumBytes = maximumBytes
+            self.disabledURLs = disabledURLs
         }
     }
 
@@ -200,6 +261,8 @@ final class WebsiteArchiveManager: @unchecked Sendable {
 
     private func downloadResource(_ url: URL, context: CrawlContext) async throws -> String? {
         let key = canonicalKey(url)
+        context.discovered.insert(key)
+        if context.disabledURLs.contains(key) { return nil }
         if let existing = context.mapping[key] { return existing }
         guard context.mapping.count < context.maximumResources,
               context.totalBytes < context.maximumBytes else { return nil }
@@ -426,7 +489,7 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         let enumerator = fileManager.enumerator(at: folder, includingPropertiesForKeys: nil)
         var files: [URL] = []
         while let file = enumerator?.nextObject() as? URL {
-            guard file.lastPathComponent != "fingerprint.txt" else { continue }
+            guard !["fingerprint.txt", "sources-manifest.json"].contains(file.lastPathComponent) else { continue }
             var isDirectory: ObjCBool = false
             if fileManager.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue {
                 files.append(file)
