@@ -233,6 +233,14 @@ final class AppStore: ObservableObject {
         notice = "All saved icons were rebuilt."
     }
 
+    func setGeneratedIcon(_ data: Data, for app: SavedHTMLApp) {
+        guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
+        apps[index].favicon = data
+        apps[index].updatedAt = Date()
+        save()
+        notice = "Updated icon for \(apps[index].name)."
+    }
+
     func launch(_ app: SavedHTMLApp) {
         guard var index = apps.firstIndex(where: { $0.id == app.id }) else { return }
 
