@@ -34,6 +34,7 @@ struct LibraryView: View {
     @State private var showAddOptions = false
     @State private var showGenerator = false
     @State private var aiEditorApp: SavedHTMLApp?
+    @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
     @State private var showWebsiteImporter = false
     @State private var showReceiver = false
@@ -85,6 +86,9 @@ struct LibraryView: View {
         }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
+        }
+        .sheet(item: $aiIconApp) { app in
+            AIIconGenerationView(app: app).environmentObject(store)
         }
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
@@ -384,6 +388,7 @@ struct LibraryView: View {
         Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: { Label("Move To", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
+        Button { aiIconApp = app } label: { Label("Generate Icon with AI", systemImage: "app.badge") }
         Button { edit(app) } label: {
             Label(app.websiteSourceURL == nil ? "Edit HTML Code" : "Edit Website URL", systemImage: app.websiteSourceURL == nil ? "pencil" : "link")
         }
