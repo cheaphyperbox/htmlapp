@@ -429,12 +429,15 @@ enum AIProviderClient {
                         }
                     }
                     await activity.markFinished()
-                    await MainActor.run { AIDebugTraceStore.shared.append("AI STREAM RESPONSE", rawResponse) }
+                    let completedResponse = rawResponse
+                    await MainActor.run { AIDebugTraceStore.shared.append("AI STREAM RESPONSE", completedResponse) }
                     continuation.finish()
                 } catch {
                     await activity.markFinished()
+                    let partialResponse = rawResponse
+                    let errorText = error.localizedDescription
                     await MainActor.run {
-                        AIDebugTraceStore.shared.append("AI STREAM ERROR", error.localizedDescription + "\nPartial response:\n" + rawResponse)
+                        AIDebugTraceStore.shared.append("AI STREAM ERROR", errorText + "\nPartial response:\n" + partialResponse)
                     }
                     continuation.finish(throwing: error)
                 }
@@ -485,7 +488,8 @@ enum AIProviderClient {
         for (role, content) in messages {
             value += "\n\n[\(role.uppercased())]\n\(content)"
         }
-        await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST", value) }
+        let requestTrace = value
+        await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST", requestTrace) }
     }
 
     private static func requestBody(config: AIProviderConfiguration, system: String, messages: [(String, String)], stream: Bool) -> [String: Any] {
