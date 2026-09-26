@@ -366,13 +366,10 @@ struct HTMLWebView: UIViewRepresentable {
         }
 
         private static func temporaryDownloadURL(filename: String) -> URL {
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("HTMLAppDownloads", isDirectory: true)
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("HTMLAppDownloads", isDirectory: true)
+            let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let stem = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
-            let ext = URL(fileURLWithPath: filename).pathExtension
-            let unique = UUID().uuidString.prefix(8)
-            let finalName = ext.isEmpty ? "\(stem)-\(unique)" : "\(stem)-\(unique).\(ext)"
-            return folder.appendingPathComponent(finalName)
+            return folder.appendingPathComponent(filename)
         }
 
         private static func safeFilename(_ raw: String, mimeType: String?) -> String {
@@ -640,6 +637,7 @@ enum DownloadBridgeScript {
       const filenameFor = (url, preferred) => {
         const explicit = String(preferred || '').trim();
         if (explicit) return explicit;
+        if (String(url).startsWith('blob:') || String(url).startsWith('data:')) return 'download';
         try {
           const parsed = new URL(url, document.baseURI);
           const last = decodeURIComponent(parsed.pathname.split('/').pop() || '');
