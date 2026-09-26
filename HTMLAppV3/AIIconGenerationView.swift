@@ -54,7 +54,7 @@ struct AIIconGenerationView: View {
                 } header: {
                     Text("Optional Direction")
                 } footer: {
-                    Text("The AI receives this app's HTML design and content context so the icon can match the app even when this field is empty.")
+                    Text("Optional. HTMLApp now infers the app's purpose, visual identity, palette, and icon concept automatically when this field is empty.")
                 }
 
                 Section {
@@ -159,10 +159,15 @@ Generate a new icon for the existing HTMLApp named \(app.name).
                     }
 
                     if let image = await AIIconRenderer.render(script: candidate) {
+                        if let qualityIssue = AIHTMLAgent.iconQualityIssue(candidate) {
+                            repairReason = qualityIssue
+                            AIDebugTraceStore.shared.append("ICON QUALITY", "Attempt \(attempt + 1) rendered, but was rejected: \(qualityIssue)")
+                            continue
+                        }
                         script = candidate
                         rendered = image
                         status = "Icon ready"
-                        AIDebugTraceStore.shared.append("ICON RENDER", "Rendered locally on attempt \(attempt + 1).")
+                        AIDebugTraceStore.shared.append("ICON RENDER", "Rendered and passed icon-quality checks on attempt \(attempt + 1).")
                         working = false
                         return
                     }
