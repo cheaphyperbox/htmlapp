@@ -280,13 +280,19 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         for attempt in 0..<3 {
             if !candidate.isEmpty {
                 if let rendered = await AIIconRenderer.render(script: candidate) {
-                    iconScript = candidate
-                    renderedIconData = rendered
-                    AIDebugTraceStore.shared.append("ICON RENDER", "Rendered locally on attempt \(attempt + 1).")
-                    return
+                    if let qualityIssue = AIHTMLAgent.iconQualityIssue(candidate) {
+                        repairReason = qualityIssue
+                        AIDebugTraceStore.shared.append("ICON QUALITY", "Attempt \(attempt + 1) rendered, but was rejected: \(qualityIssue)")
+                    } else {
+                        iconScript = candidate
+                        renderedIconData = rendered
+                        AIDebugTraceStore.shared.append("ICON RENDER", "Rendered and passed icon-quality checks on attempt \(attempt + 1).")
+                        return
+                    }
+                } else {
+                    repairReason = "The previous icon script did not render successfully in HTMLApp. Repair or replace it using only the supported icon commands."
+                    AIDebugTraceStore.shared.append("ICON RENDER", "Local render failed on attempt \(attempt + 1). Asking the AI to repair the script.")
                 }
-                repairReason = "The previous icon script did not render successfully in HTMLApp. Repair or replace it using only the supported icon commands."
-                AIDebugTraceStore.shared.append("ICON RENDER", "Local render failed on attempt \(attempt + 1). Asking the AI to repair the script.")
             }
 
             phase = candidate.isEmpty ? "Generating app icon" : "Repairing app icon"
@@ -700,67 +706,67 @@ RESEARCH RESULTS:
         config: AIProviderConfiguration
     ) async throws -> String {
         let system = """
-Create a valid HTMLApp icon drawing script for the supplied app. The icon is mandatory and must visually match the app's purpose and visual language. Return only <icon_script>...</icon_script>. Keep the script compact. Use only these commands: SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE, FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown, SVG, HTML, or explanatory text.
-"""
-        let context = iconHTMLContext(html)
-        let user = """
-USER'S ORIGINAL PROMPT:
-\(originalPrompt)
+You are HTMLApp's specialist app-icon art director and vector illustrator. The user often gives NO icon-specific direction, so you must infer a strong concept from the app identity brief rather than waiting for extra details.
 
-APP HTML CONTEXT:
+Return only <icon_script>...</icon_script> and nothing else.
+
+DESIGN STANDARD:
+- SIZE must be 1024 1024 and the icon should have an opaque full-canvas BG.
+- Invent one memorable, app-specific visual metaphor. Do not fall back to a generic circle + triangle + dot composition.
+- Match the app's purpose, vocabulary, and UI palette. If the app is an engine/editor/game tool, depict that idea; if it is weather, depict weather; if it is a calculator, depict calculation, etc.
+- Make the silhouette readable at 64px. Keep the important artwork roughly inside a 120px safe margin.
+- Use depth through layering, overlap, negative space, and at most a few restrained gradients.
+- Prefer 10-32 visible shape commands, with one dominant symbol and several supporting details. Avoid microscopic detail.
+- No text, letters, numbers, logos copied from third parties, emoji, SVG, HTML, prose, or comments.
+- Do not merely restyle the previous script when the repair note says the concept is weak; replace it with a better concept.
+
+SUPPORTED COMMANDS ONLY:
+SIZE width height
+BG color
+RECT x y width height color
+CIRCLE center_x center_y radius color
+LINE x1 y1 x2 y2 thickness color
+TRIANGLE x1 y1 x2 y2 x3 y3 color
+FILL_LINEAR color1 color2
+FILL_RADIAL color1 color2
+FILL_TEXTURE color1 color2
+
+A FILL_* command modifies only the immediately following shape. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown fences, SVG, or explanatory text.
+"""
+        let context = iconDesignBrief(html: html, originalPrompt: originalPrompt)
+        let user = """
+APP IDENTITY BRIEF:
 \(context)
 
-PREVIOUS ICON SCRIPT, IF ANY:
-\(previousScript.isEmpty ? "None. Generate a new icon." : previousScript)
+PREVIOUS ICON SCRIPT:
+\(previousScript.isEmpty ? "None — create a fresh, purpose-built concept." : previousScript)
 
-REPAIR NOTE, IF ANY:
-\(repairReason ?? "None.")
+REPAIR / QUALITY NOTE:
+\(repairReason ?? "None. Produce a polished icon without asking the user for more icon details.")
 """
         await MainActor.run {
-            if context.count < html.count {
-                AIDebugTraceStore.shared.append("ICON CONTEXT", "Compacted HTML from \(html.count) to \(context.count) characters before the dedicated icon request.")
-            }
-        }
-
-        var streamedResponse = ""
-        do {
-            let stream = try await AIProviderClient.stream(
-                config: config,
-                system: system,
-                messages: [("user", user)],
-                maxTokens: 900
-            )
-            for try await piece in stream { streamedResponse += piece }
-            let parsed = iconScriptFromProviderResponse(streamedResponse)
-            if !parsed.isEmpty { return parsed }
-            await MainActor.run {
-                AIDebugTraceStore.shared.append("ICON STREAM FALLBACK", "The stream ended without a usable icon script. Retrying without streaming.")
-            }
-        } catch {
-            await MainActor.run {
-                AIDebugTraceStore.shared.append("ICON STREAM FALLBACK", error.localizedDescription)
-            }
+            AIDebugTraceStore.shared.append("ICON CONTEXT", context)
         }
 
         var lastError: Error?
-        for retry in 1...2 {
+        for retry in 1...3 {
             do {
                 let response = try await AIProviderClient.complete(
                     config: config,
                     system: system,
                     messages: [("user", user)],
-                    timeout: 30,
-                    maxTokens: 900
+                    timeout: 45,
+                    maxTokens: 1600
                 )
                 let parsed = iconScriptFromProviderResponse(response)
                 if !parsed.isEmpty { return parsed }
                 await MainActor.run {
-                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Non-streaming attempt \(retry) returned no usable icon script.")
+                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Attempt \(retry) returned no usable icon script.")
                 }
             } catch {
                 lastError = error
                 await MainActor.run {
-                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Non-streaming attempt \(retry) failed: \(error.localizedDescription)")
+                    AIDebugTraceStore.shared.append("ICON COMPLETE RETRY", "Attempt \(retry) failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -782,68 +788,152 @@ REPAIR NOTE, IF ANY:
         return bare
     }
 
+    static func iconQualityIssue(_ script: String) -> String? {
+        let lines = script
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let commands = lines.compactMap { $0.split(whereSeparator: \.isWhitespace).first?.uppercased() }
+        let shapeCommands = commands.filter { ["RECT", "CIRCLE", "LINE", "TRIANGLE"].contains($0) }
+        let shapeKinds = Set(shapeCommands)
+        guard commands.contains("SIZE"), commands.contains("BG") else {
+            return "The icon must include SIZE 1024 1024 and a full opaque BG."
+        }
+        guard shapeCommands.count >= 8 else {
+            return "The icon is too sparse and generic. Redesign it with a clear app-specific symbol and at least 8 visible shape commands."
+        }
+        guard shapeKinds.count >= 2 else {
+            return "The icon relies on only one primitive type. Add purposeful supporting geometry so the concept reads as designed rather than autogenerated."
+        }
+        if shapeCommands.count > 42 {
+            return "The icon is too detailed for app-icon scale. Simplify to a bold 10-32-shape composition."
+        }
+        return nil
+    }
+
     static func fallbackIconScript(html: String, originalPrompt: String) -> String {
         let palette = fallbackIconPalette(html)
         let background = palette.0, accent = palette.1, light = palette.2
-        let intent = (originalPrompt + " " + String(html.prefix(2_000))).lowercased()
+        let intent = (originalPrompt + " " + String(html.prefix(8_000))).lowercased()
 
         if intent.contains("weather") || intent.contains("forecast") {
             return """
 SIZE 1024 1024
 BG \(background)
-CIRCLE 350 350 150 \(accent)
-CIRCLE 535 590 185 \(light)
-CIRCLE 700 585 145 \(light)
-RECT 360 585 480 170 \(light)
-LINE 350 120 350 190 30 \(accent)
-LINE 120 350 190 350 30 \(accent)
-LINE 510 190 560 140 30 \(accent)
+FILL_RADIAL \(accent) \(background)
+CIRCLE 330 320 205 \(accent)
+CIRCLE 330 320 125 \(light)
+LINE 330 82 330 145 30 \(light)
+LINE 110 320 174 320 30 \(light)
+LINE 486 164 532 118 28 \(light)
+CIRCLE 500 585 210 \(light)
+CIRCLE 690 590 160 \(light)
+CIRCLE 360 620 145 \(light)
+RECT 315 580 515 190 \(light)
+LINE 380 810 350 885 30 \(accent)
+LINE 540 810 510 885 30 \(accent)
+LINE 700 810 670 885 30 \(accent)
 """
         }
-        if intent.contains("game") || intent.contains("engine") || intent.contains("synapse") {
+        if intent.contains("game") || intent.contains("engine") || intent.contains("synapse") || intent.contains("canvas") {
             return """
 SIZE 1024 1024
 BG \(background)
-LINE 300 320 512 512 34 \(accent)
-LINE 724 320 512 512 34 \(accent)
-LINE 300 704 512 512 34 \(accent)
-LINE 724 704 512 512 34 \(accent)
-CIRCLE 512 512 128 \(accent)
-CIRCLE 300 320 74 \(light)
-CIRCLE 724 320 74 \(light)
-CIRCLE 300 704 74 \(light)
-CIRCLE 724 704 74 \(light)
-CIRCLE 512 512 48 \(light)
+FILL_RADIAL \(accent) \(background)
+CIRCLE 512 512 330 \(accent)
+CIRCLE 512 512 246 \(background)
+LINE 300 330 512 512 38 \(accent)
+LINE 724 330 512 512 38 \(accent)
+LINE 300 694 512 512 38 \(accent)
+LINE 724 694 512 512 38 \(accent)
+CIRCLE 300 330 78 \(light)
+CIRCLE 724 330 78 \(light)
+CIRCLE 300 694 78 \(light)
+CIRCLE 724 694 78 \(light)
+FILL_RADIAL \(light) \(accent)
+CIRCLE 512 512 138 \(light)
+TRIANGLE 478 430 478 594 620 512 \(background)
+CIRCLE 512 512 42 \(accent)
 """
         }
         if intent.contains("music") || intent.contains("audio") || intent.contains("sound") {
             return """
 SIZE 1024 1024
 BG \(background)
-CIRCLE 390 690 120 \(accent)
-CIRCLE 700 620 120 \(accent)
-RECT 485 245 82 450 \(accent)
-RECT 565 245 300 82 \(accent)
-LINE 565 410 815 350 44 \(light)
+FILL_LINEAR \(accent) \(light)
+RECT 440 210 110 470 \(accent)
+RECT 540 210 300 105 \(accent)
+LINE 548 420 808 350 52 \(light)
+CIRCLE 365 705 132 \(accent)
+CIRCLE 715 650 132 \(accent)
+CIRCLE 365 705 62 \(background)
+CIRCLE 715 650 62 \(background)
+LINE 210 360 210 580 30 \(light)
+LINE 270 320 270 620 30 \(light)
+LINE 330 385 330 555 30 \(light)
+"""
+        }
+        if intent.contains("calculator") || intent.contains("math") {
+            return """
+SIZE 1024 1024
+BG \(background)
+RECT 238 150 548 724 \(light)
+RECT 290 210 444 150 \(background)
+CIRCLE 340 475 54 \(accent)
+CIRCLE 512 475 54 \(accent)
+CIRCLE 684 475 54 \(accent)
+CIRCLE 340 635 54 \(accent)
+CIRCLE 512 635 54 \(accent)
+CIRCLE 684 635 54 \(accent)
+LINE 316 785 364 737 30 \(background)
+LINE 316 737 364 785 30 \(background)
+LINE 488 760 536 760 30 \(background)
+LINE 684 724 684 796 30 \(background)
+LINE 648 760 720 760 30 \(background)
 """
         }
         if intent.contains("map") || intent.contains("location") || intent.contains("place") {
             return """
 SIZE 1024 1024
 BG \(background)
-CIRCLE 512 440 250 \(accent)
-TRIANGLE 330 560 694 560 512 860 \(accent)
-CIRCLE 512 440 105 \(background)
-CIRCLE 512 440 54 \(light)
+FILL_RADIAL \(accent) \(background)
+CIRCLE 512 420 260 \(accent)
+TRIANGLE 332 565 692 565 512 866 \(accent)
+CIRCLE 512 420 128 \(background)
+CIRCLE 512 420 66 \(light)
+LINE 240 760 400 700 26 \(light)
+LINE 624 720 800 650 26 \(light)
+LINE 250 825 430 760 26 \(light)
+LINE 610 790 790 720 26 \(light)
+"""
+        }
+        if intent.contains("note") || intent.contains("write") || intent.contains("editor") || intent.contains("code") {
+            return """
+SIZE 1024 1024
+BG \(background)
+RECT 220 150 584 724 \(light)
+TRIANGLE 680 150 804 274 680 274 \(accent)
+LINE 320 390 430 500 34 \(accent)
+LINE 430 500 320 610 34 \(accent)
+LINE 704 390 594 500 34 \(accent)
+LINE 594 500 704 610 34 \(accent)
+LINE 485 650 555 350 32 \(background)
+LINE 315 735 710 735 22 \(background)
 """
         }
         return """
 SIZE 1024 1024
 BG \(background)
-CIRCLE 512 512 300 \(accent)
-CIRCLE 512 512 190 \(background)
-TRIANGLE 512 270 735 650 289 650 \(light)
-CIRCLE 512 512 74 \(accent)
+FILL_RADIAL \(accent) \(background)
+CIRCLE 512 512 330 \(accent)
+CIRCLE 512 512 235 \(background)
+TRIANGLE 512 275 742 665 282 665 \(light)
+CIRCLE 512 512 105 \(accent)
+LINE 512 185 512 255 28 \(light)
+LINE 215 512 285 512 28 \(light)
+LINE 739 512 809 512 28 \(light)
+LINE 305 305 355 355 28 \(light)
+LINE 669 669 719 719 28 \(light)
 """
     }
 
@@ -859,22 +949,71 @@ CIRCLE 512 512 74 \(accent)
             if !colors.contains(where: { $0.caseInsensitiveCompare(color) == .orderedSame }) {
                 colors.append(color)
             }
-            if colors.count == 6 { break }
+            if colors.count == 8 { break }
         }
         return (colors.first ?? "#111827", colors.dropFirst().first ?? "#7C3AED", colors.dropFirst(2).first ?? "#F8FAFC")
     }
 
-    private static func iconHTMLContext(_ html: String) -> String {
-        var compact = html.replacingOccurrences(
-            of: #"data:[^;\s"']+;base64,[A-Za-z0-9+/=\r\n]+"#,
-            with: "data:embedded-asset-omitted",
-            options: .regularExpression
-        )
-        compact = compact.replacingOccurrences(of: #"<!--(?s:.*?)-->"#, with: " ", options: .regularExpression)
-        compact = compact.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
-        let limit = 12_000
-        guard compact.count > limit else { return compact }
-        return String(compact.prefix(8_500)) + "\n<!-- middle omitted only for icon-design context -->\n" + String(compact.suffix(2_500))
+    private static func iconDesignBrief(html: String, originalPrompt: String) -> String {
+        func firstMatch(_ pattern: String, in source: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+                  let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: source) else { return nil }
+            return String(source[range])
+                .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let title = firstMatch(#"<title[^>]*>(.*?)</title>"#, in: html)
+        let description = firstMatch(#"<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']"#, in: html)
+            ?? firstMatch(#"<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']"#, in: html)
+
+        var stripped = html
+        stripped = stripped.replacingOccurrences(of: #"<style(?s:.*?)</style>"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        stripped = stripped.replacingOccurrences(of: #"<script(?s:.*?)</script>"#, with: " ", options: [.regularExpression, .caseInsensitive])
+        stripped = stripped.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+        stripped = stripped.replacingOccurrences(of: #"&[A-Za-z0-9#]+;"#, with: " ", options: .regularExpression)
+        stripped = stripped.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        let visible = String(stripped.prefix(1_800)).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let lower = html.lowercased()
+        let categories: [(String, [String])] = [
+            ("game / simulation engine", ["game", "canvas", "engine", "player", "level", "sprite"]),
+            ("weather", ["weather", "forecast", "temperature", "precipitation"]),
+            ("music / audio", ["audio", "music", "playlist", "waveform"]),
+            ("developer / code editor", ["code", "editor", "javascript", "console", "developer"]),
+            ("calculator / math", ["calculator", "equation", "math", "compute"]),
+            ("maps / location", ["map", "location", "latitude", "longitude"]),
+            ("notes / writing", ["note", "document", "textarea", "markdown"]),
+            ("media / photos", ["photo", "image", "gallery", "camera"])
+        ]
+        let ranked = categories.map { item in
+            (item.0, item.1.reduce(0) { $0 + (lower.components(separatedBy: $1).count - 1) })
+        }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
+        let categoryText = ranked.prefix(3).map { "\($0.0) (signal \($0.1))" }.joined(separator: ", ")
+
+        guard let colorRegex = try? NSRegularExpression(pattern: "#[0-9A-Fa-f]{6}") else {
+            return "Original request: \(originalPrompt)\nTitle: \(title ?? "Unknown")\nVisible app text: \(visible)"
+        }
+        var colors: [String] = []
+        for match in colorRegex.matches(in: html, range: NSRange(html.startIndex..., in: html)) {
+            guard let range = Range(match.range, in: html) else { continue }
+            let color = String(html[range]).uppercased()
+            if !colors.contains(color) { colors.append(color) }
+            if colors.count == 8 { break }
+        }
+
+        return """
+Original request: \(originalPrompt)
+HTML title: \(title ?? "Not found")
+Meta description: \(description ?? "Not found")
+Likely product category: \(categoryText.isEmpty ? "Infer from the title and visible labels." : categoryText)
+UI palette candidates: \(colors.isEmpty ? "No reliable hex palette found; choose a restrained purpose-appropriate palette." : colors.joined(separator: ", "))
+Visible labels/content excerpt: \(visible.isEmpty ? "No useful visible text extracted; infer from title and code-category signals." : visible)
+Icon direction: infer the most distinctive product metaphor yourself. Do not require the user to provide icon details.
+"""
     }
 
     static func reviewArtifact(
