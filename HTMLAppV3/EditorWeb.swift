@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import UIKit
+import UniformTypeIdentifiers
 
 enum EditorMode: Identifiable {
     case new
@@ -106,11 +107,17 @@ struct HTMLWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
+        controller.addUserScript(WKUserScript(
+            source: DownloadBridgeScript.source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
         controller.add(context.coordinator, name: "htmlappLocation")
         controller.add(context.coordinator, name: "htmlappNotificationPermission")
         controller.add(context.coordinator, name: "htmlappNotification")
         controller.add(context.coordinator, name: "htmlappHaptic")
         controller.add(context.coordinator, name: "htmlappSensorPermission")
+        controller.add(context.coordinator, name: "htmlappDownload")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         context.coordinator.attach(webView, initialHTML: html)
@@ -135,15 +142,23 @@ struct HTMLWebView: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "htmlappNotification")
         controller.removeScriptMessageHandler(forName: "htmlappHaptic")
         controller.removeScriptMessageHandler(forName: "htmlappSensorPermission")
+        controller.removeScriptMessageHandler(forName: "htmlappDownload")
         uiView.stopLoading()
     }
 
-    final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
+        private struct BlobTransfer {
+            let url: URL
+            let handle: FileHandle
+        }
+
         let appID: String
         var lastHTML = ""
         private weak var webView: WKWebView?
         private var nativePermissions: NativePermissionCoordinator?
         private var locationPermissions: HTMLLocationBridge?
+        private var downloadDestinations: [ObjectIdentifier: URL] = [:]
+        private var blobTransfers: [String: BlobTransfer] = [:]
 
         init(appID: String) { self.appID = appID }
 
@@ -198,9 +213,183 @@ struct HTMLWebView: UIViewRepresentable {
                 guard let callbackID = body["id"] as? String else { return }
                 requestSensorPermission(callbackID: callbackID)
 
+            case "htmlappDownload":
+                handleDownloadMessage(body)
+
             default:
                 break
             }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if navigationAction.shouldPerformDownload {
+                decisionHandler(.download)
+                return
+            }
+
+            if let url = navigationAction.request.url,
+               url.scheme?.lowercased() == "blob" {
+                if let jsonData = try? JSONSerialization.data(withJSONObject: url.absoluteString),
+                   let jsonURL = String(data: jsonData, encoding: .utf8) {
+                    webView.evaluateJavaScript("window.__htmlappDownloadURL && window.__htmlappDownloadURL(\(jsonURL));")
+                }
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            let disposition = (navigationResponse.response as? HTTPURLResponse)?
+                .value(forHTTPHeaderField: "Content-Disposition")?
+                .lowercased() ?? ""
+            if !navigationResponse.canShowMIMEType || disposition.contains("attachment") {
+                decisionHandler(.download)
+            } else {
+                decisionHandler(.allow)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationAction: WKNavigationAction,
+            didBecome download: WKDownload
+        ) {
+            download.delegate = self
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationResponse: WKNavigationResponse,
+            didBecome download: WKDownload
+        ) {
+            download.delegate = self
+        }
+
+        func download(
+            _ download: WKDownload,
+            decideDestinationUsing response: URLResponse,
+            suggestedFilename: String,
+            completionHandler: @escaping (URL?) -> Void
+        ) {
+            let filename = Self.safeFilename(
+                suggestedFilename,
+                mimeType: response.mimeType
+            )
+            let url = Self.temporaryDownloadURL(filename: filename)
+            try? FileManager.default.removeItem(at: url)
+            downloadDestinations[ObjectIdentifier(download)] = url
+            completionHandler(url)
+        }
+
+        func downloadDidFinish(_ download: WKDownload) {
+            guard let url = downloadDestinations.removeValue(forKey: ObjectIdentifier(download)) else { return }
+            presentShareSheet(for: url)
+        }
+
+        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+            if let url = downloadDestinations.removeValue(forKey: ObjectIdentifier(download)) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        private func handleDownloadMessage(_ body: [String: Any]) {
+            guard let action = body["action"] as? String,
+                  let id = body["id"] as? String else { return }
+
+            switch action {
+            case "start":
+                let rawName = body["filename"] as? String ?? "download"
+                let mimeType = body["mimeType"] as? String
+                let filename = Self.safeFilename(rawName, mimeType: mimeType)
+                let url = Self.temporaryDownloadURL(filename: filename)
+                try? FileManager.default.removeItem(at: url)
+                FileManager.default.createFile(atPath: url.path, contents: nil)
+                guard let handle = try? FileHandle(forWritingTo: url) else { return }
+                blobTransfers[id] = BlobTransfer(url: url, handle: handle)
+
+            case "chunk":
+                guard let encoded = body["base64"] as? String,
+                      let data = Data(base64Encoded: encoded),
+                      let transfer = blobTransfers[id] else { return }
+                do {
+                    try transfer.handle.write(contentsOf: data)
+                } catch {
+                    try? transfer.handle.close()
+                    try? FileManager.default.removeItem(at: transfer.url)
+                    blobTransfers.removeValue(forKey: id)
+                }
+
+            case "finish":
+                guard let transfer = blobTransfers.removeValue(forKey: id) else { return }
+                try? transfer.handle.close()
+                presentShareSheet(for: transfer.url)
+
+            case "cancel":
+                guard let transfer = blobTransfers.removeValue(forKey: id) else { return }
+                try? transfer.handle.close()
+                try? FileManager.default.removeItem(at: transfer.url)
+
+            default:
+                break
+            }
+        }
+
+        private func presentShareSheet(for url: URL) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let presenter = self.topViewController() else { return }
+                let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                if let popover = sheet.popoverPresentationController {
+                    popover.sourceView = presenter.view
+                    popover.sourceRect = CGRect(
+                        x: presenter.view.bounds.midX,
+                        y: presenter.view.bounds.midY,
+                        width: 1,
+                        height: 1
+                    )
+                    popover.permittedArrowDirections = []
+                }
+                sheet.completionWithItemsHandler = { _, _, _, _ in
+                    try? FileManager.default.removeItem(at: url)
+                }
+                presenter.present(sheet, animated: true)
+            }
+        }
+
+        private static func temporaryDownloadURL(filename: String) -> URL {
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("HTMLAppDownloads", isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let stem = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
+            let ext = URL(fileURLWithPath: filename).pathExtension
+            let unique = UUID().uuidString.prefix(8)
+            let finalName = ext.isEmpty ? "\(stem)-\(unique)" : "\(stem)-\(unique).\(ext)"
+            return folder.appendingPathComponent(finalName)
+        }
+
+        private static func safeFilename(_ raw: String, mimeType: String?) -> String {
+            let forbidden = CharacterSet(charactersIn: "/\\:?%*|\"<>\n\r\t")
+            let cleaned = raw
+                .components(separatedBy: forbidden)
+                .joined(separator: "_")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            var filename = cleaned.isEmpty ? "download" : cleaned
+            if URL(fileURLWithPath: filename).pathExtension.isEmpty,
+               let mimeType,
+               let ext = UTType(mimeType: mimeType)?.preferredFilenameExtension,
+               !ext.isEmpty {
+                filename += ".\(ext)"
+            }
+            return String(filename.prefix(180))
         }
 
         private func requestSensorPermission(callbackID: String) {
@@ -437,4 +626,77 @@ enum PermissionBridgeScript {
         })();
         """#.replacingOccurrences(of: "__SENSOR_POLICY__", with: sensorPolicy)
     }
+}
+
+enum DownloadBridgeScript {
+    static let source = #"""
+    (() => {
+      if (window.__htmlappDownloadBridgeInstalled) return;
+      window.__htmlappDownloadBridgeInstalled = true;
+
+      let sequence = 0;
+      const handler = () => window.webkit?.messageHandlers?.htmlappDownload;
+
+      const filenameFor = (url, preferred) => {
+        const explicit = String(preferred || '').trim();
+        if (explicit) return explicit;
+        try {
+          const parsed = new URL(url, document.baseURI);
+          const last = decodeURIComponent(parsed.pathname.split('/').pop() || '');
+          return last || 'download';
+        } catch (_) {
+          return 'download';
+        }
+      };
+
+      const sendBlob = async (url, preferredName) => {
+        const id = `blob-${Date.now()}-${++sequence}`;
+        try {
+          const response = await fetch(url);
+          if (!response.ok && response.type !== 'opaque') throw new Error('Download request failed');
+          const blob = await response.blob();
+          handler()?.postMessage({
+            action: 'start',
+            id,
+            filename: filenameFor(url, preferredName),
+            mimeType: blob.type || ''
+          });
+
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          const chunkSize = 196608;
+          const sliceSize = 32768;
+          for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+            const end = Math.min(bytes.length, offset + chunkSize);
+            let binary = '';
+            for (let cursor = offset; cursor < end; cursor += sliceSize) {
+              const slice = bytes.subarray(cursor, Math.min(end, cursor + sliceSize));
+              binary += String.fromCharCode.apply(null, slice);
+            }
+            handler()?.postMessage({ action: 'chunk', id, base64: btoa(binary) });
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          handler()?.postMessage({ action: 'finish', id });
+        } catch (_) {
+          handler()?.postMessage({ action: 'cancel', id });
+        }
+      };
+
+      window.__htmlappDownloadURL = (url, filename) => {
+        if (!url) return false;
+        sendBlob(String(url), filename);
+        return true;
+      };
+
+      document.addEventListener('click', (event) => {
+        const anchor = event.target?.closest?.('a');
+        if (!anchor) return;
+        const href = anchor.href || '';
+        const isLocalPayload = href.startsWith('blob:') || href.startsWith('data:');
+        if (!isLocalPayload) return;
+        event.preventDefault();
+        event.stopPropagation();
+        sendBlob(href, anchor.getAttribute('download'));
+      }, true);
+    })();
+    """#
 }
