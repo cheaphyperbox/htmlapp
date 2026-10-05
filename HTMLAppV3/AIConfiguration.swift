@@ -49,7 +49,11 @@ enum AISettingsStore {
 
     static let nativeAPIReference = """
 HTMLAPP NATIVE API REFERENCE (always available in saved apps):
-window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop. Sensitive methods can reject for cancellation or permission denial. Use only these documented method names; do not invent native bridges.
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop.
+
+The generation pipeline can also inject HTMLAPP DEVICE API CATALOG RESULTS. Those results are the authoritative searchable reference for exact method names, usage examples, return-shape notes, permission expectations, and limitations. Prefer them over remembered assumptions about iOS or Safari. If the catalog says a capability is unavailable, do not invent a bridge for it.
+
+Sensitive methods can reject for cancellation or permission denial. Use only documented methods and feature-detected browser APIs.
 """
 
     static let defaultSystemPrompt = """
@@ -98,7 +102,8 @@ Before writing code:
 - Separate what must be real from what can be local.
 - Use the minimum screen/navigation structure needed for a complete product.
 - Research current external APIs and unfamiliar capabilities when they materially affect correctness.
-- Prefer documented primary sources.
+- For any device/system/hardware feature, consult the supplied HTMLAPP DEVICE API CATALOG RESULTS before implementation and use the strongest verified built-in capability before adding an external dependency.
+- Prefer documented primary sources for web services and the built-in device catalog for HTMLApp-native capabilities.
 - Verify endpoint URL, method, parameters, response fields, auth, client-side feasibility, CORS, limits, and error behavior before relying on a remote service.
 - Do not add major features merely to look impressive.
 - If the user asks for a simple app, make it exceptionally good at the simple job.
@@ -106,6 +111,19 @@ Before writing code:
 
 HTMLAPP RUNTIME CONTRACT
 HTMLApp is not ordinary Safari. It is a WKWebView-based app with native bridges plus standard browser APIs. Use the strongest capability that is actually available, but never invent a native bridge or assume an optional Web API exists.
+
+CAPABILITY DISCOVERY
+The research section may contain two distinct evidence sources:
+- HTMLAPP DEVICE API CATALOG RESULTS — generated from HTMLApp's own built-in capability catalog. These are authoritative for generated HTMLApps and can include exact APIs, examples, return-shape notes, permission requirements, and explicit unsupported-capability warnings.
+- Public/web API research — evidence about external services, endpoints, schemas, authentication, CORS, and service limitations.
+
+For every requested device or system integration:
+1. Use a matching device-catalog result when available.
+2. Prefer a guaranteed HTMLAppNative wrapper or first-class bridged browser API over an external service when it solves the task locally.
+3. Follow the catalog's exact method name and constraints; adapt the example to the product rather than inventing adjacent methods.
+4. If the catalog marks the capability unavailable, do not infer availability merely because native iOS supports it.
+5. Feature-detect optional WebKit APIs and provide a truthful fallback.
+6. Ask for sensitive permissions only from a meaningful user action and only when the feature is actually being used.
 
 HTMLAPP NATIVE WRAPPER — window.HTMLAppNative
 HTMLApp injects a promise-based native API wrapper into saved apps. Use these exact methods when the requested feature benefits from iOS-native behavior. Every method returns a Promise and rejects with an Error carrying error.code when the user cancels, permission is denied, or the operation fails.
@@ -297,8 +315,8 @@ Never fabricate current or retrieved information: weather, prices, scores, peopl
 
 If the UI presents something as live/current/nearby/personalized/retrieved:
 1. Obtain it from a legitimate source.
-2. Use supplied research first when it is authoritative.
-3. If current API details are uncertain and research tools are available, research before implementation.
+2. Use supplied device-catalog and public-web research first when they are authoritative.
+3. If current external API details are uncertain and research tools are available, research before implementation; if a device capability is uncertain, rely on the internal device catalog rather than guessing.
 4. Prefer official/documented unauthenticated APIs, then browser-safe free tiers.
 5. Use OAuth/PKCE only when account access is genuinely necessary.
 6. If no legitimate source exists, use user-entered/local data or a clearly labeled demo only when demo data was requested.
@@ -416,6 +434,7 @@ Before returning the four sections, verify:
 - the app fulfills the user's request rather than a generic interpretation
 - every visible control works
 - all network/device operations are real or honestly limited
+- every device/system feature matches a documented device-catalog capability or is honestly marked unsupported
 - no unsupported bridge/API is invented
 - permission flows originate from meaningful user actions
 - loading/error/offline/permission states are handled
@@ -493,14 +512,14 @@ RESEARCH RESULTS
 
     static func resolvedSystemPrompt(research: String) -> String {
         let evidence = research.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "No external API research was needed or no suitable public API was found."
+            ? "No additional device-capability or public-API research was needed."
             : research
         let prompt = systemPrompt
         let resolved: String
         if prompt.contains(researchPlaceholder) {
             resolved = prompt.replacingOccurrences(of: researchPlaceholder, with: evidence)
         } else {
-            resolved = prompt + "\n\n**RESEARCH RESULTS:**\n\n" + evidence
+            resolved = prompt + "\n\nRESEARCH RESULTS\n" + evidence
         }
         if resolved.contains("window.HTMLAppNative") { return resolved }
         return resolved + "\n\n" + nativeAPIReference
