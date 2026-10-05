@@ -297,11 +297,11 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             "addresses": addresses
         ]
         if let birthday = contact.birthday {
-            result["birthday"] = [
-                "year": birthday.year as Any,
-                "month": birthday.month as Any,
-                "day": birthday.day as Any
-            ]
+            var value: [String: Int] = [:]
+            if let year = birthday.year { value["year"] = year }
+            if let month = birthday.month { value["month"] = month }
+            if let day = birthday.day { value["day"] = day }
+            if !value.isEmpty { result["birthday"] = value }
         }
         return result
     }
@@ -437,10 +437,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 self.reject(id, code: "invalid_arguments", message: "Reminder requires a title.")
                 return
             }
+            guard let calendar = self.eventStore.defaultCalendarForNewReminders() else {
+                self.reject(id, code: "reminder_failed", message: "No writable reminders list is available.")
+                return
+            }
             let reminder = EKReminder(eventStore: self.eventStore)
             reminder.title = title
             reminder.notes = args["notes"] as? String
-            reminder.calendar = self.eventStore.defaultCalendarForNewReminders()
+            reminder.calendar = calendar
             if let due = self.date(from: args["due"]) {
                 reminder.dueDateComponents = Calendar.current.dateComponents(in: TimeZone.current, from: due)
             }
@@ -517,12 +521,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func biometryName(_ type: LABiometryType) -> String {
+        if #available(iOS 17.0, *), type == .opticID { return "opticID" }
         switch type {
         case .faceID: return "faceID"
         case .touchID: return "touchID"
-        case .opticID:
-            if #available(iOS 17.0, *) { return "opticID" }
-            return "unknown"
         default: return "none"
         }
     }
