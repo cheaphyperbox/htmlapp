@@ -1,0 +1,480 @@
+import Foundation
+
+struct HTMLAppDeviceAPICatalogEntry {
+    let id: String
+    let title: String
+    let keywords: [String]
+    let purpose: String
+    let api: String
+    let example: String
+    let constraints: String
+
+    var searchableText: String {
+        ([id, title, purpose, api, constraints] + keywords).joined(separator: " ").lowercased()
+    }
+
+    var renderedReference: String {
+        """
+        [\(title)]
+        API: \(api)
+        Use when: \(purpose)
+        Example:
+        \(example)
+        Constraints: \(constraints)
+        """
+    }
+}
+
+enum HTMLAppDeviceAPIResearch {
+    private static let stopWords: Set<String> = [
+        "the", "and", "for", "with", "from", "into", "that", "this", "htmlapp",
+        "app", "ios", "iphone", "ipad", "native", "device", "user", "users", "need",
+        "needs", "make", "build", "create", "use", "using", "access", "support"
+    ]
+
+    static let entries: [HTMLAppDeviceAPICatalogEntry] = [
+        .init(
+            id: "device.info",
+            title: "Device and runtime information",
+            keywords: ["battery", "brightness", "thermal", "low power", "locale", "timezone", "screen", "model", "system version", "runtime"],
+            purpose: "Read non-secret runtime details for adaptive UI, diagnostics, battery-aware behavior, locale/time-zone defaults, and screen-aware tools.",
+            api: "await HTMLAppNative.device.info()",
+            example: """
+            const info = await HTMLAppNative.device.info();
+            console.log(info.systemVersion, info.batteryLevel, info.lowPowerMode);
+            """,
+            constraints: "Treat hardware details as hints, not identity or authentication signals."
+        ),
+        .init(
+            id: "device.keepAwake",
+            title: "Keep the screen awake",
+            keywords: ["idle timer", "screen awake", "prevent sleep", "presentation", "timer", "workout", "reader"],
+            purpose: "Prevent automatic screen sleep while the user is actively using a timer, presentation, scanner, game, or similar foreground experience.",
+            api: "await HTMLAppNative.device.keepAwake(true|false)",
+            example: """
+            await HTMLAppNative.device.keepAwake(true);
+            // Later, when the feature ends:
+            await HTMLAppNative.device.keepAwake(false);
+            """,
+            constraints: "Foreground-only behavior. Always restore false when the feature ends."
+        ),
+        .init(
+            id: "clipboard",
+            title: "Native clipboard text",
+            keywords: ["copy", "paste", "clipboard", "text"],
+            purpose: "Read or write text using the iOS clipboard when a user-facing copy/paste workflow needs native behavior.",
+            api: "HTMLAppNative.clipboard.readText(); HTMLAppNative.clipboard.writeText(text)",
+            example: """
+            await HTMLAppNative.clipboard.writeText("Copied from my HTMLApp");
+            const { text } = await HTMLAppNative.clipboard.readText();
+            """,
+            constraints: "Clipboard reads can still trigger iOS paste privacy behavior; keep reads user-initiated."
+        ),
+        .init(
+            id: "haptics",
+            title: "Haptics and vibration",
+            keywords: ["haptic", "vibrate", "feedback", "tap", "impact"],
+            purpose: "Add short tactile feedback to meaningful user actions.",
+            api: "await HTMLAppNative.haptics.play(pattern); navigator.vibrate(pattern)",
+            example: """
+            await HTMLAppNative.haptics.play([8]);
+            // Or the web-compatible bridge:
+            navigator.vibrate(8);
+            """,
+            constraints: "Use briefly and after deliberate interaction. Never make functionality depend on haptics."
+        ),
+        .init(
+            id: "share.present",
+            title: "Native iOS share sheet",
+            keywords: ["share", "airdrop", "messages", "send", "url", "text"],
+            purpose: "Share text or a URL through the native iOS activity sheet.",
+            api: "await HTMLAppNative.share.present({ text?, url? })",
+            example: """
+            const result = await HTMLAppNative.share.present({
+              text: "Take a look at this",
+              url: "https://example.org"
+            });
+            """,
+            constraints: "This wrapper shares text/URLs. For generated or downloaded files, use the download/export path so HTMLApp retrieves the file and opens the share sheet."
+        ),
+        .init(
+            id: "system.open",
+            title: "Open supported system URLs",
+            keywords: ["mailto", "tel", "sms", "browser", "open url", "handoff", "phone call", "email"],
+            purpose: "Hand a user-initiated URL to iOS for supported schemes such as https:, mailto:, tel:, or sms:.",
+            api: "await HTMLAppNative.system.open(url)",
+            example: """
+            await HTMLAppNative.system.open("mailto:hello@example.org");
+            """,
+            constraints: "iOS decides whether the URL can be opened. Never present the handoff as a silent/background action."
+        ),
+        .init(
+            id: "files.pick",
+            title: "Native Files picker",
+            keywords: ["file picker", "documents", "import file", "files app", "open document", "multiple files"],
+            purpose: "Let the user choose one or more documents from the iOS Files picker and import them into the HTMLApp.",
+            api: "await HTMLAppNative.files.pick({ multiple? })",
+            example: """
+            const files = await HTMLAppNative.files.pick({ multiple: true });
+            for (const file of files) {
+              const response = await fetch(file.url);
+              const bytes = await response.arrayBuffer();
+            }
+            """,
+            constraints: "Returns [{name,url,mimeType,size}]. The url is a local relative URL scoped to the current HTMLApp. Cancellation rejects normally."
+        ),
+        .init(
+            id: "downloads",
+            title: "Downloads, Blob exports, and native save/share",
+            keywords: ["download", "export", "blob", "save file", "pdf", "csv", "zip", "generated file", "share file"],
+            purpose: "Export generated, fetched, Blob, data-URL, or object-URL content using normal web download semantics; HTMLApp retrieves the completed file and opens the native share sheet.",
+            api: "Blob/File + URL.createObjectURL(...) + <a download>; ordinary downloadable URLs also work",
+            example: """
+            const blob = new Blob([csvText], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "export.csv";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            """,
+            constraints: "Use a meaningful filename and MIME type. Do not claim the file was saved before the native share/export flow is triggered."
+        ),
+        .init(
+            id: "contacts",
+            title: "Contacts picker, list, and create",
+            keywords: ["contact", "contacts", "address book", "phone number", "email address", "people"],
+            purpose: "Pick one contact, read authorized contacts when bulk access is core to the feature, or create a new real contact.",
+            api: "HTMLAppNative.contacts.pick(); contacts.list({limit?}); contacts.create({...})",
+            example: """
+            const person = await HTMLAppNative.contacts.pick();
+
+            const contacts = await HTMLAppNative.contacts.list({ limit: 200 });
+
+            await HTMLAppNative.contacts.create({
+              givenName: "Alex",
+              familyName: "Rivera",
+              phones: [{ label: "mobile", value: "+15551234567" }],
+              emails: [{ label: "home", value: "alex@example.org" }]
+            });
+            """,
+            constraints: "Prefer pick() for one-contact workflows. list() is sensitive and should be requested only after a clear user action. Handle permission denial and empty results."
+        ),
+        .init(
+            id: "photos",
+            title: "Photos picker and save to Photos",
+            keywords: ["photo", "photos", "image", "video", "gallery", "camera roll", "save image", "save video"],
+            purpose: "Let the user select photos/videos with the native picker or save a local imported/generated media file into Photos.",
+            api: "HTMLAppNative.photos.pick({limit?,media?}); HTMLAppNative.photos.save(localURL)",
+            example: """
+            const picked = await HTMLAppNative.photos.pick({ limit: 4, media: "images" });
+            const first = picked[0];
+            if (first) await HTMLAppNative.photos.save(first.url);
+            """,
+            constraints: "media is images, videos, or any. The picker is user-mediated; it does not expose unrestricted hidden library enumeration or deletion."
+        ),
+        .init(
+            id: "calendar",
+            title: "Calendar events",
+            keywords: ["calendar", "event", "appointment", "schedule", "meeting", "eventkit"],
+            purpose: "Create, query, update, or delete real iOS calendar events.",
+            api: "calendar.createEvent({...}); calendar.events({...}); calendar.updateEvent({...}); calendar.deleteEvent(id)",
+            example: """
+            const event = await HTMLAppNative.calendar.createEvent({
+              title: "Project review",
+              start: "2026-10-06T17:00:00Z",
+              end: "2026-10-06T17:30:00Z",
+              notes: "Created by this HTMLApp"
+            });
+
+            const events = await HTMLAppNative.calendar.events({
+              start: "2026-10-01T00:00:00Z",
+              end: "2026-11-01T00:00:00Z",
+              limit: 100
+            });
+
+            await HTMLAppNative.calendar.updateEvent({ id: event.id, title: "Updated review" });
+            await HTMLAppNative.calendar.deleteEvent(event.id);
+            """,
+            constraints: "Requires permission. Dates may be ISO-8601 strings or Unix timestamps. Handle deleted/missing items."
+        ),
+        .init(
+            id: "reminders",
+            title: "Reminders",
+            keywords: ["reminder", "todo", "task", "due date", "eventkit"],
+            purpose: "Create, list, update, or delete real iOS reminders.",
+            api: "reminders.create({...}); reminders.list({limit?}); reminders.update({...}); reminders.delete(id)",
+            example: """
+            const created = await HTMLAppNative.reminders.create({
+              title: "Submit report",
+              due: "2026-10-07T16:00:00Z"
+            });
+            const reminders = await HTMLAppNative.reminders.list({ limit: 100 });
+            await HTMLAppNative.reminders.update({ id: created.id, notes: "Bring attachments" });
+            """,
+            constraints: "Requires permission. Treat cancellation, denial, empty lists, and missing reminders as normal states."
+        ),
+        .init(
+            id: "notifications.schedule",
+            title: "Local notifications and scheduling",
+            keywords: ["notification", "notify", "alert later", "schedule notification", "timer alert", "local notification"],
+            purpose: "Schedule or cancel real local iOS notifications for this HTMLApp.",
+            api: "HTMLAppNative.notifications.schedule({...}); HTMLAppNative.notifications.cancel({id?})",
+            example: """
+            const n = await HTMLAppNative.notifications.schedule({
+              id: "tea-timer",
+              title: "Tea is ready",
+              body: "Your 4 minute timer finished.",
+              afterSeconds: 240
+            });
+            await HTMLAppNative.notifications.cancel({ id: n.id });
+            """,
+            constraints: "Local notifications only. This does not provide remote push or arbitrary background execution. Ask permission in context."
+        ),
+        .init(
+            id: "biometrics.authenticate",
+            title: "Face ID, Touch ID, or device authentication",
+            keywords: ["face id", "touch id", "biometric", "authentication", "unlock", "local authentication"],
+            purpose: "Gate a sensitive local action behind iOS device-owner authentication.",
+            api: "await HTMLAppNative.biometrics.authenticate({reason?,biometricsOnly?})",
+            example: """
+            const result = await HTMLAppNative.biometrics.authenticate({
+              reason: "Unlock your private notes"
+            });
+            if (result.authenticated) showPrivateContent();
+            """,
+            constraints: "Authentication success proves only local device authentication for that action; it is not a user account or identity service."
+        ),
+        .init(
+            id: "secureStorage",
+            title: "Per-HTMLApp secure string storage",
+            keywords: ["keychain", "secret", "token", "credential", "secure storage", "password"],
+            purpose: "Store small secrets or tokens in a per-HTMLApp Keychain-backed store instead of localStorage.",
+            api: "secureStorage.set(key,value); secureStorage.get(key); secureStorage.remove(key)",
+            example: """
+            await HTMLAppNative.secureStorage.set("access-token", token);
+            const { value } = await HTMLAppNative.secureStorage.get("access-token");
+            await HTMLAppNative.secureStorage.remove("access-token");
+            """,
+            constraints: "String values only and intended for small secrets/tokens, not bulk data. Do not log secret values."
+        ),
+        .init(
+            id: "speech",
+            title: "Native text-to-speech",
+            keywords: ["speech", "speak", "text to speech", "tts", "voice", "read aloud"],
+            purpose: "Speak app text with AVSpeechSynthesizer and stop playback when needed.",
+            api: "HTMLAppNative.speech.speak(text,{language?,rate?,pitch?}); speech.stop()",
+            example: """
+            await HTMLAppNative.speech.speak("Navigation started", {
+              language: "en-US",
+              rate: 0.45,
+              pitch: 1.0
+            });
+            // Later:
+            await HTMLAppNative.speech.stop();
+            """,
+            constraints: "Do not assume a particular installed voice. Start speech as a meaningful user-facing action."
+        ),
+        .init(
+            id: "camera.microphone",
+            title: "Camera and microphone",
+            keywords: ["camera", "microphone", "mic", "record", "scanner", "video", "audio capture", "selfie", "rear camera"],
+            purpose: "Capture live camera/microphone media, build scanners, recorders, meters, or camera-driven tools.",
+            api: "navigator.mediaDevices.getUserMedia(constraints); MediaRecorder/Web Audio when feature-detected",
+            example: """
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: "environment" } },
+              audio: false
+            });
+            video.srcObject = stream;
+            // Cleanup:
+            stream.getTracks().forEach(track => track.stop());
+            """,
+            constraints: "Request only after a meaningful user gesture, handle denial/unavailability, and always stop tracks when finished."
+        ),
+        .init(
+            id: "geolocation",
+            title: "Foreground geolocation",
+            keywords: ["location", "gps", "coordinates", "latitude", "longitude", "position", "tracking", "map"],
+            purpose: "Get a one-time native location fix or foreground position updates.",
+            api: "navigator.geolocation.getCurrentPosition(...); navigator.geolocation.watchPosition(...); clearWatch(...)",
+            example: """
+            navigator.geolocation.getCurrentPosition(
+              position => usePosition(position.coords),
+              error => showLocationError(error),
+              { enableHighAccuracy: true, timeout: 15000 }
+            );
+            """,
+            constraints: "Foreground use only. Handle denied, unavailable, and timeout states. Clear watches when no longer needed."
+        ),
+        .init(
+            id: "motion.orientation.compass",
+            title: "Motion, orientation, and compass",
+            keywords: ["accelerometer", "gyroscope", "motion", "orientation", "compass", "heading", "tilt", "sensor"],
+            purpose: "Build tilt controls, motion-reactive experiences, heading/compass UI, and sensor-driven interactions.",
+            api: "DeviceMotionEvent / DeviceOrientationEvent; window.htmlappCompassHeading; htmlappcompass event",
+            example: """
+            if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+              await DeviceOrientationEvent.requestPermission();
+            }
+            window.addEventListener("htmlappcompass", event => {
+              console.log(event.detail.heading, event.detail.accuracy);
+            });
+            """,
+            constraints: "Permission requests must come from a user gesture when required. Remove listeners when finished and never fabricate sensor values."
+        ),
+        .init(
+            id: "file.input",
+            title: "Web file and media input",
+            keywords: ["input file", "upload local", "choose image", "choose audio", "choose video", "capture hint"],
+            purpose: "Use standard file inputs for user-mediated imports when a native picker wrapper is unnecessary.",
+            api: "<input type=\"file\"> plus File/Blob/FileReader/arrayBuffer()/text()/object URLs",
+            example: """
+            <input id="picker" type="file" accept="image/*" multiple>
+            <script>
+              picker.addEventListener("change", () => {
+                for (const file of picker.files) console.log(file.name, file.type, file.size);
+              });
+            </script>
+            """,
+            constraints: "The user chooses the files. Do not claim unrestricted filesystem or Photo Library access."
+        ),
+        .init(
+            id: "storage",
+            title: "Local persistence and offline data",
+            keywords: ["localstorage", "indexeddb", "cache", "offline", "database", "blob storage", "settings", "drafts"],
+            purpose: "Persist preferences, drafts, cached responses, projects, histories, and larger structured/blob data locally.",
+            api: "localStorage for small values; IndexedDB for structured/blob data; navigator.storage when available",
+            example: """
+            localStorage.setItem("units", "metric");
+            // Use IndexedDB for projects, histories, or Blob-heavy data.
+            """,
+            constraints: "Do not store secrets in localStorage. Feature-detect optional storage APIs and handle quota/eviction."
+        ),
+        .init(
+            id: "networking",
+            title: "Networking and realtime",
+            keywords: ["fetch", "http", "websocket", "eventsource", "sse", "realtime", "api", "network"],
+            purpose: "Call browser-safe public services or a real user/service backend and support realtime connections.",
+            api: "fetch; WebSocket; EventSource",
+            example: """
+            const controller = new AbortController();
+            const response = await fetch(apiURL, { signal: controller.signal });
+            if (!response.ok) throw new Error("Request failed");
+            const data = await response.json();
+            """,
+            constraints: "CORS, authentication, endpoint documentation, and service limits still apply. Never embed private server secrets."
+        ),
+        .init(
+            id: "media.audio",
+            title: "Audio, video, Web Audio, and media session",
+            keywords: ["audio", "video", "music", "player", "web audio", "media session", "waveform", "playback"],
+            purpose: "Build media players, audio tools, waveform/visualizer experiences, synthesis, and recording workflows.",
+            api: "<audio>/<video>, Web Audio API, MediaRecorder, Media Session when feature-detected",
+            example: """
+            const ctx = new AudioContext();
+            await ctx.resume();
+            // Build nodes/analysis only after user interaction when audio policy requires it.
+            """,
+            constraints: "Respect autoplay restrictions, clean up nodes/streams, and feature-detect optional Media Session behavior."
+        ),
+        .init(
+            id: "credentials",
+            title: "Credentials, passkeys, and OAuth",
+            keywords: ["login", "oauth", "passkey", "webauthn", "credential", "sign in", "authentication server"],
+            purpose: "Use standards-based authentication when a real service/backend exists.",
+            api: "navigator.credentials / WebAuthn when supported; OAuth Authorization Code + PKCE for compatible services",
+            example: """
+            if ("credentials" in navigator) {
+              // Use only with a real relying-party/backend configuration.
+            }
+            """,
+            constraints: "Never invent login success, users, tokens, or account state. Passkeys require a real relying party and correct secure-origin/server setup; never embed client secrets."
+        ),
+        .init(
+            id: "optional.web.capabilities",
+            title: "Optional WebKit capabilities",
+            keywords: ["wake lock", "service worker", "cache api", "webgpu", "webgl", "bluetooth", "usb", "serial", "hid", "fullscreen", "picture in picture", "network information", "battery"],
+            purpose: "Use optional browser APIs only when feature detection proves the relevant object/method is present and the app has a usable fallback.",
+            api: "Feature-detect the specific standard browser API before use",
+            example: """
+            if ("wakeLock" in navigator) {
+              try { const lock = await navigator.wakeLock.request("screen"); } catch (_) {}
+            }
+            """,
+            constraints: "Object presence does not guarantee a particular operation succeeds on the current iOS/WebKit version or context."
+        ),
+        .init(
+            id: "unsupported.entitlements",
+            title: "Capabilities not currently exposed to generated HTMLApps",
+            keywords: ["healthkit", "health", "homekit", "nfc", "core nfc", "nearby interaction", "background execution", "background location", "live activity", "live activities", "dynamic island", "remote push", "callkit", "carplay", "apple pay", "device management", "secure enclave", "background task", "activitykit", "widgetkit"],
+            purpose: "Recognize requests that need an iOS entitlement/framework which HTMLApp does not currently expose through a documented bridge.",
+            api: "No generated-JavaScript bridge is currently documented for these capabilities.",
+            example: """
+            // Do not invent window.htmlappLiveActivity, HTMLAppNative.health, or similar APIs.
+            // Use an honest user-mediated/web fallback, or surface the limitation.
+            """,
+            constraints: "An iOS capability existing at the native platform level does not make it available to a generated HTMLApp. Only documented bridges are guaranteed."
+        )
+    ]
+
+    static func research(queries: [String], maxMatchesPerQuery: Int = 6) -> String {
+        var seenQueries = Set<String>()
+        let uniqueQueries = queries
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seenQueries.insert($0.lowercased()).inserted }
+
+        guard !uniqueQueries.isEmpty else { return "" }
+
+        var sections: [String] = [
+            "HTMLAPP DEVICE API CATALOG RESULTS",
+            "These results are generated from HTMLApp's built-in capability catalog. Treat exact method names, examples, and limitations below as authoritative for generated HTMLApps."
+        ]
+
+        for query in uniqueQueries.prefix(8) {
+            let terms = searchTerms(query)
+            let normalizedQuery = query.lowercased()
+
+            let ranked = entries.compactMap { entry -> (score: Int, entry: HTMLAppDeviceAPICatalogEntry)? in
+                let haystack = entry.searchableText
+                var score = 0
+                if haystack.contains(normalizedQuery) { score += 12 }
+                for term in terms {
+                    if entry.id.lowercased().contains(term) { score += 7 }
+                    if entry.title.lowercased().contains(term) { score += 6 }
+                    if entry.keywords.contains(where: { $0.lowercased().contains(term) }) { score += 5 }
+                    if entry.purpose.lowercased().contains(term) { score += 3 }
+                    if entry.api.lowercased().contains(term) { score += 2 }
+                }
+                return score > 0 ? (score, entry) : nil
+            }
+            .sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                return $0.entry.title < $1.entry.title
+            }
+
+            var lines = ["DEVICE QUERY: \(query)"]
+            if ranked.isEmpty {
+                lines.append("No matching built-in capability was found. Do not invent a native bridge; use a verified browser/public API fallback or expose the limitation.")
+            } else {
+                lines.append(contentsOf: ranked.prefix(max(1, maxMatchesPerQuery)).map { $0.entry.renderedReference })
+            }
+            sections.append(lines.joined(separator: "\n"))
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    private static func searchTerms(_ query: String) -> [String] {
+        let raw = query
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+        var seen = Set<String>()
+        return raw.filter {
+            $0.count > 2 &&
+            !stopWords.contains($0) &&
+            seen.insert($0).inserted
+        }
+    }
+}
