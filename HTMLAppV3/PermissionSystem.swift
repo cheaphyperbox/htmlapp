@@ -10,6 +10,11 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case microphone
     case location
     case notifications
+    case contacts
+    case photoLibrary
+    case calendar
+    case reminders
+    case biometrics
 
     var id: String { rawValue }
 
@@ -19,6 +24,11 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .microphone: return "Microphone"
         case .location: return "Location"
         case .notifications: return "Notifications"
+        case .contacts: return "Contacts"
+        case .photoLibrary: return "Photos"
+        case .calendar: return "Calendar"
+        case .reminders: return "Reminders"
+        case .biometrics: return "Biometrics"
         }
     }
 
@@ -28,6 +38,11 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
         case .notifications: return "Allows this HTML app to send native iOS notifications."
+        case .contacts: return "Allows this HTML app to select or read contacts through the native Contacts framework."
+        case .photoLibrary: return "Allows this HTML app to open the native photo picker for selected photos and videos."
+        case .calendar: return "Allows this HTML app to read and create calendar events through EventKit."
+        case .reminders: return "Allows this HTML app to read and create reminders through EventKit."
+        case .biometrics: return "Allows this HTML app to request Face ID, Touch ID, or device authentication."
         }
     }
 
@@ -37,6 +52,11 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
         case .notifications: return "bell.fill"
+        case .contacts: return "person.crop.circle.badge.checkmark"
+        case .photoLibrary: return "photo.on.rectangle.angled"
+        case .calendar: return "calendar"
+        case .reminders: return "checklist"
+        case .biometrics: return "faceid"
         }
     }
 }
@@ -227,6 +247,10 @@ final class NativePermissionCoordinator: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    func requestHTMLPermission(_ permission: HTMLPermission, completion: @escaping (Bool) -> Void) {
+        resolvePolicy(permission, completion: completion)
+    }
+
     private func resolvePolicies(_ permissions: [HTMLPermission], completion: @escaping (Bool) -> Void) {
         guard let first = permissions.first else {
             completion(true)
@@ -388,7 +412,7 @@ struct AppPermissionsView: View {
                         for permission in HTMLPermission.allCases { choices[permission] = .ask }
                     }
                 } footer: {
-                    Text("Allowing an HTML app here does not bypass iOS. Camera, microphone, location, and notifications still require the system permission for HTMLApp.")
+                    Text("Allowing an HTML app here does not bypass iOS. Sensitive native capabilities can still require a separate iOS system permission or system picker.")
                 }
             }
             .navigationTitle("Permissions")
