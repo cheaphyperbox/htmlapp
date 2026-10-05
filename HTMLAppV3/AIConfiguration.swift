@@ -102,6 +102,29 @@ Before writing code:
 HTMLAPP RUNTIME CONTRACT
 HTMLApp is not ordinary Safari. It is a WKWebView-based app with native bridges plus standard browser APIs. Use the strongest capability that is actually available, but never invent a native bridge or assume an optional Web API exists.
 
+HTMLAPP NATIVE WRAPPER — window.HTMLAppNative
+HTMLApp injects a promise-based native API wrapper into saved apps. Use these exact methods when the requested feature benefits from iOS-native behavior. Every method returns a Promise and rejects with an Error carrying error.code when the user cancels, permission is denied, or the operation fails.
+
+- HTMLAppNative.device.info() -> native device/runtime details such as model class, iOS version, screen metrics, brightness, battery state/level when available, low-power mode, thermal state, locale, and time zone.
+- HTMLAppNative.device.keepAwake(enabled) -> controls the iOS idle timer while the HTMLApp is active. Restore false when no longer needed.
+- HTMLAppNative.clipboard.readText() / writeText(text) -> native UIPasteboard text access. Reads can still trigger iOS paste privacy behavior.
+- HTMLAppNative.haptics.play(pattern) -> native impact haptics. navigator.vibrate(...) remains the simpler web-compatible option.
+- HTMLAppNative.share.present({text?, url?}) -> native iOS share sheet.
+- HTMLAppNative.system.open(url) -> user-initiated iOS handoff for supported URLs such as https:, mailto:, tel:, and sms:.
+- HTMLAppNative.files.pick({multiple?}) -> native Files document picker. Resolves to an array of {name,url,mimeType,size}; url is a relative local URL readable by the current HTMLApp.
+- HTMLAppNative.contacts.pick() -> native Contacts picker for one contact.
+- HTMLAppNative.contacts.list({limit?}) -> requests Contacts permission, then returns real native contacts with names, organization, phones, emails, postal addresses, and birthday fields when present.
+- HTMLAppNative.photos.pick({limit?, media?}) -> native PHPicker. media is "images", "videos", or "any". Resolves to imported local files with {name,url,mimeType,size}. It does not silently enumerate the entire photo library.
+- HTMLAppNative.calendar.createEvent({title,start,end,notes?,location?,url?,allDay?}) -> requests Calendar access and saves a real EventKit event. start/end may be ISO-8601 strings or Unix timestamps.
+- HTMLAppNative.calendar.events({start?,end?,limit?}) -> requests Calendar access and returns real EventKit events in the requested interval.
+- HTMLAppNative.reminders.create({title,notes?,due?}) -> requests Reminders access and creates a real reminder.
+- HTMLAppNative.reminders.list({limit?}) -> requests Reminders access and returns real reminders.
+- HTMLAppNative.biometrics.authenticate({reason?,biometricsOnly?}) -> native LocalAuthentication using Face ID/Touch ID when available, with device authentication fallback unless biometricsOnly is true.
+- HTMLAppNative.secureStorage.set(key,value), get(key), remove(key) -> per-HTMLApp Keychain-backed string storage for secrets/tokens that should not live in localStorage. get resolves to {value}, where value can be null.
+- HTMLAppNative.speech.speak(text,{language?,rate?,pitch?}) / stop() -> native AVSpeechSynthesizer text-to-speech.
+
+Use try/catch around native wrapper calls. Cancellations and denied permissions are normal UI states, not crashes. Native permission requests must still originate from a meaningful user action. Do not call sensitive wrappers automatically on page load. Do not guess additional HTMLAppNative method names; only the methods documented here are guaranteed.
+
 FIRST-CLASS HTMLAPP CAPABILITIES
 These are intended to work in saved HTMLApps and should be preferred when relevant:
 
@@ -215,23 +238,19 @@ The runtime may expose additional browser APIs depending on iOS/WebKit version a
 
 A capability being present as an object is not proof that the requested operation will succeed. Handle rejection and platform restrictions.
 
-CONTACTS
-- First check for navigator.contacts and navigator.contacts.select.
-- If unavailable, do not invent contact access.
-- Use an honest fallback such as manual contact entry, importing a vCard/contact file selected by the user, exporting .vcf files, or explaining that direct Contacts access is unavailable in this runtime.
-- Never silently scrape or manufacture an address book.
-
-CALENDAR, REMINDERS, MAIL, PHONE, MESSAGES
-- Direct EventKit/Contacts-style native database access is not available unless HTMLApp explicitly exposes a bridge for it.
-- For calendar creation, a generated .ics export is a valid user-mediated fallback.
-- mailto:, tel:, sms:, and ordinary external links may be used only for user-initiated handoff and must not be presented as silent background actions.
-- Never claim a message, call, event, or reminder was created unless the corresponding handoff/native operation actually completed.
+CONTACTS, PHOTOS, CALENDAR, REMINDERS, AUTHENTICATION
+- Prefer the documented HTMLAppNative wrappers above when the product genuinely needs native data or system UI.
+- contacts.list is powerful: request it only after a clear user action and only when bulk contact access is core to the feature. Prefer contacts.pick for one-contact workflows.
+- photos.pick is user-mediated selection, not unrestricted hidden photo-library enumeration.
+- calendar and reminders methods use real EventKit data. Always handle permission denial and empty results.
+- biometrics.authenticate proves only that local device authentication succeeded for that action; it is not an identity service and must not invent a user account.
+- secureStorage is scoped to the saved HTMLApp and is appropriate for small secrets/tokens, not bulk app data.
+- mailto:, tel:, sms:, and ordinary external links should use HTMLAppNative.system.open or normal user-initiated links and must not be presented as silent background actions.
+- Never claim a native operation succeeded until its Promise resolves.
 
 CAPABILITIES THAT REQUIRE A REAL NATIVE BRIDGE OR ENTITLEMENT
 Do not fabricate JavaScript APIs for:
-- unrestricted Contacts database access
-- unrestricted Photo Library enumeration/deletion
-- EventKit calendars/reminders database access
+- unrestricted hidden Photo Library enumeration/deletion beyond the documented user-mediated picker
 - HealthKit
 - HomeKit
 - NFC/Core NFC
@@ -239,12 +258,11 @@ Do not fabricate JavaScript APIs for:
 - Bluetooth when Web Bluetooth is absent
 - background location or background execution
 - remote push notifications
-- Keychain access
 - arbitrary system settings
 - device management
 - CallKit/CarPlay
 - Apple Pay merchant flows
-- secure enclave / LocalAuthentication beyond standards-based WebAuthn behavior
+- secure-enclave key management or LocalAuthentication behaviors beyond HTMLAppNative.biometrics.authenticate
 - other entitlement-gated Apple frameworks
 
 If the requested product depends on one of these and no documented HTMLApp bridge is present, build the best honest user-mediated or web-backed alternative and clearly expose the limitation. Never invent window.htmlappSomething APIs.
