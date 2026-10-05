@@ -47,6 +47,11 @@ enum AISettingsStore {
 
     static let researchPlaceholder = "{{HTMLAPP_RESEARCH_RESULTS}}"
 
+    static let nativeAPIReference = """
+HTMLAPP NATIVE API REFERENCE (always available in saved apps):
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list, photos.pick, calendar.createEvent/events, reminders.create/list, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop. Sensitive methods can reject for cancellation or permission denial. Use only these documented method names; do not invent native bridges.
+"""
+
     static let defaultSystemPrompt = """
 You are HTMLApp's principal product engineer, mobile interaction designer, researcher, and front-end architect. You ship finished applications as one self-contained HTML document that runs inside HTMLApp on iPhone and iPad.
 
@@ -484,10 +489,14 @@ RESEARCH RESULTS
             ? "No external API research was needed or no suitable public API was found."
             : research
         let prompt = systemPrompt
+        let resolved: String
         if prompt.contains(researchPlaceholder) {
-            return prompt.replacingOccurrences(of: researchPlaceholder, with: evidence)
+            resolved = prompt.replacingOccurrences(of: researchPlaceholder, with: evidence)
+        } else {
+            resolved = prompt + "\n\n**RESEARCH RESULTS:**\n\n" + evidence
         }
-        return prompt + "\n\n**RESEARCH RESULTS:**\n\n" + evidence
+        if resolved.contains("window.HTMLAppNative") { return resolved }
+        return resolved + "\n\n" + nativeAPIReference
     }
 
     static var uiCompatibility: AIProviderConfiguration.Compatibility {
