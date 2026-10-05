@@ -49,7 +49,7 @@ enum AISettingsStore {
 
     static let nativeAPIReference = """
 HTMLAPP NATIVE API REFERENCE (always available in saved apps):
-window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list, photos.pick, calendar.createEvent/events, reminders.create/list, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop. Sensitive methods can reject for cancellation or permission denial. Use only these documented method names; do not invent native bridges.
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop. Sensitive methods can reject for cancellation or permission denial. Use only these documented method names; do not invent native bridges.
 """
 
     static let defaultSystemPrompt = """
@@ -119,11 +119,17 @@ HTMLApp injects a promise-based native API wrapper into saved apps. Use these ex
 - HTMLAppNative.files.pick({multiple?}) -> native Files document picker. Resolves to an array of {name,url,mimeType,size}; url is a relative local URL readable by the current HTMLApp.
 - HTMLAppNative.contacts.pick() -> native Contacts picker for one contact.
 - HTMLAppNative.contacts.list({limit?}) -> requests Contacts permission, then returns real native contacts with names, organization, phones, emails, postal addresses, and birthday fields when present.
+- HTMLAppNative.contacts.create({givenName?,familyName?,organizationName?,phones?,emails?}) -> requests Contacts permission and creates a real contact.
 - HTMLAppNative.photos.pick({limit?, media?}) -> native PHPicker. media is "images", "videos", or "any". Resolves to imported local files with {name,url,mimeType,size}. It does not silently enumerate the entire photo library.
+- HTMLAppNative.photos.save(url) -> asks for Photos add permission and saves a local file returned by the native Files/Photos picker into the user's Photos library.
 - HTMLAppNative.calendar.createEvent({title,start,end,notes?,location?,url?,allDay?}) -> requests Calendar access and saves a real EventKit event. start/end may be ISO-8601 strings or Unix timestamps.
 - HTMLAppNative.calendar.events({start?,end?,limit?}) -> requests Calendar access and returns real EventKit events in the requested interval.
+- HTMLAppNative.calendar.updateEvent({id,...changes}) / deleteEvent(id) -> updates or deletes a real EventKit event.
 - HTMLAppNative.reminders.create({title,notes?,due?}) -> requests Reminders access and creates a real reminder.
 - HTMLAppNative.reminders.list({limit?}) -> requests Reminders access and returns real reminders.
+- HTMLAppNative.reminders.update({id,...changes}) / delete(id) -> updates or deletes a real reminder.
+- HTMLAppNative.notifications.schedule({title?,body?,at?,afterSeconds?,id?,silent?}) -> schedules a real local iOS notification after permission is granted.
+- HTMLAppNative.notifications.cancel({id?}) -> cancels one scheduled/delivered notification for this HTMLApp, or all of this HTMLApp's native scheduled notifications when no id is supplied.
 - HTMLAppNative.biometrics.authenticate({reason?,biometricsOnly?}) -> native LocalAuthentication using Face ID/Touch ID when available, with device authentication fallback unless biometricsOnly is true.
 - HTMLAppNative.secureStorage.set(key,value), get(key), remove(key) -> per-HTMLApp Keychain-backed string storage for secrets/tokens that should not live in localStorage. get resolves to {value}, where value can be null.
 - HTMLAppNative.speech.speak(text,{language?,rate?,pitch?}) / stop() -> native AVSpeechSynthesizer text-to-speech.
@@ -247,7 +253,8 @@ CONTACTS, PHOTOS, CALENDAR, REMINDERS, AUTHENTICATION
 - Prefer the documented HTMLAppNative wrappers above when the product genuinely needs native data or system UI.
 - contacts.list is powerful: request it only after a clear user action and only when bulk contact access is core to the feature. Prefer contacts.pick for one-contact workflows.
 - photos.pick is user-mediated selection, not unrestricted hidden photo-library enumeration.
-- calendar and reminders methods use real EventKit data. Always handle permission denial and empty results.
+- calendar and reminders methods use real EventKit data and support read/create/update/delete operations. Always handle permission denial, missing items, and empty results.
+- notifications.schedule creates local iOS notifications only; it is not remote push and does not grant background execution.
 - biometrics.authenticate proves only that local device authentication succeeded for that action; it is not an identity service and must not invent a user account.
 - secureStorage is scoped to the saved HTMLApp and is appropriate for small secrets/tokens, not bulk app data.
 - mailto:, tel:, sms:, and ordinary external links should use HTMLAppNative.system.open or normal user-initiated links and must not be presented as silent background actions.
