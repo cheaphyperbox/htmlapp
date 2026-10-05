@@ -91,7 +91,11 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: "preview_restricted", message: "This native capability is unavailable in preview mode.")
             return
         }
-        permissionCoordinator?.requestHTMLPermission(permission) { [weak self] allowed in
+        guard let permissionCoordinator else {
+            reject(id, code: "bridge_unavailable", message: "The native permission coordinator is unavailable.")
+            return
+        }
+        permissionCoordinator.requestHTMLPermission(permission) { [weak self] allowed in
             guard let self else { return }
             if allowed { action() }
             else { self.reject(id, code: "permission_denied", message: "\(permission.title) permission was denied for this HTML app.") }
@@ -240,34 +244,34 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private func listContacts(id: String, args: [String: Any]) {
         let store = CNContactStore()
         store.requestAccess(for: .contacts) { [weak self] granted, error in
-            guard let self else { return }
-            guard granted else {
-                Task { @MainActor in
+            Task { @MainActor in
+                guard let self else { return }
+                guard granted else {
                     self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Contacts access was denied.")
+                    return
                 }
-                return
-            }
-            let limit = max(1, min(args["limit"] as? Int ?? 500, 2000))
-            let keys: [CNKeyDescriptor] = [
-                CNContactIdentifierKey as CNKeyDescriptor,
-                CNContactGivenNameKey as CNKeyDescriptor,
-                CNContactFamilyNameKey as CNKeyDescriptor,
-                CNContactOrganizationNameKey as CNKeyDescriptor,
-                CNContactPhoneNumbersKey as CNKeyDescriptor,
-                CNContactEmailAddressesKey as CNKeyDescriptor,
-                CNContactPostalAddressesKey as CNKeyDescriptor,
-                CNContactBirthdayKey as CNKeyDescriptor
-            ]
-            let request = CNContactFetchRequest(keysToFetch: keys)
-            var values: [[String: Any]] = []
-            do {
-                try store.enumerateContacts(with: request) { contact, stop in
-                    values.append(self.contactPayload(contact))
-                    if values.count >= limit { stop.pointee = true }
+                let limit = max(1, min(args["limit"] as? Int ?? 500, 2000))
+                let keys: [CNKeyDescriptor] = [
+                    CNContactIdentifierKey as CNKeyDescriptor,
+                    CNContactGivenNameKey as CNKeyDescriptor,
+                    CNContactFamilyNameKey as CNKeyDescriptor,
+                    CNContactOrganizationNameKey as CNKeyDescriptor,
+                    CNContactPhoneNumbersKey as CNKeyDescriptor,
+                    CNContactEmailAddressesKey as CNKeyDescriptor,
+                    CNContactPostalAddressesKey as CNKeyDescriptor,
+                    CNContactBirthdayKey as CNKeyDescriptor
+                ]
+                let request = CNContactFetchRequest(keysToFetch: keys)
+                var values: [[String: Any]] = []
+                do {
+                    try store.enumerateContacts(with: request) { contact, stop in
+                        values.append(self.contactPayload(contact))
+                        if values.count >= limit { stop.pointee = true }
+                    }
+                    self.resolve(id, value: values)
+                } catch {
+                    self.reject(id, code: "contacts_failed", message: error.localizedDescription)
                 }
-                Task { @MainActor in self.resolve(id, value: values) }
-            } catch {
-                Task { @MainActor in self.reject(id, code: "contacts_failed", message: error.localizedDescription) }
             }
         }
     }
@@ -340,12 +344,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             guard let typeIdentifier = result.itemProvider.registeredTypeIdentifiers.first else { continue }
             group.enter()
             result.itemProvider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, _ in
-                defer { group.leave() }
-                guard let self, let url else { return }
-                if let item = self.importFile(url: url, namespace: "photos", preferredName: result.itemProvider.suggestedName, typeIdentifier: typeIdentifier) {
-                    lock.lock()
-                    imported.append(item)
-                    lock.unlock()
+                Task { @MainActor in
+                    defer { group.leave() }
+                    guard let self, let url else { return }
+                    if let item = self.importFile(url: url, namespace: "photos", preferredName: result.itemProvider.suggestedName, typeIdentifier: typeIdentifier) {
+                        lock.lock()
+                        imported.append(item)
+                        lock.unlock()
+                    }
                 }
             }
         }
@@ -467,21 +473,23 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             let limit = max(1, min(args["limit"] as? Int ?? 250, 1000))
             let predicate = self.eventStore.predicateForReminders(in: nil)
             self.eventStore.fetchReminders(matching: predicate) { reminders in
-                let values = (reminders ?? []).prefix(limit).map { reminder in
-                    var item: [String: Any] = [
-                        "id": reminder.calendarItemIdentifier,
-                        "title": reminder.title ?? "",
-                        "notes": reminder.notes ?? "",
-                        "completed": reminder.isCompleted,
-                        "calendarTitle": reminder.calendar.title
-                    ]
-                    if let components = reminder.dueDateComponents,
-                       let date = Calendar.current.date(from: components) {
-                        item["due"] = ISO8601DateFormatter().string(from: date)
+                Task { @MainActor in
+                    let values = (reminders ?? []).prefix(limit).map { reminder in
+                        var item: [String: Any] = [
+                            "id": reminder.calendarItemIdentifier,
+                            "title": reminder.title ?? "",
+                            "notes": reminder.notes ?? "",
+                            "completed": reminder.isCompleted,
+                            "calendarTitle": reminder.calendar.title
+                        ]
+                        if let components = reminder.dueDateComponents,
+                           let date = Calendar.current.date(from: components) {
+                            item["due"] = ISO8601DateFormatter().string(from: date)
+                        }
+                        return item
                     }
-                    return item
+                    self.resolve(id, value: Array(values))
                 }
-                Task { @MainActor in self.resolve(id, value: Array(values)) }
             }
         }
     }
