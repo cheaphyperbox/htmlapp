@@ -78,11 +78,12 @@ final class AIGenerationSession: ObservableObject {
                 improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
                 refinedBrief = improved
 
-                if !suppliedResearch.isEmpty {
-                    lastResearch = suppliedResearch
-                } else {
-                    phase = "Planning APIs and capabilities"
-                    let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+                phase = "Planning APIs and capabilities"
+                let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+
+                let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+                let publicResearch: String
+                if suppliedResearch.isEmpty {
                     if plan.isEmpty {
                         phase = "Designing the app"
                     } else if !plan.deviceQueries.isEmpty && !plan.publicQueries.isEmpty {
@@ -92,14 +93,16 @@ final class AIGenerationSession: ObservableObject {
                     } else {
                         phase = "Finding useful public APIs"
                     }
-
-                    let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
-                    let publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
-                    lastResearch = [deviceResearch, publicResearch]
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
-                        .joined(separator: "\n\n")
+                    publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
+                } else {
+                    phase = plan.deviceQueries.isEmpty ? "Using web research" : "Checking device capabilities"
+                    publicResearch = ""
                 }
+
+                lastResearch = [deviceResearch, suppliedResearch, publicResearch]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n")
                 phase = "Generating live preview"
             }
 
@@ -175,19 +178,17 @@ final class AIGenerationSession: ObservableObject {
             let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: config)
 
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !suppliedResearch.isEmpty {
-                lastResearch = suppliedResearch
-            } else {
-                phase = "Checking APIs for this change"
-                let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
-                let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
-                let publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
-                let research = [deviceResearch, publicResearch]
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: "\n\n")
-                if !research.isEmpty { lastResearch = research }
-            }
+            phase = "Checking APIs for this change"
+            let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
+            let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+            let publicResearch = suppliedResearch.isEmpty
+                ? await SafePublicAPIResearch.research(queries: plan.publicQueries)
+                : ""
+            let research = [deviceResearch, suppliedResearch, publicResearch]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n\n")
+            if !research.isEmpty { lastResearch = research }
 
             phase = "Patching the app"
             let user = """
