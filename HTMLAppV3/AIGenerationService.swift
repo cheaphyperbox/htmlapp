@@ -664,23 +664,33 @@ Engineering quality is mandatory: loading/empty/error/offline/permission/unsuppo
 Inside <icon_script>, output only a static drawing script. Commands: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Use absolute coordinates and CSS/HEX colors, draw back-to-front, and never use ANIM, GROUP or FPS.
 """
 
+    private static let webResearchSignals = [
+        "api", "website", "web site", "url", "current", "live", "latest", "weather",
+        "news", "stock", "crypto", "price", "restaurant", "flight", "sports", "score",
+        "search the web", "internet", "online", "remote", "oauth", "server", "fetch",
+        "public data", "real-time", "realtime"
+    ]
+
+    private static let deviceCapabilitySignals = [
+        "camera", "microphone", "mic", "photo", "video", "contact", "calendar", "reminder",
+        "notification", "face id", "touch id", "biometric", "clipboard", "file", "download",
+        "share", "speech", "text to speech", "location", "gps", "map", "motion", "orientation",
+        "compass", "sensor", "battery", "haptic", "vibrate", "keychain", "secure storage",
+        "passkey", "background", "dynamic island", "live activity", "healthkit", "homekit",
+        "nfc", "bluetooth", "carplay", "callkit", "apple pay"
+    ]
+
     static func canSkipPreflight(for prompt: String) -> Bool {
         let value = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, value.count <= 160 else { return false }
         let lower = value.lowercased()
-        let remoteSignals = [
-            "api", "website", "web site", "url", "current", "live", "latest", "weather",
-            "news", "stock", "crypto", "price", "map", "location", "restaurant", "flight",
-            "sports", "score", "search the web", "internet", "online", "remote", "database",
-            "login", "account", "oauth", "server", "fetch", "download",
-            "camera", "microphone", "mic", "photo", "video", "contact", "calendar", "reminder",
-            "notification", "face id", "touch id", "biometric", "clipboard", "file", "share",
-            "speech", "text to speech", "gps", "motion", "orientation", "compass", "sensor",
-            "battery", "haptic", "vibrate", "keychain", "secure storage", "passkey",
-            "background", "dynamic island", "live activity", "healthkit", "homekit", "nfc",
-            "bluetooth", "carplay", "callkit", "apple pay"
-        ]
-        return !remoteSignals.contains(where: { lower.contains($0) })
+        return !webResearchSignals.contains(where: { lower.contains($0) }) &&
+            !deviceCapabilitySignals.contains(where: { lower.contains($0) })
+    }
+
+    static func needsWebResearch(for prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        return webResearchSignals.contains(where: { lower.contains($0) })
     }
 
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
