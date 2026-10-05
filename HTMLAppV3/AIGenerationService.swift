@@ -604,13 +604,31 @@ enum AIProviderClient {
 
 enum AIHTMLAgent {
     static let designGuide = """
-Build one self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. It must behave like a real mobile app rather than a static webpage: clear screen hierarchy, native-feeling navigation, pressed states, sheets/overlays where appropriate, smooth animated transitions, spring-like motion, tasteful micro-interactions, and haptic feedback after user gestures when it improves the experience. Motion must communicate state and navigation, respect prefers-reduced-motion, and never block usability.
+Build one complete, self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. It must behave like a real mobile product: clear hierarchy, native-feeling navigation, useful pressed states, sheets/overlays where appropriate, smooth state transitions, safe areas, 44px minimum touch targets, excellent phone/iPad resizing, polished light/dark appearance, accessible forms, and no dead controls. Respect prefers-reduced-motion, prefers-contrast, and prefers-reduced-transparency.
 
-Aim for a premium iPhone/iPad experience: Apple system typography, safe areas, responsive layouts, 44px minimum touch targets, polished light/dark appearance, loading/empty/error/offline states, keyboard-friendly forms, and no dead controls. Use restrained iOS-style materials for navigation, controls, sheets and overlays. Avoid generic SaaS dashboards, excessive blur/glow/gradients, Material-style UI, emoji icons, browser alert() for routine feedback, and desktop-first layouts.
+Use the HTMLApp runtime rather than assuming ordinary Safari limitations:
+- Camera/mic: navigator.mediaDevices.getUserMedia; stop tracks when finished; MediaRecorder/Web Audio when available.
+- Location: navigator.geolocation.getCurrentPosition and watchPosition are natively bridged; clear watches.
+- Motion/orientation: request DeviceMotionEvent/DeviceOrientationEvent permission from a user gesture when required. Compass can also use window.htmlappCompassHeading and the htmlappcompass event.
+- Haptics: navigator.vibrate is bridged to native iOS feedback; keep it brief and user-initiated.
+- Notifications: Notification.requestPermission and immediate new Notification(...) are bridged to native iOS local notifications. Do not promise remote push/background scheduling.
+- Downloads/export: normal downloads plus Blob/data/object-URL downloads are handled by HTMLApp and open the iOS share sheet after retrieval. Use meaningful MIME types and filenames.
+- Files/photos: use <input type=file> for user-selected files/photos/videos; read with File/Blob/FileReader/arrayBuffer/object URLs; do not claim unrestricted Photo Library access.
+- Storage: localStorage for small preferences; IndexedDB for larger structured/blob data; navigator.storage when available.
+- Networking: fetch/WebSocket/EventSource are allowed subject to CORS, server support, and normal security constraints.
+- Sharing/media/credentials: feature-detect navigator.share/canShare, Media Session, navigator.credentials/WebAuthn, Clipboard, and other optional APIs.
 
-Never invent facts, live values, people, accounts, reviews, measurements, availability, prices, API responses, endpoints, or capabilities unless the user explicitly asks for fictional/demo/sample content. Do not silently pass fabricated sample data off as real data. If real data or a capability is needed, use the researched documented API when available. If you are unsure whether something can be done, prefer a documented API solution found in the research rather than pretending it works. If no suitable API exists, make the limitation clear in the app and offer honest user-entered/local functionality instead of fake live data.
+Never invent native bridges. Direct Contacts database access, unrestricted Photo Library enumeration, Calendar/Reminders databases, HealthKit, HomeKit, NFC, background execution/location, remote push, Keychain, Apple Pay merchant flows, and other entitlement-gated Apple frameworks are unavailable unless an explicit HTMLApp bridge exists. For contacts, first feature-detect navigator.contacts.select; if unavailable, use honest manual/vCard import/export fallback. For calendar creation, .ics export is a valid user-mediated fallback.
 
-Permission-requiring APIs may only activate after an explicit user gesture. Never embed private API keys or secrets in generated HTML.
+Other browser APIs such as Bluetooth, USB, Serial, HID, WebGPU, WebXR, Wake Lock, Service Workers, App Badging, Network Information, Battery, keyboard APIs, Audio Session, and similar capabilities are feature-detect-only. Presence of an object is not proof the requested operation will succeed; handle rejection and unsupported states.
+
+Never invent facts, live values, people, accounts, reviews, measurements, availability, prices, API responses, endpoints, or capabilities unless the user explicitly requested fictional/demo/sample content, and label demo data visibly. If real data is needed, use researched documented APIs. Verify endpoint URL, parameters, fields, auth, CORS, and client-side feasibility. If no real source/capability exists, build the best honest local/user-mediated alternative.
+
+Permission-requiring APIs activate only after a meaningful user gesture. Request the minimum access needed. Never embed private API keys or secrets. If user/device data is sent to a remote service, do not claim it stays on-device.
+
+Design from the product rather than a template. Use restrained iOS-quality materials, purposeful typography, strong hierarchy, content-specific identity, and motion that communicates state. Avoid generic SaaS dashboards, excessive glass/glow/gradients, emoji-as-icons, browser alert/confirm for routine feedback, fake avatars/badges, and desktop-first layouts.
+
+Engineering quality is mandatory: loading/empty/error/offline/permission/unsupported states when relevant; guarded async code; AbortController for racing fetches; safe DOM insertion; cleanup of media tracks, object URLs, listeners, timers, workers, sockets and animation loops; keyboard/focus accessibility; no undefined handlers, placeholder endpoints, fake keys, TODOs, or pseudocode.
 """
 
     static let iconGuide = """
@@ -664,10 +682,11 @@ Return zero to six concise public-API discovery queries, each inside <query>. Se
         AISettingsStore.resolvedSystemPrompt(research: research) + """
 
 HTMLAPP FACT-CHECK OVERRIDES:
-- Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or standard browser APIs.
-- Never invent a reverse-geocoding mode, endpoint variant, search parameter, or response field because a related API has a similar feature.
-- If device coordinates or other user data are sent to a remote API, do not claim that information stays only on the device.
-- Prefer a slightly simpler app with verified behavior over a richer app built on guessed network behavior.
+- Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or the documented HTMLApp/browser runtime.
+- Never invent a reverse-geocoding mode, endpoint variant, search parameter, response field, or window.htmlapp* native bridge because a related capability exists elsewhere.
+- Do not assume that "iOS can do this" means a generated HTMLApp can do it. Entitlement-gated/native-framework features require an explicit HTMLApp bridge; otherwise use a truthful user-mediated/web fallback.
+- If device coordinates, photos, contacts, files, recordings, or other user data are sent to a remote API, do not claim that information stays only on the device.
+- Prefer a slightly simpler app with verified behavior over a richer app built on guessed network or native behavior.
 """
     }
 
