@@ -9,6 +9,15 @@ struct AIGenerationOutput {
     var refinedBrief = ""
 }
 
+struct AIResearchPlan {
+    var publicQueries: [String] = []
+    var deviceQueries: [String] = []
+
+    var isEmpty: Bool {
+        publicQueries.isEmpty && deviceQueries.isEmpty
+    }
+}
+
 enum AIGenerationError: LocalizedError {
     case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon
     case provider(String)
@@ -73,9 +82,23 @@ final class AIGenerationSession: ObservableObject {
                     lastResearch = suppliedResearch
                 } else {
                     phase = "Planning APIs and capabilities"
-                    let queries = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
-                    phase = queries.isEmpty ? "Designing the app" : "Finding useful public APIs"
-                    lastResearch = await SafePublicAPIResearch.research(queries: queries)
+                    let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+                    if plan.isEmpty {
+                        phase = "Designing the app"
+                    } else if !plan.deviceQueries.isEmpty && !plan.publicQueries.isEmpty {
+                        phase = "Checking device and web APIs"
+                    } else if !plan.deviceQueries.isEmpty {
+                        phase = "Checking device capabilities"
+                    } else {
+                        phase = "Finding useful public APIs"
+                    }
+
+                    let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+                    let publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
+                    lastResearch = [deviceResearch, publicResearch]
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: "\n\n")
                 }
                 phase = "Generating live preview"
             }
@@ -156,8 +179,13 @@ final class AIGenerationSession: ObservableObject {
                 lastResearch = suppliedResearch
             } else {
                 phase = "Checking APIs for this change"
-                let queries = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
-                let research = await SafePublicAPIResearch.research(queries: queries)
+                let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
+                let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+                let publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
+                let research = [deviceResearch, publicResearch]
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n\n")
                 if !research.isEmpty { lastResearch = research }
             }
 
@@ -643,7 +671,13 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
             "api", "website", "web site", "url", "current", "live", "latest", "weather",
             "news", "stock", "crypto", "price", "map", "location", "restaurant", "flight",
             "sports", "score", "search the web", "internet", "online", "remote", "database",
-            "login", "account", "oauth", "server", "fetch", "download"
+            "login", "account", "oauth", "server", "fetch", "download",
+            "camera", "microphone", "mic", "photo", "video", "contact", "calendar", "reminder",
+            "notification", "face id", "touch id", "biometric", "clipboard", "file", "share",
+            "speech", "text to speech", "gps", "motion", "orientation", "compass", "sensor",
+            "battery", "haptic", "vibrate", "keychain", "secure storage", "passkey",
+            "background", "dynamic island", "live activity", "healthkit", "homekit", "nfc",
+            "bluetooth", "carplay", "callkit", "apple pay"
         ]
         return !remoteSignals.contains(where: { lower.contains($0) })
     }
@@ -662,20 +696,38 @@ Turn the user's app idea into a stronger, concise implementation brief. Preserve
         return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
     }
 
-    static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> [String] {
+    static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> AIResearchPlan {
         let system = """
-Return zero to six concise public-API discovery queries, each inside <query>. Search whenever the requested app or revision needs real-world/live/current data, a remote capability, or a capability you are not confident can be implemented locally. If unsure whether a capability exists, search rather than making it up. Prefer documented no-auth APIs, then documented free tiers. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. If the app truly needs no external data or service, return no queries.
+Plan capability research for an HTMLApp. Return only zero or more tags in these two forms:
+<device_query>concise capability query</device_query>
+<query>concise public/web API discovery query</query>
+
+Use <device_query> whenever the requested app or revision touches iPhone/iPad hardware, sensors, camera/microphone, files, downloads/exports, sharing, contacts, photos, calendar, reminders, notifications, biometrics, secure storage, speech, authentication, background/system integration, or another capability that might be provided by HTMLApp itself. The internal device catalog returns exact supported methods, usage examples, and limitations.
+
+Use <query> only when the app needs real-world/live/current remote data or a remote service that cannot be satisfied locally. Prefer documented no-auth APIs, then documented browser-safe free tiers.
+
+It is valid to return both kinds. If neither device capabilities nor external services are needed, return no tags. If unsure whether HTMLApp provides a device capability, emit a <device_query> instead of guessing. Never invent a native bridge. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. Return at most six of each tag.
 """
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 700)
-        let completeValues = values("query", in: text)
-        if !completeValues.isEmpty {
-            return Array(completeValues.prefix(upTo: min(6, completeValues.count)))
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 900)
+
+        func plannedValues(_ tag: String) -> [String] {
+            let complete = values(tag, in: text)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !complete.isEmpty {
+                return Array(complete.prefix(upTo: min(6, complete.count)))
+            }
+            let partialValue = partial(tag, in: text)
+                .replacingOccurrences(of: "</", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return partialValue.isEmpty ? [] : [partialValue]
         }
-        let partialQuery = partial("query", in: text)
-            .replacingOccurrences(of: "</", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return partialQuery.isEmpty ? [] : [partialQuery]
+
+        return AIResearchPlan(
+            publicQueries: plannedValues("query"),
+            deviceQueries: plannedValues("device_query")
+        )
     }
 
     static func systemPrompt(research: String) -> String {
