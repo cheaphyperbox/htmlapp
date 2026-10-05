@@ -84,6 +84,7 @@ targets:
         NSLocationWhenInUseUsageDescription: HTML apps can request your location only after you allow that saved app and approve the iOS permission.
         NSMotionUsageDescription: HTML apps can use motion, orientation, and compass-related sensor events only after you allow that saved app.
         NSPhotoLibraryUsageDescription: HTML apps may request access to photos you select.
+        NSPhotoLibraryAddUsageDescription: HTML apps can save media to Photos only after you allow that saved app and approve the iOS permission.
         NSContactsUsageDescription: HTML apps can access contacts only after you allow that saved app and approve the iOS permission.
         NSCalendarsUsageDescription: HTML apps can read and create calendar events only after you allow that saved app and approve the iOS permission.
         NSCalendarsFullAccessUsageDescription: HTML apps can read and create calendar events only after you allow that saved app and approve the iOS permission.
