@@ -246,10 +246,14 @@ struct AIGenerationView: View {
                 session.phase = "Generating live preview"
                 webReport = ""
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this appears to be a simple local app request.")
-            } else {
+            } else if AIHTMLAgent.needsWebResearch(for: originalPrompt) {
                 session.phase = "Planning web research"
                 webReport = await browserResearch.research(for: originalPrompt)
                 AIDebugTraceStore.shared.append("WEB RESEARCH", webReport.isEmpty ? "No browser research result." : webReport)
+            } else {
+                session.phase = "Checking device capabilities"
+                webReport = ""
+                AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this request can be resolved against HTMLApp's internal device API catalog.")
             }
             await session.generate(
                 prompt: originalPrompt,
@@ -268,7 +272,6 @@ struct AIGenerationView: View {
         showingChange = false
         uiPolishNotice = nil
         session.isWorking = true
-        session.phase = "Planning web research"
         Task {
             let researchRequest = """
 Existing HTMLApp goal:
@@ -277,7 +280,16 @@ Existing HTMLApp goal:
 Requested edit:
 \(change)
 """
-            let webReport = await browserResearch.research(for: researchRequest)
+            let webReport: String
+            if AIHTMLAgent.needsWebResearch(for: researchRequest) {
+                session.phase = "Planning web research"
+                webReport = await browserResearch.research(for: researchRequest)
+                AIDebugTraceStore.shared.append("WEB RESEARCH", webReport.isEmpty ? "No browser research result." : webReport)
+            } else {
+                session.phase = "Checking device capabilities"
+                webReport = ""
+                AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this edit does not require public-web research; the internal device API catalog remains available.")
+            }
             await session.revise(change: change, researchReport: webReport)
             guard session.errorMessage == nil else { return }
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
