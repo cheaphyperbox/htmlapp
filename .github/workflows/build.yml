@@ -2,10 +2,6 @@ name: Build Unsigned IPA
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/build-request
 
 concurrency:
   group: htmlapp-main-build
@@ -60,21 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$PWD/DerivedData"
-          xcodebuild \
-            -project "HTMLApp.xcodeproj" \
-            -scheme "HTMLApp" \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            -derivedDataPath "$PWD/DerivedData" \
-            IPHONEOS_DEPLOYMENT_TARGET=16.0 \
-            TARGETED_DEVICE_FAMILY="1,2" \
-            SUPPORTS_MACCATALYST=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            SKIP_INSTALL=NO \
-            build
+          xcodebuild             -project "HTMLApp.xcodeproj"             -scheme "HTMLApp"             -configuration Release             -sdk iphoneos             -destination "generic/platform=iOS"             -derivedDataPath "$PWD/DerivedData"             IPHONEOS_DEPLOYMENT_TARGET=16.0             TARGETED_DEVICE_FAMILY="1,2"             SUPPORTS_MACCATALYST=NO             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             SKIP_INSTALL=NO             build
 
       - name: Verify icon and version metadata
         shell: bash
