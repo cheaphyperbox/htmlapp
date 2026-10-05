@@ -3,6 +3,8 @@ import UIKit
 import WebKit
 import Contacts
 import PhotosUI
+import Photos
+import UserNotifications
 import EventKit
 import LocalAuthentication
 import UniformTypeIdentifiers
@@ -58,16 +60,32 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.contacts, id: id) { [weak self] in self?.pickContact(id: id) }
         case "contacts.list":
             withPermission(.contacts, id: id) { [weak self] in self?.listContacts(id: id, args: args) }
+        case "contacts.create":
+            withPermission(.contacts, id: id) { [weak self] in self?.createContact(id: id, args: args) }
         case "photos.pick":
             withPermission(.photoLibrary, id: id) { [weak self] in self?.pickPhotos(id: id, args: args) }
+        case "photos.save":
+            withPermission(.photoLibrary, id: id) { [weak self] in self?.savePhotoLibraryAsset(id: id, args: args) }
         case "calendar.createEvent":
             withPermission(.calendar, id: id) { [weak self] in self?.createEvent(id: id, args: args) }
         case "calendar.events":
             withPermission(.calendar, id: id) { [weak self] in self?.listEvents(id: id, args: args) }
+        case "calendar.updateEvent":
+            withPermission(.calendar, id: id) { [weak self] in self?.updateEvent(id: id, args: args) }
+        case "calendar.deleteEvent":
+            withPermission(.calendar, id: id) { [weak self] in self?.deleteEvent(id: id, args: args) }
         case "reminders.create":
             withPermission(.reminders, id: id) { [weak self] in self?.createReminder(id: id, args: args) }
         case "reminders.list":
             withPermission(.reminders, id: id) { [weak self] in self?.listReminders(id: id, args: args) }
+        case "reminders.update":
+            withPermission(.reminders, id: id) { [weak self] in self?.updateReminder(id: id, args: args) }
+        case "reminders.delete":
+            withPermission(.reminders, id: id) { [weak self] in self?.deleteReminder(id: id, args: args) }
+        case "notifications.schedule":
+            withPermission(.notifications, id: id) { [weak self] in self?.scheduleNotification(id: id, args: args) }
+        case "notifications.cancel":
+            cancelNotifications(id: id, args: args)
         case "biometrics.authenticate":
             withPermission(.biometrics, id: id) { [weak self] in self?.authenticate(id: id, args: args) }
         case "secureStorage.set":
@@ -276,6 +294,53 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
     }
 
+    private func createContact(id: String, args: [String: Any]) {
+        let store = CNContactStore()
+        store.requestAccess(for: .contacts) { [weak self] granted, error in
+            Task { @MainActor in
+                guard let self else { return }
+                guard granted else {
+                    self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Contacts access was denied.")
+                    return
+                }
+
+                let contact = CNMutableContact()
+                contact.givenName = args["givenName"] as? String ?? ""
+                contact.familyName = args["familyName"] as? String ?? ""
+                contact.organizationName = args["organizationName"] as? String ?? ""
+
+                if let phones = args["phones"] as? [[String: Any]] {
+                    contact.phoneNumbers = phones.compactMap { item in
+                        guard let value = item["value"] as? String, !value.isEmpty else { return nil }
+                        let label = item["label"] as? String ?? CNLabelPhoneNumberMobile
+                        return CNLabeledValue(label: label, value: CNPhoneNumber(stringValue: value))
+                    }
+                }
+                if let emails = args["emails"] as? [[String: Any]] {
+                    contact.emailAddresses = emails.compactMap { item in
+                        guard let value = item["value"] as? String, !value.isEmpty else { return nil }
+                        let label = item["label"] as? String ?? CNLabelHome
+                        return CNLabeledValue(label: label, value: value as NSString)
+                    }
+                }
+
+                guard !contact.givenName.isEmpty || !contact.familyName.isEmpty || !contact.organizationName.isEmpty || !contact.phoneNumbers.isEmpty || !contact.emailAddresses.isEmpty else {
+                    self.reject(id, code: "invalid_arguments", message: "A contact needs at least a name, organization, phone number, or email address.")
+                    return
+                }
+
+                let request = CNSaveRequest()
+                request.add(contact, toContainerWithIdentifier: nil)
+                do {
+                    try store.execute(request)
+                    self.resolve(id, value: ["id": contact.identifier, "created": true])
+                } catch {
+                    self.reject(id, code: "contacts_failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
     private func contactPayload(_ contact: CNContact) -> [String: Any] {
         let phones = contact.phoneNumbers.map { ["label": CNLabeledValue<NSString>.localizedString(forLabel: $0.label ?? ""), "value": $0.value.stringValue] }
         let emails = contact.emailAddresses.map { ["label": CNLabeledValue<NSString>.localizedString(forLabel: $0.label ?? ""), "value": String($0.value)] }
@@ -362,6 +427,36 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
     }
 
+    private func savePhotoLibraryAsset(id: String, args: [String: Any]) {
+        guard let relative = args["url"] as? String,
+              let source = localResourceURL(relative) else {
+            reject(id, code: "invalid_arguments", message: "photos.save requires a local relative url returned by HTMLAppNative.files.pick or photos.pick.")
+            return
+        }
+
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
+            guard let self else { return }
+            guard status == .authorized || status == .limited else {
+                Task { @MainActor in
+                    self.reject(id, code: "system_permission_denied", message: "iOS Photos add permission was denied.")
+                }
+                return
+            }
+
+            let type = UTType(filenameExtension: source.pathExtension)
+            let resourceType: PHAssetResourceType = type?.conforms(to: .movie) == true ? .video : .photo
+            PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: resourceType, fileURL: source, options: nil)
+            } completionHandler: { success, error in
+                Task { @MainActor in
+                    if success { self.resolve(id, value: ["saved": true]) }
+                    else { self.reject(id, code: "photos_save_failed", message: error?.localizedDescription ?? "The media could not be saved to Photos.") }
+                }
+            }
+        }
+    }
+
     private func createEvent(id: String, args: [String: Any]) {
         requestCalendarAccess { [weak self] granted, error in
             guard let self else { return }
@@ -417,6 +512,56 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 ] as [String: Any]
             }
             self.resolve(id, value: events)
+        }
+    }
+
+    private func updateEvent(id: String, args: [String: Any]) {
+        requestCalendarAccess { [weak self] granted, error in
+            guard let self else { return }
+            guard granted else {
+                self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Calendar access was denied.")
+                return
+            }
+            guard let eventID = args["id"] as? String,
+                  let event = self.eventStore.event(withIdentifier: eventID) else {
+                self.reject(id, code: "not_found", message: "The calendar event could not be found.")
+                return
+            }
+            if let title = args["title"] as? String { event.title = title }
+            if let start = self.date(from: args["start"]) { event.startDate = start }
+            if let end = self.date(from: args["end"]) { event.endDate = end }
+            if let notes = args["notes"] as? String { event.notes = notes }
+            if let location = args["location"] as? String { event.location = location }
+            if let allDay = args["allDay"] as? Bool { event.isAllDay = allDay }
+            if let rawURL = args["url"] as? String { event.url = rawURL.isEmpty ? nil : URL(string: rawURL) }
+            if event.endDate <= event.startDate { event.endDate = event.startDate.addingTimeInterval(60) }
+            do {
+                try self.eventStore.save(event, span: .thisEvent, commit: true)
+                self.resolve(id, value: ["id": event.eventIdentifier ?? eventID, "updated": true])
+            } catch {
+                self.reject(id, code: "calendar_failed", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func deleteEvent(id: String, args: [String: Any]) {
+        requestCalendarAccess { [weak self] granted, error in
+            guard let self else { return }
+            guard granted else {
+                self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Calendar access was denied.")
+                return
+            }
+            guard let eventID = args["id"] as? String,
+                  let event = self.eventStore.event(withIdentifier: eventID) else {
+                self.reject(id, code: "not_found", message: "The calendar event could not be found.")
+                return
+            }
+            do {
+                try self.eventStore.remove(event, span: .thisEvent, commit: true)
+                self.resolve(id, value: ["deleted": true])
+            } catch {
+                self.reject(id, code: "calendar_failed", message: error.localizedDescription)
+            }
         }
     }
 
@@ -494,6 +639,58 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
     }
 
+    private func updateReminder(id: String, args: [String: Any]) {
+        requestReminderAccess { [weak self] granted, error in
+            guard let self else { return }
+            guard granted else {
+                self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Reminders access was denied.")
+                return
+            }
+            guard let reminderID = args["id"] as? String,
+                  let reminder = self.eventStore.calendarItem(withIdentifier: reminderID) as? EKReminder else {
+                self.reject(id, code: "not_found", message: "The reminder could not be found.")
+                return
+            }
+            if let title = args["title"] as? String { reminder.title = title }
+            if let notes = args["notes"] as? String { reminder.notes = notes }
+            if let completed = args["completed"] as? Bool { reminder.isCompleted = completed }
+            if args.keys.contains("due") {
+                if let due = self.date(from: args["due"]) {
+                    reminder.dueDateComponents = Calendar.current.dateComponents(in: TimeZone.current, from: due)
+                } else {
+                    reminder.dueDateComponents = nil
+                }
+            }
+            do {
+                try self.eventStore.save(reminder, commit: true)
+                self.resolve(id, value: ["id": reminder.calendarItemIdentifier, "updated": true])
+            } catch {
+                self.reject(id, code: "reminder_failed", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func deleteReminder(id: String, args: [String: Any]) {
+        requestReminderAccess { [weak self] granted, error in
+            guard let self else { return }
+            guard granted else {
+                self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS Reminders access was denied.")
+                return
+            }
+            guard let reminderID = args["id"] as? String,
+                  let reminder = self.eventStore.calendarItem(withIdentifier: reminderID) as? EKReminder else {
+                self.reject(id, code: "not_found", message: "The reminder could not be found.")
+                return
+            }
+            do {
+                try self.eventStore.remove(reminder, commit: true)
+                self.resolve(id, value: ["deleted": true])
+            } catch {
+                self.reject(id, code: "reminder_failed", message: error.localizedDescription)
+            }
+        }
+    }
+
     private func requestReminderAccess(_ completion: @escaping @MainActor (Bool, Error?) -> Void) {
         if #available(iOS 17.0, *) {
             eventStore.requestFullAccessToReminders { granted, error in
@@ -503,6 +700,58 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             eventStore.requestAccess(to: .reminder) { granted, error in
                 Task { @MainActor in completion(granted, error) }
             }
+        }
+    }
+
+    private func scheduleNotification(id: String, args: [String: Any]) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
+            guard let self else { return }
+            guard granted else {
+                Task { @MainActor in
+                    self.reject(id, code: "system_permission_denied", message: error?.localizedDescription ?? "iOS notification permission was denied.")
+                }
+                return
+            }
+            Task { @MainActor in
+                let content = UNMutableNotificationContent()
+                content.title = args["title"] as? String ?? "HTMLApp"
+                content.body = args["body"] as? String ?? ""
+                content.sound = (args["silent"] as? Bool ?? false) ? nil : .default
+
+                let requestedID = (args["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let identifier = "native.\(self.appID)." + ((requestedID?.isEmpty == false ? requestedID! : UUID().uuidString))
+                let fireDate = self.date(from: args["at"])
+                let seconds = max(1, fireDate?.timeIntervalSinceNow ?? (args["afterSeconds"] as? Double ?? 1))
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+
+                UNUserNotificationCenter.current().add(request) { error in
+                    Task { @MainActor in
+                        if let error { self.reject(id, code: "notification_failed", message: error.localizedDescription) }
+                        else { self.resolve(id, value: ["id": identifier, "scheduled": true]) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func cancelNotifications(id: String, args: [String: Any]) {
+        let center = UNUserNotificationCenter.current()
+        let prefix = "native.\(appID)."
+        if let rawID = args["id"] as? String, !rawID.isEmpty {
+            let identifier = rawID.hasPrefix(prefix) ? rawID : prefix + rawID
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            center.removeDeliveredNotifications(withIdentifiers: [identifier])
+            resolve(id, value: ["cancelled": true])
+            return
+        }
+
+        center.getPendingNotificationRequests { [weak self] requests in
+            guard let self else { return }
+            let ids = requests.map(\.identifier).filter { $0.hasPrefix(prefix) }
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+            center.removeDeliveredNotifications(withIdentifiers: ids)
+            Task { @MainActor in self.resolve(id, value: ["cancelled": true, "count": ids.count]) }
         }
     }
 
@@ -674,6 +923,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
     }
 
+    private func localResourceURL(_ relative: String) -> URL? {
+        guard !relative.isEmpty,
+              !relative.hasPrefix("/"),
+              !relative.contains("..") else { return nil }
+        let root = SourceCache.shared.baseURL(appID: appID).standardizedFileURL
+        let candidate = root.appendingPathComponent(relative).standardizedFileURL
+        guard candidate.path.hasPrefix(root.path + "/"),
+              FileManager.default.fileExists(atPath: candidate.path) else { return nil }
+        return candidate
+    }
+
     private func safeFilename(_ raw: String) -> String {
         let forbidden = CharacterSet(charactersIn: "/\\:?%*|\"<>\n\r\t")
         let cleaned = raw.components(separatedBy: forbidden).joined(separator: "_").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -773,18 +1033,28 @@ enum HTMLNativeAPIScript {
         },
         contacts: {
           pick: () => call('contacts.pick'),
-          list: (options = {}) => call('contacts.list', options)
+          list: (options = {}) => call('contacts.list', options),
+          create: (contact) => call('contacts.create', contact || {})
         },
         photos: {
-          pick: (options = {}) => call('photos.pick', options)
+          pick: (options = {}) => call('photos.pick', options),
+          save: (url) => call('photos.save', { url: String(url || '') })
         },
         calendar: {
           createEvent: (event) => call('calendar.createEvent', event || {}),
-          events: (options = {}) => call('calendar.events', options)
+          events: (options = {}) => call('calendar.events', options),
+          updateEvent: (event) => call('calendar.updateEvent', event || {}),
+          deleteEvent: (id) => call('calendar.deleteEvent', { id: String(id || '') })
         },
         reminders: {
           create: (reminder) => call('reminders.create', reminder || {}),
-          list: (options = {}) => call('reminders.list', options)
+          list: (options = {}) => call('reminders.list', options),
+          update: (reminder) => call('reminders.update', reminder || {}),
+          delete: (id) => call('reminders.delete', { id: String(id || '') })
+        },
+        notifications: {
+          schedule: (notification) => call('notifications.schedule', notification || {}),
+          cancel: (options = {}) => call('notifications.cancel', options)
         },
         biometrics: {
           authenticate: (options = {}) => call('biometrics.authenticate', options)
