@@ -82,6 +82,10 @@ final class AIGenerationSession: ObservableObject {
                 let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
 
                 let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+                AIDebugTraceStore.shared.append(
+                    "DEVICE API RESEARCH",
+                    deviceResearch.isEmpty ? "No internal device capability research was needed." : deviceResearch
+                )
                 let publicResearch: String
                 if suppliedResearch.isEmpty {
                     if plan.isEmpty {
@@ -181,9 +185,16 @@ final class AIGenerationSession: ObservableObject {
             phase = "Checking APIs for this change"
             let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
             let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
-            let publicResearch = suppliedResearch.isEmpty
-                ? await SafePublicAPIResearch.research(queries: plan.publicQueries)
-                : ""
+            AIDebugTraceStore.shared.append(
+                "DEVICE API RESEARCH",
+                deviceResearch.isEmpty ? "No internal device capability research was needed for this edit." : deviceResearch
+            )
+            let publicResearch: String
+            if suppliedResearch.isEmpty {
+                publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
+            } else {
+                publicResearch = ""
+            }
             let research = [deviceResearch, suppliedResearch, publicResearch]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
