@@ -47,6 +47,7 @@ final class HTMLLocalNetworkBridge: NSObject, URLSessionDelegate, URLSessionTask
         session.invalidateAndCancel()
     }
 
+    @MainActor
     func handle(_ body: [String: Any]) {
         guard let action = body["action"] as? String else { return }
 
@@ -80,7 +81,8 @@ final class HTMLLocalNetworkBridge: NSObject, URLSessionDelegate, URLSessionTask
         }
     }
 
-    private func withLocalNetworkPermission(id: String, isSocket: Bool = false, action: @escaping () -> Void) {
+    @MainActor
+    private func withLocalNetworkPermission(id: String, isSocket: Bool = false, action: @escaping @MainActor () -> Void) {
         guard let permissionCoordinator else {
             sendFailure(id: id, code: "bridge_unavailable", message: "Local network bridge is unavailable.", socket: isSocket)
             return
