@@ -1,0 +1,53 @@
+name: Discord Build Delivery
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+
+jobs:
+  deliver:
+    if: github.event.issue.title == 'HTMLApp build delivery' && github.event.comment.user.login == 'mekabrine'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deliver summary and IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WEBHOOK_URL="$(jq -r '.comment.body' "$GITHUB_EVENT_PATH")"
+          echo "::add-mask::$WEBHOOK_URL"
+          case "$WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo "Unsupported Discord webhook URL."; exit 1 ;;
+          esac
+
+          MESSAGE="$(jq -r '.issue.body' "$GITHUB_EVENT_PATH")"
+
+          BODY="$(jq -nc --arg webhook "$WEBHOOK_URL" --arg content "$MESSAGE" '{
+            webhook_url: $webhook,
+            wait: true,
+            payload: {
+              content: $content,
+              username: "HTMLApp Build Bot",
+              allowed_mentions: {parse: []}
+            }
+          }')"
+
+          PROXY_STATUS="$(curl --silent --show-error --max-time 45             --output proxy-response.json             --write-out "%{http_code}"             --header "Content-Type: application/json"             --data-binary "$BODY"             "https://mekapc.hostish.site/api/webhook")"
+          echo "HOSTISH proxy HTTP status: $PROXY_STATUS"
+          test "$PROXY_STATUS" = "200" -o "$PROXY_STATUS" = "204"
+
+          curl --fail --location --silent --show-error             --header "Authorization: Bearer $GITHUB_TOKEN"             --header "Accept: application/vnd.github+json"             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/11791704996/zip"             --output artifact.zip
+
+          unzip -q artifact.zip
+          test -f HTMLApp-unsigned.ipa
+          echo "IPA bytes: $(wc -c < HTMLApp-unsigned.ipa)"
+
+          UPLOAD_STATUS="$(curl --silent --show-error --max-time 120             --output discord-upload.json             --write-out "%{http_code}"             -F 'payload_json={"content":"HTMLApp app-agent overhaul IPA attached.","allowed_mentions":{"parse":[]}}'             -F 'files[0]=@HTMLApp-unsigned.ipa;type=application/octet-stream'             "$WEBHOOK_URL?wait=true")"
+          echo "Discord attachment HTTP status: $UPLOAD_STATUS"
+          test "$UPLOAD_STATUS" = "200" -o "$UPLOAD_STATUS" = "204"
