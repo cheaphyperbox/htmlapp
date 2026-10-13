@@ -117,6 +117,11 @@ struct HTMLWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
+        controller.addUserScript(WKUserScript(
+            source: HTMLLocalNetworkScript.source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
         controller.add(context.coordinator, name: "htmlappLocation")
         controller.add(context.coordinator, name: "htmlappNotificationPermission")
         controller.add(context.coordinator, name: "htmlappNotification")
@@ -124,6 +129,7 @@ struct HTMLWebView: UIViewRepresentable {
         controller.add(context.coordinator, name: "htmlappSensorPermission")
         controller.add(context.coordinator, name: "htmlappDownload")
         controller.add(context.coordinator, name: "htmlappNative")
+        controller.add(context.coordinator, name: "htmlappNetwork")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         context.coordinator.attach(webView, initialHTML: html)
@@ -150,6 +156,8 @@ struct HTMLWebView: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "htmlappSensorPermission")
         controller.removeScriptMessageHandler(forName: "htmlappDownload")
         controller.removeScriptMessageHandler(forName: "htmlappNative")
+        controller.removeScriptMessageHandler(forName: "htmlappNetwork")
+        coordinator.shutdown()
         uiView.stopLoading()
     }
 
@@ -165,6 +173,7 @@ struct HTMLWebView: UIViewRepresentable {
         private var nativePermissions: NativePermissionCoordinator?
         private var locationPermissions: HTMLLocationBridge?
         private var nativeBridge: HTMLNativeAPIBridge?
+        private var localNetworkBridge: HTMLLocalNetworkBridge?
         private var downloadDestinations: [ObjectIdentifier: URL] = [:]
         private var blobTransfers: [String: BlobTransfer] = [:]
 
@@ -176,6 +185,12 @@ struct HTMLWebView: UIViewRepresentable {
             nativePermissions = NativePermissionCoordinator(webView: webView, appID: appID)
             locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
             nativeBridge = HTMLNativeAPIBridge(webView: webView, appID: appID, permissionCoordinator: nativePermissions)
+            localNetworkBridge = HTMLLocalNetworkBridge(webView: webView, permissionCoordinator: nativePermissions)
+        }
+
+        func shutdown() {
+            localNetworkBridge?.shutdown()
+            localNetworkBridge = nil
         }
 
         func webView(_ webView: WKWebView,
@@ -227,6 +242,9 @@ struct HTMLWebView: UIViewRepresentable {
 
             case "htmlappNative":
                 nativeBridge?.handle(body)
+
+            case "htmlappNetwork":
+                localNetworkBridge?.handle(body)
 
             default:
                 break
