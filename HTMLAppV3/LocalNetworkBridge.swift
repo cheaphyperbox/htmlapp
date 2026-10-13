@@ -1,10 +1,14 @@
 import Foundation
 import WebKit
+import Security
 
 /// Gives saved HTML apps a native path to private-LAN HTTP(S) and WebSocket
 /// endpoints. This keeps normal browser APIs working while avoiding WKWebView's
-/// local-file CORS limitations. TLS is still validated by iOS; HTMLApp does not
-/// bypass certificate trust.
+/// local-file CORS limitations. For private/local HTTPS and WSS endpoints only,
+/// normal iOS trust is attempted first. If the only missing piece is trust in the
+/// presented local certificate chain, HTMLApp may use that presented chain as a
+/// connection-scoped trust anchor; hostname/IP and certificate validity checks
+/// are still enforced by Security.framework.
 final class HTMLLocalNetworkBridge: NSObject, URLSessionDelegate, URLSessionTaskDelegate, URLSessionWebSocketDelegate {
     private weak var webView: WKWebView?
     private weak var permissionCoordinator: NativePermissionCoordinator?
@@ -340,6 +344,61 @@ final class HTMLLocalNetworkBridge: NSObject, URLSessionDelegate, URLSessionTask
         }
     }
 
+    // MARK: - Local TLS trust
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        let url = task.currentRequest?.url ?? task.originalRequest?.url
+        let challengeHost = challenge.protectionSpace.host.lowercased()
+        guard let url,
+              Self.isAllowedLocalURL(url, schemes: ["https", "wss"]),
+              Self.isLocalHost(challengeHost),
+              url.host?.lowercased() == challengeHost else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        // Keep standard system trust whenever it already succeeds.
+        if SecTrustEvaluateWithError(trust, nil) {
+            completionHandler(.useCredential, URLCredential(trust: trust))
+            return
+        }
+
+        // The local bridge is already restricted to loopback/RFC1918/link-local
+        // hosts and gated by HTMLApp's per-app Local Network permission. For those
+        // hosts only, trust the certificate chain presented by that endpoint for
+        // this connection, then re-run Apple's SSL policy checks. This handles a
+        // private CA or self-signed local certificate without globally weakening
+        // TLS and without disabling host/IP or validity-date verification.
+        guard Self.evaluatePresentedLocalTrust(trust) else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        completionHandler(.useCredential, URLCredential(trust: trust))
+    }
+
+    private static func evaluatePresentedLocalTrust(_ trust: SecTrust) -> Bool {
+        let count = SecTrustGetCertificateCount(trust)
+        guard count > 0,
+              let presentedAnchor = SecTrustGetCertificateAtIndex(trust, count - 1),
+              SecTrustSetAnchorCertificates(trust, [presentedAnchor] as CFArray) == errSecSuccess,
+              SecTrustSetAnchorCertificatesOnly(trust, false) == errSecSuccess else {
+            return false
+        }
+        return SecTrustEvaluateWithError(trust, nil)
+    }
+
     // MARK: - Helpers
 
     private func friendlyNetworkError(_ error: NSError, url: URL?) -> String {
@@ -350,7 +409,7 @@ final class HTMLLocalNetworkBridge: NSObject, URLSessionDelegate, URLSessionTask
                  NSURLErrorServerCertificateHasUnknownRoot,
                  NSURLErrorServerCertificateNotYetValid,
                  NSURLErrorSecureConnectionFailed:
-                return "TLS trust failed for \(url?.host ?? "the local server"). Trust the server's local CA/certificate in iOS, then retry."
+                return "TLS trust failed for \(url?.host ?? "the local server"). HTMLApp accepted the presented local trust chain only if its certificate was valid for this host/IP and date. Check the certificate SAN and the device/server clocks."
             case NSURLErrorCannotConnectToHost:
                 return "Could not connect to \(url?.host ?? "the local server"). Make sure the device is on the same LAN and Local Network access is enabled for HTMLApp."
             case NSURLErrorTimedOut:
