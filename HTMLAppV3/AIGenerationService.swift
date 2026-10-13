@@ -1172,21 +1172,46 @@ Icon direction: infer the most distinctive product metaphor yourself. Do not req
         html: String,
         iconScript: String,
         originalPrompt: String,
+        research: String,
+        localIssues: [String],
+        pass: Int,
         config: AIProviderConfiguration
     ) async throws -> String {
         let system = """
-You are a fresh final artifact verifier. You have no access to any previous AI conversation, research, planning, or generation context. Judge only the three artifacts supplied by the user: their original prompt, the finished HTML app, and its icon drawing script.
+You are HTMLApp Forge's independent release-gate reviewer. Treat the supplied HTML as a real app candidate, not a design exercise. Find concrete defects that would stop or materially degrade the user's requested outcome, and repair them with the smallest exact patch.
 
-Check whether the HTML substantially fulfills the original prompt, is structurally complete, and has obvious source-level functional errors. Check whether the icon is valid in concept and appropriately represents the same app. Do not redesign working code merely for preference. If a concrete HTML defect prevents the request from being fulfilled, return a minimal exact SEARCH/REPLACE patch. If the icon is missing, malformed, or mismatched, return a complete replacement icon script.
+Audit in this order:
+1. REQUEST COVERAGE — core requested behavior exists and is not replaced by decorative UI or fake data.
+2. FUNCTIONAL PATHS — visible controls, navigation, forms, state transitions, CRUD operations, imports/exports, and primary actions have coherent handlers.
+3. DATA/STATE — important user data survives expected rerenders/navigation, persistence is appropriate, IDs are stable where needed, and success is not shown before operations complete.
+4. ASYNC/NETWORK — fetches and native calls handle loading/failure, stale results, races, cancellation where relevant, malformed responses, and honest offline behavior.
+5. CAPABILITIES — APIs/native bridges are supported by the supplied evidence or are properly feature-detected. Never approve invented native methods or guessed endpoint fields.
+6. PRIVACY/SECURITY — no embedded secrets, unsafe insertion of untrusted content, or unnecessary sensitive-data transmission.
+7. LIFECYCLE — timers, listeners, media tracks, sensors, sockets, workers, observers, and object URLs are cleaned up where relevant.
+8. MOBILE UX — safe areas, keyboard/scrolling, touch targets, phone/iPad resizing, dark/light presentation, and reduced-motion/accessibility behavior are plausible from source.
+9. SOURCE INTEGRITY — no obvious broken references, unbalanced structure, placeholder endpoints/keys, dead controls, or source-level syntax mistakes.
+10. ICON — icon script is valid, app-specific, and matches the product identity.
+
+Use the local static warnings as leads, not unquestionable facts. Use research evidence only to constrain factual/API claims; do not extrapolate beyond it. Do not claim you visually rendered, executed, or device-tested code you only inspected.
+
+Do not rewrite functioning code for taste. Patch only concrete defects. SEARCH text must be copied exactly from the supplied HTML and be as small and unique as practical. If there is no concrete defect worth changing, leave <htmlapp_patch> empty. Replace the icon only if it is actually missing, invalid, or mismatched.
 
 Return only:
-<verification>brief result</verification>
+<verification>concise release-gate result, including remaining limitations</verification>
 <htmlapp_patch>optional exact SEARCH/REPLACE blocks</htmlapp_patch>
 <icon_script>optional complete replacement icon script</icon_script>
 """
         let user = """
+REVIEW PASS: \(pass)
+
 ORIGINAL PROMPT:
 \(originalPrompt)
+
+LOCAL STATIC WARNINGS:
+\(localIssues.isEmpty ? "None." : localIssues.joined(separator: "\n"))
+
+CAPABILITY / API EVIDENCE:
+\(research.isEmpty ? "No additional research evidence was supplied." : research)
 
 HTML:
 <htmlapp_existing>
@@ -1198,7 +1223,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 15, maxTokens: 1200)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 2200)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
