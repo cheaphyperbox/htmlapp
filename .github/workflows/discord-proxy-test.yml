@@ -1,0 +1,39 @@
+name: Discord Proxy Test
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  relay:
+    if: github.event.issue.title == 'HTMLApp Discord relay' && github.event.comment.user.login == 'mekabrine'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test message through HOSTISH
+        shell: bash
+        env:
+          WEBHOOK_URL: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          case "$WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo "Comment was not a supported Discord webhook URL."; exit 1 ;;
+          esac
+
+          BODY="$(jq -nc --arg webhook "$WEBHOOK_URL" '{
+            webhook_url: $webhook,
+            wait: true,
+            payload: {
+              content: "HTMLApp webhook proxy test succeeded.",
+              username: "HTMLApp Build Bot",
+              allowed_mentions: {parse: []}
+            }
+          }')"
+
+          STATUS="$(curl --silent --show-error --max-time 30             --output response.json             --write-out "%{http_code}"             --header "Content-Type: application/json"             --data-binary "$BODY"             "https://mekapc.hostish.site/api/webhook")"
+
+          echo "HOSTISH proxy HTTP status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            jq '{id, channel_id, content, attachments}' response.json
+          fi
+          test "$STATUS" = "200" -o "$STATUS" = "204"
