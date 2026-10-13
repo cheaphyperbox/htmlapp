@@ -374,28 +374,66 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
     }
 
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
-        phase = "Verifying everything is in place"
+        verificationReport = ""
         do {
-            let response = try await AIHTMLAgent.reviewArtifact(
-                html: streamedHTML,
-                iconScript: iconScript,
-                originalPrompt: originalPrompt,
-                config: config
-            )
-            verificationReport = AIHTMLAgent.verification(from: response)
+            var changedOnPreviousPass = false
 
-            let patch = AIHTMLAgent.patch(from: response)
-            if !patch.trimmed.isEmpty, let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
-                streamedHTML = repaired
-                verificationReport += verificationReport.isEmpty ? "Verification repaired the HTML." : "\nVerification repaired the HTML."
+            for pass in 1...2 {
+                phase = pass == 1 ? "Auditing the finished app" : "Rechecking repaired app"
+                let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
+                let response = try await AIHTMLAgent.reviewArtifact(
+                    html: streamedHTML,
+                    iconScript: iconScript,
+                    originalPrompt: originalPrompt,
+                    research: lastResearch,
+                    localIssues: localIssues,
+                    pass: pass,
+                    config: config
+                )
+
+                let summary = AIHTMLAgent.verification(from: response)
+                if !summary.isEmpty {
+                    verificationReport += verificationReport.isEmpty
+                        ? "Pass \(pass): \(summary)"
+                        : "\nPass \(pass): \(summary)"
+                }
+
+                var changedThisPass = false
+                let patch = AIHTMLAgent.patch(from: response)
+                if !patch.trimmed.isEmpty {
+                    if let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
+                        streamedHTML = repaired
+                        changedThisPass = true
+                        verificationReport += "\nPass \(pass) repaired the HTML."
+                    } else {
+                        AIDebugTraceStore.shared.append("VERIFIER PATCH", "Pass \(pass) proposed a patch that did not apply exactly; the existing app was preserved.")
+                    }
+                }
+
+                let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !correctedIcon.isEmpty, correctedIcon != iconScript {
+                    iconScript = correctedIcon
+                    renderedIconData = nil
+                    try await ensureValidIcon(config: config)
+                    changedThisPass = true
+                    verificationReport += "\nPass \(pass) repaired the icon."
+                }
+
+                changedOnPreviousPass = changedThisPass
+                if !changedThisPass { break }
             }
 
-            let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !correctedIcon.isEmpty, correctedIcon != iconScript {
-                iconScript = correctedIcon
-                renderedIconData = nil
-                try await ensureValidIcon(config: config)
-                verificationReport += verificationReport.isEmpty ? "Verification repaired the icon." : "\nVerification repaired the icon."
+            let remainingLocalIssues = HTMLQualityChecks.issues(in: streamedHTML)
+            if remainingLocalIssues.isEmpty {
+                verificationReport += verificationReport.isEmpty
+                    ? "Local structural checks passed."
+                    : "\nLocal structural checks passed."
+            } else {
+                verificationReport += "\nRemaining local checks: " + remainingLocalIssues.joined(separator: " ")
+            }
+
+            if changedOnPreviousPass {
+                AIDebugTraceStore.shared.append("VERIFIER", "The second verifier pass made a repair; local structural checks were run again afterward.")
             }
         } catch {
             let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
@@ -694,11 +732,9 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
     ]
 
     static func canSkipPreflight(for prompt: String) -> Bool {
-        let value = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, value.count <= 160 else { return false }
-        let lower = value.lowercased()
-        return !webResearchSignals.contains(where: { lower.contains($0) }) &&
-            !deviceCapabilitySignals.contains(where: { lower.contains($0) })
+        // Deliberately keep the product-planning pass enabled even for terse prompts.
+        // Short requests are where requirement inference and sensible defaults help most.
+        false
     }
 
     static func needsWebResearch(for prompt: String) -> Bool {
@@ -708,15 +744,36 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
 
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
         let system = """
-Turn the user's app idea into a stronger, concise implementation brief. Preserve the user's intent and do not add unsupported requirements. Clarify likely screens, interactions, data needs, mobile behavior, animation/motion, empty/loading/error states, and what must be real versus local. Do not invent data or APIs. Return only <brief>...</brief>.
+You are HTMLApp Forge's product-specification agent. Convert the user's raw app idea into a compact but implementation-ready product brief for another coding agent.
+
+Preserve the user's actual intent. Do not inflate the scope with generic startup features. Infer sensible defaults where the request is underspecified, but never invent live data sources, native capabilities, accounts, APIs, or backend infrastructure.
+
+The brief must explicitly cover:
+- OUTCOME: what success means for the user
+- CORE LOOP: entry -> primary action -> result -> repeat
+- MUST FEATURES: behavior that cannot be omitted
+- STRUCTURE: screens/navigation/sheets/overlays only where useful
+- DATA MODEL: important entities, state, persistence, import/export, and source of truth
+- CAPABILITIES: browser/native/network needs that require verification
+- STATES: loading/empty/error/offline/permission/unsupported/invalid/destructive states that genuinely apply
+- EXPERIENCE: phone-first interaction, iPad behavior, accessibility, visual direction, and meaningful motion
+- ACCEPTANCE: observable conditions the finished app must satisfy
+
+Prefer the smallest complete product over a feature list. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 45, maxTokens: 1400)
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 55, maxTokens: 2200)
         return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
     }
 
     static func refineRevision(_ change: String, appBrief: String, config: AIProviderConfiguration) async throws -> String {
-        let system = "Return a precise patch request that preserves everything not explicitly changed. Resolve ambiguity conservatively. Include mobile animation/state implications when relevant. Never invent facts or fake live data. Return only <brief>...</brief>."
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 45, maxTokens: 1400)
+        let system = """
+You are HTMLApp Forge's change-planning agent. Turn the requested edit into a precise implementation brief for an existing working app.
+
+Preserve every behavior, storage key, API integration, navigation path, visual convention, and user-created-data assumption that the user did not ask to change. Identify the smallest coherent change surface, any state/data migration implications, edge cases, and acceptance criteria. Resolve ambiguity conservatively and prefer reversible edits. Never invent facts, APIs, capabilities, or live data.
+
+Return only <brief>...</brief>.
+"""
+        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 55, maxTokens: 2000)
         return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
     }
 
