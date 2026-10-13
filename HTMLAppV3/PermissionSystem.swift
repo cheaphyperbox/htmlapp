@@ -15,6 +15,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case calendar
     case reminders
     case biometrics
+    case localNetwork
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .calendar: return "Calendar"
         case .reminders: return "Reminders"
         case .biometrics: return "Biometrics"
+        case .localNetwork: return "Local Network"
         }
     }
 
@@ -43,6 +45,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .calendar: return "Allows this HTML app to read and create calendar events through EventKit."
         case .reminders: return "Allows this HTML app to read and create reminders through EventKit."
         case .biometrics: return "Allows this HTML app to request Face ID, Touch ID, or device authentication."
+        case .localNetwork: return "Allows this HTML app to connect to devices and servers on your private Wi-Fi or LAN."
         }
     }
 
@@ -57,6 +60,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .calendar: return "calendar"
         case .reminders: return "checklist"
         case .biometrics: return "faceid"
+        case .localNetwork: return "network"
         }
     }
 }
