@@ -84,7 +84,7 @@ enum AISettingsStore {
 
     static let nativeAPIReference = """
 HTMLAPP NATIVE API REFERENCE (always available in saved apps):
-window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop.
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, externalApps.maps/shortcuts, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop.
 
 The generation pipeline can also inject HTMLAPP DEVICE API CATALOG RESULTS. Those results are the authoritative searchable reference for exact method names, usage examples, return-shape notes, permission expectations, and limitations. Prefer them over remembered assumptions about iOS or Safari. If the catalog says a capability is unavailable, do not invent a bridge for it.
 
@@ -268,6 +268,8 @@ HTMLApp injects a promise-based native API wrapper into saved apps. Use these ex
 - HTMLAppNative.haptics.play(pattern) -> native impact haptics. navigator.vibrate(...) remains the simpler web-compatible option.
 - HTMLAppNative.share.present({text?, url?}) -> native iOS share sheet.
 - HTMLAppNative.system.open(url) -> user-initiated iOS handoff for supported URLs such as https:, mailto:, tel:, and sms:.
+- HTMLAppNative.externalApps.maps({query?,latitude?,longitude?,name?,directions?}) -> opens Apple Maps to a search or coordinate; directions true requests a driving-directions handoff.
+- HTMLAppNative.externalApps.shortcuts(name,input?) -> asks iOS Shortcuts to run a named user-installed Shortcut with optional text input. This does not create or silently install shortcuts.
 - HTMLAppNative.files.pick({multiple?}) -> native Files document picker. Resolves to an array of {name,url,mimeType,size}; url is a relative local URL readable by the current HTMLApp.
 - HTMLAppNative.contacts.pick() -> native Contacts picker for one contact.
 - HTMLAppNative.contacts.list({limit?}) -> requests Contacts permission, then returns real native contacts with names, organization, phones, emails, postal addresses, and birthday fields when present.
