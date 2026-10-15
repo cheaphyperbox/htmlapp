@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 struct HTMLAppPortableBundle: Codable {
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     var formatVersion: Int
     var exportedAt: Date
@@ -11,6 +11,7 @@ struct HTMLAppPortableBundle: Codable {
     var links: [LibraryAppLink]
     var permissionChoices: [String: [String: String]]
     var sensorChoices: [String: String]
+    var appData: [String: [String: String]]?
 }
 
 enum HTMLAppPackageError: LocalizedError {
@@ -57,7 +58,10 @@ enum HTMLAppPackageTransfer {
             folders: folders,
             links: links.filter { appIDs.contains($0.appID) },
             permissionChoices: permissionChoices,
-            sensorChoices: sensorChoices
+            sensorChoices: sensorChoices,
+            appData: Dictionary(uniqueKeysWithValues: apps.map {
+                ($0.id, HTMLAppPortableDataStore.all(appID: $0.id))
+            })
         )
 
         let encoder = JSONEncoder()
