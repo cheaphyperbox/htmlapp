@@ -1,0 +1,67 @@
+import Foundation
+
+enum HTMLAppPortableDataStore {
+    private static let queue = DispatchQueue(label: "com.mekabrine.htmlapp.portable-data")
+    private static let root: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HTMLApp", isDirectory: true)
+            .appendingPathComponent("PortableAppData", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }()
+
+    static func get(appID: String, key: String) -> String? {
+        queue.sync { load(appID: appID)[key] }
+    }
+
+    static func set(appID: String, key: String, value: String) {
+        queue.sync {
+            var values = load(appID: appID)
+            values[key] = value
+            persist(values, appID: appID)
+        }
+    }
+
+    static func remove(appID: String, key: String) {
+        queue.sync {
+            var values = load(appID: appID)
+            values.removeValue(forKey: key)
+            persist(values, appID: appID)
+        }
+    }
+
+    static func all(appID: String) -> [String: String] {
+        queue.sync { load(appID: appID) }
+    }
+
+    static func replace(appID: String, values: [String: String]) {
+        queue.sync { persist(values, appID: appID) }
+    }
+
+    static func clear(appID: String) {
+        queue.sync { try? FileManager.default.removeItem(at: url(appID: appID)) }
+    }
+
+    private static func load(appID: String) -> [String: String] {
+        guard let data = try? Data(contentsOf: url(appID: appID)),
+              let values = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return values
+    }
+
+    private static func persist(_ values: [String: String], appID: String) {
+        let destination = url(appID: appID)
+        if values.isEmpty {
+            try? FileManager.default.removeItem(at: destination)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(values) else { return }
+        try? data.write(to: destination, options: .atomic)
+    }
+
+    private static func url(appID: String) -> URL {
+        let safe = appID.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        return root.appendingPathComponent(safe.isEmpty ? "invalid" : safe).appendingPathExtension("json")
+    }
+}
