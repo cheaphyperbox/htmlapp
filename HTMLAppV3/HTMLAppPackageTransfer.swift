@@ -40,17 +40,10 @@ enum HTMLAppPackageTransfer {
         links: [LibraryAppLink]
     ) throws -> URL {
         let appIDs = Set(apps.map(\.id))
-        let permissionChoices = Dictionary(uniqueKeysWithValues: apps.map { app in
-            (
-                app.id,
-                Dictionary(uniqueKeysWithValues: HTMLPermission.allCases.map {
-                    ($0.rawValue, HTMLPermissionStore.choice(for: $0, appID: app.id).rawValue)
-                })
-            )
-        })
-        let sensorChoices = Dictionary(uniqueKeysWithValues: apps.map {
-            ($0.id, HTMLSensorPermissionPolicy.choice(appID: $0.id).rawValue)
-        })
+        // Permission grants are deliberately not transferred. A received HTMLApp
+        // must ask again on the destination device before sensitive native access.
+        let permissionChoices: [String: [String: String]] = [:]
+        let sensorChoices: [String: String] = [:]
 
         let bundle = HTMLAppPortableBundle(
             formatVersion: HTMLAppPortableBundle.currentVersion,
