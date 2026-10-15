@@ -782,20 +782,27 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
         let system = """
 You are HTMLApp Forge's product-specification agent. Convert the user's raw app idea into a compact but implementation-ready product brief for another coding agent.
 
-Preserve the user's actual intent. Do not inflate the scope with generic startup features. Infer sensible defaults where the request is underspecified, but never invent live data sources, native capabilities, accounts, APIs, or backend infrastructure.
+Preserve the user's actual intent, then think one step ahead: infer what the user is likely to ask for immediately after trying the first version. Add a small number of high-value adjacent features when they clearly advance the same goal. Do not inflate the scope with generic startup features, dashboards, accounts, analytics, or decorative complexity. Never invent live data sources, native capabilities, APIs, or backend infrastructure.
+
+Examples of good anticipation:
+- "Make a handbook for my e-bike" -> researched specifications for the exact model when identifiable, maintenance schedule, searchable troubleshooting, useful conversions, range/battery helpers, notes/bookmarks, and quick-reference safety info.
+- "Let me view a restaurant menu" -> nearby restaurant discovery when location/map data can be implemented honestly, recent/favorite places, map/list switching, and a fast place -> menu flow.
+Bad anticipation is adding unrelated social feeds, profiles, subscriptions, gamification, or remote infrastructure merely because many apps have them.
 
 The brief must explicitly cover:
 - OUTCOME: what success means for the user
 - CORE LOOP: entry -> primary action -> result -> repeat
 - MUST FEATURES: behavior that cannot be omitted
+- ANTICIPATED VALUE: 0-3 adjacent features the user would probably ask for next, with a one-line reason for each
 - STRUCTURE: screens/navigation/sheets/overlays only where useful
 - DATA MODEL: important entities, state, persistence, import/export, and source of truth
 - CAPABILITIES: browser/native/network needs that require verification
+- ONBOARDING: whether first-run setup is genuinely useful; if so, exactly what must be chosen/explained and how completion persists
 - STATES: loading/empty/error/offline/permission/unsupported/invalid/destructive states that genuinely apply
 - EXPERIENCE: phone-first interaction, iPad behavior, accessibility, visual direction, and meaningful motion
 - ACCEPTANCE: observable conditions the finished app must satisfy
 
-Prefer the smallest complete product over a feature list. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
+Prefer the smallest complete product that already feels like a thoughtful version 1. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
         let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 55, maxTokens: 2200)
         return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
@@ -867,6 +874,7 @@ Return these sections with no Markdown fences:
 <thinking>short updated implementation plan</thinking>
 <description>updated one-sentence description if materially changed, otherwise repeat the current purpose</description>
 <icon_script>updated icon script only if the app identity changed; otherwise leave empty</icon_script>
+<asset_scripts>optional new portable IconScript assets using ASSET filename / END_ASSET blocks; leave empty unless the edit genuinely needs generated artwork</asset_scripts>
 <htmlapp_patch>
 <<<<<<< SEARCH
 exact text copied from the existing HTML
@@ -894,19 +902,28 @@ RESEARCH RESULTS:
         config: AIProviderConfiguration
     ) async throws -> String {
         let system = """
-You are HTMLApp's specialist app-icon art director and vector illustrator. The user often gives NO icon-specific direction, so you must infer a strong concept from the app identity brief rather than waiting for extra details.
+You are HTMLApp's specialist iOS app-icon designer. Produce an icon that could plausibly ship beside polished App Store icons: simple, instantly understandable, balanced, and specific to this exact app.
 
-Return only <icon_script>...</icon_script> and nothing else.
+ICON DESIGN PROCESS:
+1. Identify the app's single primary job.
+2. Choose one concrete visual metaphor that communicates that job without text.
+3. Remove secondary ideas until the concept reads at thumbnail size.
+4. Build a large, centered silhouette with strong negative space and clean geometry.
+5. Add only restrained depth or supporting detail if it strengthens recognition.
+6. Mentally downscale to 64px and 32px; if the idea becomes muddy, simplify again.
 
-DESIGN STANDARD:
-- SIZE must be 1024 1024 and the icon should have an opaque full-canvas BG.
-- Invent one memorable, app-specific visual metaphor. Do not fall back to a generic circle + triangle + dot composition.
-- Match the app's purpose, vocabulary, and UI palette. If the app is an engine/editor/game tool, depict that idea; if it is weather, depict weather; if it is a calculator, depict calculation, etc.
-- Make the silhouette readable at 64px. Keep the important artwork roughly inside a 120px safe margin.
-- Use depth through layering, overlap, negative space, and at most a few restrained gradients.
-- Prefer 10-32 visible shape commands, with one dominant symbol and several supporting details. Avoid microscopic detail.
-- No text, letters, numbers, logos copied from third parties, emoji, SVG, HTML, prose, or comments.
-- Do not merely restyle the previous script when the repair note says the concept is weak; replace it with a better concept.
+QUALITY BAR:
+- SIZE must be 1024 1024 with an opaque full-canvas BG.
+- Aim for one dominant symbol and, at most, one supporting form.
+- Prefer about 6-18 visible shape commands. More detail is allowed only when genuinely necessary.
+- Use large shapes and intentional spacing. Avoid tiny decorative marks.
+- Make the icon understandable in about one second.
+- Match the app's palette/personality without drawing a screenshot of the interface.
+- Avoid generic AI imagery unless AI itself is the product: no automatic sparkles, magic wands, brains, chat bubbles, rockets, or purple-gradient filler.
+- Avoid generic "circle + triangle + dot" constructions unless they directly depict the product.
+- No text, letters, numbers, copied third-party logos, emoji, copyrighted characters, SVG, HTML, prose, or comments.
+- Keep key artwork away from extreme edges; iOS applies its own icon mask.
+- If the previous concept is weak or overcomplicated, replace the concept rather than cosmetically tweaking it.
 
 SUPPORTED COMMANDS ONLY:
 SIZE width height
@@ -1301,6 +1318,7 @@ You are HTMLApp's recovery editor. The previous app-generation response was trun
 <thinking>concise implementation plan</thinking>
 <description>one sentence</description>
 <icon_script>static icon drawing script</icon_script>
+<asset_scripts>optional ASSET filename / END_ASSET IconScript blocks needed by the recovered HTML</asset_scripts>
 <htmlapp_code><!DOCTYPE html>...one complete self-contained app...</htmlapp_code>
 No Markdown fences and no text outside those sections.
 """
