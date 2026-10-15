@@ -109,6 +109,33 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "iOS decides whether the URL can be opened. Never present the handoff as a silent/background action."
         ),
         .init(
+            id: "externalApps.maps",
+            title: "Apple Maps handoff",
+            keywords: ["map", "maps", "directions", "navigation", "restaurant", "place", "route", "coordinates", "latitude", "longitude"],
+            purpose: "Open Apple Maps to a search, place coordinate, or driving-directions handoff from a deliberate user action.",
+            api: "await HTMLAppNative.externalApps.maps({ query?, latitude?, longitude?, name?, directions? })",
+            example: """
+            await HTMLAppNative.externalApps.maps({
+              latitude: 33.4484,
+              longitude: -112.0740,
+              name: "Destination",
+              directions: true
+            });
+            """,
+            constraints: "This hands off to Apple Maps; it does not embed a map inside the HTMLApp. For an in-app map, use a legitimate browser-safe map library/service."
+        ),
+        .init(
+            id: "externalApps.shortcuts",
+            title: "Run an installed Shortcut",
+            keywords: ["shortcut", "shortcuts", "automation", "workflow", "handoff", "external app"],
+            purpose: "Ask iOS Shortcuts to run a user-installed named Shortcut with optional text input.",
+            api: "await HTMLAppNative.externalApps.shortcuts(name, input?)",
+            example: """
+            await HTMLAppNative.externalApps.shortcuts("Log Bike Ride", "12.4 miles");
+            """,
+            constraints: "The Shortcut must already exist on the device. HTMLApp does not create, install, or silently run arbitrary Shortcuts in the background."
+        ),
+        .init(
             id: "files.pick",
             title: "Native Files picker",
             keywords: ["file picker", "documents", "import file", "files app", "open document", "multiple files"],
