@@ -837,17 +837,11 @@ final class AppStore: ObservableObject {
     }
 
     private func restorePortablePermissions(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
-        for (oldID, choices) in bundle.permissionChoices {
-            guard let newID = appIDMap[oldID] else { continue }
-            for permission in HTMLPermission.allCases {
-                guard let raw = choices[permission.rawValue],
-                      let choice = HTMLPermissionChoice(rawValue: raw) else { continue }
-                HTMLPermissionStore.set(choice, for: permission, appID: newID)
-            }
-            if let raw = bundle.sensorChoices[oldID],
-               let choice = HTMLPermissionChoice(rawValue: raw) {
-                HTMLSensorPermissionPolicy.set(choice, appID: newID)
-            }
+        // A portable package may come from another person/device. Never inherit
+        // sensitive sub-app permission grants silently; require fresh consent.
+        for newID in appIDMap.values {
+            HTMLPermissionStore.reset(appID: newID)
+            HTMLSensorPermissionPolicy.reset(appID: newID)
         }
     }
 
