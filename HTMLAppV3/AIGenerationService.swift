@@ -942,6 +942,67 @@ RESEARCH RESULTS:
 """
     }
 
+    static func refineAssetScripts(
+        html: String,
+        originalPrompt: String,
+        drafts: [AIGeneratedAsset],
+        config: AIProviderConfiguration
+    ) async throws -> [AIGeneratedAsset] {
+        guard !drafts.isEmpty else { return [] }
+        let system = """
+You are HTMLApp's specialist portable-asset illustrator. Refine the supplied IconScript asset drafts into clean, useful original artwork for the finished app.
+
+Return only:
+<asset_scripts>
+ASSET filename.png
+SIZE width height
+...IconScript...
+END_ASSET
+</asset_scripts>
+
+RULES:
+- Preserve every draft filename exactly because the HTML already references {{HTMLAPP_ASSET:filename}} tokens.
+- Return one asset block for every supplied draft, at most six.
+- Keep the intended function of each asset, but simplify confusing or overly decorative compositions.
+- Artwork should be immediately understandable at its actual UI size, not overloaded like a poster.
+- Prefer strong silhouettes, clean geometry, restrained palettes, useful negative space, and only the detail needed for the asset's purpose.
+- Generated diagrams/illustrations must be original and must not imitate logos, copyrighted characters, trademarks, or proprietary product artwork.
+- Do not add text unless the draft absolutely requires a simple diagram label; in practice IconScript has no text command, so use shapes only.
+- Use only SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE, FILL_LINEAR, FILL_RADIAL, and FILL_TEXTURE.
+- SIZE may be 64 through 4096 pixels per side.
+- No Markdown, prose, comments, SVG, HTML, external URLs, ANIM, GROUP, or FPS.
+"""
+        let draftText = drafts.map { asset in
+            """
+            ASSET \(asset.name)
+            \(asset.script)
+            END_ASSET
+            """
+        }.joined(separator: "\n\n")
+        let user = """
+APP REQUEST:
+\(originalPrompt)
+
+CURRENT APP EXCERPT:
+\(String(html.prefix(12_000)))
+
+ASSET DRAFTS:
+\(draftText)
+"""
+        let response = try await AIProviderClient.complete(
+            config: config,
+            system: system,
+            messages: [("user", user)],
+            timeout: 55,
+            maxTokens: 5000
+        )
+        let parsed = parseAssetScripts(value("asset_scripts", in: response))
+        guard !parsed.isEmpty else { return drafts }
+
+        let byName = Dictionary(uniqueKeysWithValues: parsed.map { ($0.name, $0) })
+        return drafts.map { byName[$0.name] ?? $0 }
+    }
+
     static func generateIconScript(
         html: String,
         originalPrompt: String,
