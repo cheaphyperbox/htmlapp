@@ -80,7 +80,7 @@ struct HTMLAppDataTransferView: View {
                 } header: {
                     Text("Selective Export")
                 } footer: {
-                    Text("Folder placement, aliases, icons, permissions, HTML, embedded generated assets, and cached website files for the selected apps are included.")
+                    Text("Folder placement, aliases, icons, HTML, portable app data, embedded generated assets, and cached website files are included. Sensitive permissions always ask again on the receiving device.")
                 }
             }
 
