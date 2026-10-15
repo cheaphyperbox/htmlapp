@@ -75,11 +75,11 @@ final class AIGenerationSession: ObservableObject {
                 phase = "Generating live preview"
             } else {
                 phase = "Improving your prompt"
-                improved = try await AIHTMLAgent.refinePrompt(prompt, config: config)
+                improved = try await AIHTMLAgent.refinePrompt(prompt, config: AISettingsStore.configuration(for: .planner))
                 refinedBrief = improved
 
                 phase = "Planning APIs and capabilities"
-                let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: config)
+                let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: AISettingsStore.configuration(for: .planner))
 
                 let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
                 AIDebugTraceStore.shared.append(
@@ -179,11 +179,11 @@ final class AIGenerationSession: ObservableObject {
         verificationReport = ""
         do {
             phase = "Improving the requested change"
-            let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: config)
+            let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
 
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             phase = "Checking APIs for this change"
-            let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: config)
+            let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: AISettingsStore.configuration(for: .planner))
             let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
             AIDebugTraceStore.shared.append(
                 "DEVICE API RESEARCH",
@@ -342,7 +342,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                     originalPrompt: originalPrompt,
                     previousScript: candidate,
                     repairReason: repairReason,
-                    config: config
+                    config: AISettingsStore.configuration(for: .icon)
                 ).trimmingCharacters(in: .whitespacesAndNewlines)
                 if candidate.isEmpty {
                     repairReason = "The previous response omitted the mandatory <icon_script>. Return a complete replacement icon script."
@@ -388,7 +388,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                     research: lastResearch,
                     localIssues: localIssues,
                     pass: pass,
-                    config: config
+                    config: AISettingsStore.configuration(for: .verifier)
                 )
 
                 let summary = AIHTMLAgent.verification(from: response)
