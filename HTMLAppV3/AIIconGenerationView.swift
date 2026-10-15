@@ -126,7 +126,7 @@ struct AIIconGenerationView: View {
         errorMessage = nil
         status = "Designing icon…"
 
-        let config = AISettingsStore.configuration
+        let config = AISettingsStore.configuration(for: .icon)
         let direction = guidance.trimmingCharacters(in: .whitespacesAndNewlines)
         let purpose = """
 Generate a new icon for the existing HTMLApp named \(app.name).
