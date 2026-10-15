@@ -167,6 +167,52 @@ final class AppStore: ObservableObject {
         await SourceCache.shared.refresh(app: app, force: false)
     }
 
+    func addTransferredApp(_ incoming: SavedHTMLApp, portableData: [String: String]? = nil) async {
+        if let source = incoming.websiteSourceURL,
+           !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           (try? await addWebsite(urlString: source)) != nil {
+            if let imported = apps.first {
+                if let index = apps.firstIndex(where: { $0.id == imported.id }) {
+                    apps[index].summary = incoming.summary
+                    apps[index].isFavorite = incoming.isFavorite
+                    if let favicon = incoming.favicon { apps[index].favicon = favicon }
+                    save()
+                    if let portableData { HTMLAppPortableDataStore.replace(appID: apps[index].id, values: portableData) }
+                }
+            }
+            notice = "Received \(incoming.name) and refreshed its saved website."
+            return
+        }
+
+        let now = Date()
+        let id = makeID()
+        let destination = validPendingInsertionFolderID()
+        let icon = incoming.favicon ?? await HTMLAppIconTools.savedIcon(html: incoming.html, name: incoming.name)
+        let app = SavedHTMLApp(
+            id: id,
+            name: incoming.name,
+            summary: incoming.summary,
+            html: incoming.html,
+            favicon: icon,
+            createdAt: incoming.createdAt,
+            updatedAt: max(incoming.updatedAt, now),
+            lastOpenedAt: nil,
+            isFavorite: incoming.isFavorite,
+            folderName: nil,
+            folderID: destination,
+            websiteSourceURL: nil,
+            websiteFingerprint: nil
+        )
+        pendingInsertionFolderID = nil
+        apps.insert(app, at: 0)
+        if let portableData {
+            HTMLAppPortableDataStore.replace(appID: id, values: portableData)
+        }
+        save()
+        await SourceCache.shared.refresh(app: app, force: false)
+        notice = "Received \(app.name)."
+    }
+
     func addWebsite(urlString: String) async throws {
         guard let url = WebsiteArchiveManager.shared.normalizedURL(urlString) else { throw WebsiteArchiveError.invalidURL }
         let id = makeID()
