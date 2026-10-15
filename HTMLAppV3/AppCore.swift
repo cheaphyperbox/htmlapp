@@ -588,6 +588,7 @@ final class AppStore: ObservableObject {
             try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: identityMap)
             restorePortablePermissions(bundle: imported, appIDMap: identityMap)
             restorePortableAppData(bundle: imported, appIDMap: identityMap)
+            restorePortableWebsiteState(bundle: imported, appIDMap: identityMap)
 
             save()
             persistFolders()
@@ -662,6 +663,7 @@ final class AppStore: ObservableObject {
         try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: appIDMap)
         restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
         restorePortableAppData(bundle: imported, appIDMap: appIDMap)
+        restorePortableWebsiteState(bundle: imported, appIDMap: appIDMap)
 
         save()
         persistFolders()
@@ -809,6 +811,15 @@ final class AppStore: ObservableObject {
         for (oldID, values) in appData {
             guard let newID = appIDMap[oldID] else { continue }
             HTMLAppPortableDataStore.replace(appID: newID, values: values)
+        }
+    }
+
+
+    private func restorePortableWebsiteState(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
+        guard let states = bundle.websiteStates else { return }
+        for (oldID, state) in states {
+            guard let newID = appIDMap[oldID] else { continue }
+            WebsiteArchiveManager.shared.restorePortableState(state, appID: newID)
         }
     }
 
