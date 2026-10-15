@@ -8,11 +8,34 @@ struct OpticalImportPayload: Identifiable, Equatable {
     let id = UUID()
     let fileName: String
     let html: String
+    let app: SavedHTMLApp?
+
+    init(fileName: String, html: String, app: SavedHTMLApp? = nil) {
+        self.fileName = fileName
+        self.html = html
+        self.app = app
+    }
 }
 
 private struct OpticalEnvelope: Codable {
-    let fileName: String
-    let html: String
+    let formatVersion: Int?
+    let fileName: String?
+    let html: String?
+    let app: SavedHTMLApp?
+
+    init(fileName: String, html: String) {
+        self.formatVersion = 1
+        self.fileName = fileName
+        self.html = html
+        self.app = nil
+    }
+
+    init(app: SavedHTMLApp) {
+        self.formatVersion = 2
+        self.fileName = OpticalTransferCodec.safeFileName(app.name)
+        self.html = nil
+        self.app = app
+    }
 }
 
 enum OpticalTransferCodec {
@@ -21,11 +44,16 @@ enum OpticalTransferCodec {
     static let rawChunkSize = 550
 
     static func frames(for app: SavedHTMLApp) -> [String] {
-        frames(fileName: safeFileName(app.name), html: app.html)
+        guard let payload = try? JSONEncoder().encode(OpticalEnvelope(app: app)) else { return [] }
+        return frames(payload: payload)
     }
 
     static func frames(fileName: String, html: String) -> [String] {
         guard let payload = try? JSONEncoder().encode(OpticalEnvelope(fileName: fileName, html: html)) else { return [] }
+        return frames(payload: payload)
+    }
+
+    private static func frames(payload: Data) -> [String] {
         let transferID = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
         let chunks = stride(from: 0, to: payload.count, by: rawChunkSize).map {
             payload.subdata(in: $0..<min($0 + rawChunkSize, payload.count))
@@ -159,8 +187,23 @@ final class OpticalFrameCollector: ObservableObject {
             status = "The complete transfer could not be decoded."
             return
         }
-        status = "Transfer complete"
-        completedPayload = OpticalImportPayload(fileName: envelope.fileName, html: envelope.html)
+
+        if let app = envelope.app {
+            status = "Transfer complete"
+            completedPayload = OpticalImportPayload(
+                fileName: envelope.fileName ?? OpticalTransferCodec.safeFileName(app.name),
+                html: app.html,
+                app: app
+            )
+        } else if let html = envelope.html {
+            status = "Transfer complete"
+            completedPayload = OpticalImportPayload(
+                fileName: envelope.fileName ?? "HTMLApp.html",
+                html: html
+            )
+        } else {
+            status = "The complete transfer did not contain an HTMLApp."
+        }
     }
 }
 
@@ -191,7 +234,7 @@ struct OpticalSenderView: View {
                         .padding(.horizontal)
                     ProgressView(value: Double(frameIndex + 1), total: Double(frames.count))
                         .padding(.horizontal)
-                    Text("Frame \(frameIndex + 1) of \(frames.count) • High density • Standard recovery • 150 ms")
+                    Text("Frame \(frameIndex + 1) of \(frames.count) • Full HTMLApp envelope • Recovery enabled")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button(paused ? "Resume" : "Pause") { paused.toggle() }
@@ -237,7 +280,7 @@ struct OpticalReceiverView: View {
                 }
             }
             .padding()
-            .navigationTitle("Receive HTML")
+            .navigationTitle("Receive HTMLApp")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
             .onChange(of: collector.completedPayload) { payload in
@@ -364,7 +407,15 @@ struct ImportHTMLDestinationView: View {
                     }
                     .disabled(working)
                 } footer: {
-                    Text(payload.fileName)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(payload.app?.name ?? payload.fileName)
+                        if let summary = payload.app?.summary, !summary.isEmpty {
+                            Text(summary).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(payload.app == nil ? "Legacy HTML transfer" : "Includes HTMLApp metadata")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
 
                 if !store.orderedApps.isEmpty {
@@ -395,8 +446,11 @@ struct ImportHTMLDestinationView: View {
     private func installNew() {
         working = true
         Task {
-            await store.add(html: payload.html, summary: "Imported from \(payload.fileName)")
-            store.notice = "HTML app imported."
+            await store.add(
+                html: payload.html,
+                summary: payload.app?.summary ?? "Imported from \(payload.fileName)"
+            )
+            store.notice = payload.app == nil ? "HTML app imported." : "HTMLApp received from another device."
             dismiss()
         }
     }
@@ -404,7 +458,11 @@ struct ImportHTMLDestinationView: View {
     private func update(_ app: SavedHTMLApp) {
         working = true
         Task {
-            await store.update(app, html: payload.html, summary: app.summary)
+            await store.update(
+                app,
+                html: payload.html,
+                summary: payload.app?.summary ?? app.summary
+            )
             store.notice = "\(app.name) updated."
             dismiss()
         }
