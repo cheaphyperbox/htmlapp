@@ -100,6 +100,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             secureStorageGet(id: id, args: args)
         case "secureStorage.remove":
             secureStorageRemove(id: id, args: args)
+        case "appStorage.get":
+            portableDataGet(id: id, args: args)
+        case "appStorage.set":
+            portableDataSet(id: id, args: args)
+        case "appStorage.remove":
+            portableDataRemove(id: id, args: args)
+        case "appStorage.all":
+            portableDataAll(id: id)
+        case "appStorage.clear":
+            HTMLAppPortableDataStore.clear(appID: appID)
+            resolve(id, value: ["cleared": true])
         case "speech.speak":
             speak(id: id, args: args)
         case "speech.stop":
@@ -198,6 +209,44 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
         }
         presenter.present(sheet, animated: true)
+    }
+
+    private func portableDataGet(id: String, args: [String: Any]) {
+        let key = (args["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !key.isEmpty, key.count <= 200 else {
+            reject(id, code: "invalid_key", message: "Portable app-data keys must be 1-200 characters.")
+            return
+        }
+        resolve(id, value: ["value": HTMLAppPortableDataStore.get(appID: appID, key: key) as Any])
+    }
+
+    private func portableDataSet(id: String, args: [String: Any]) {
+        let key = (args["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let value = args["value"] as? String ?? ""
+        guard !key.isEmpty, key.count <= 200 else {
+            reject(id, code: "invalid_key", message: "Portable app-data keys must be 1-200 characters.")
+            return
+        }
+        guard value.utf8.count <= 4 * 1024 * 1024 else {
+            reject(id, code: "value_too_large", message: "One portable app-data value cannot exceed 4 MB.")
+            return
+        }
+        HTMLAppPortableDataStore.set(appID: appID, key: key, value: value)
+        resolve(id, value: ["saved": true])
+    }
+
+    private func portableDataRemove(id: String, args: [String: Any]) {
+        let key = (args["key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !key.isEmpty else {
+            reject(id, code: "invalid_key", message: "A portable app-data key is required.")
+            return
+        }
+        HTMLAppPortableDataStore.remove(appID: appID, key: key)
+        resolve(id, value: ["removed": true])
+    }
+
+    private func portableDataAll(id: String) {
+        resolve(id, value: ["values": HTMLAppPortableDataStore.all(appID: appID)])
     }
 
     private func openURL(id: String, value: String) {
@@ -1145,6 +1194,27 @@ enum HTMLNativeAPIScript {
           set: (key, value) => call('secureStorage.set', { key: String(key || ''), value: String(value ?? '') }),
           get: (key) => call('secureStorage.get', { key: String(key || '') }),
           remove: (key) => call('secureStorage.remove', { key: String(key || '') })
+        },
+        appStorage: {
+          get: async (key) => {
+            const result = await call('appStorage.get', { key: String(key || '') });
+            if (result?.value == null) return null;
+            try { return JSON.parse(result.value); } catch (_) { return result.value; }
+          },
+          set: (key, value) => call('appStorage.set', {
+            key: String(key || ''),
+            value: JSON.stringify(value)
+          }),
+          remove: (key) => call('appStorage.remove', { key: String(key || '') }),
+          all: async () => {
+            const result = await call('appStorage.all');
+            const output = {};
+            for (const [key, value] of Object.entries(result?.values || {})) {
+              try { output[key] = JSON.parse(value); } catch (_) { output[key] = value; }
+            }
+            return output;
+          },
+          clear: () => call('appStorage.clear')
         },
         speech: {
           speak: (text, options = {}) => call('speech.speak', { ...options, text: String(text ?? '') }),
