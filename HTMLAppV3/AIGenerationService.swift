@@ -1,11 +1,17 @@
 import Foundation
 import SwiftUI
 
+struct AIGeneratedAsset: Equatable {
+    var name: String
+    var script: String
+}
+
 struct AIGenerationOutput {
     var html = ""
     var patch = ""
     var description = ""
     var iconScript = ""
+    var assetScripts: [AIGeneratedAsset] = []
     var refinedBrief = ""
 }
 
@@ -160,6 +166,7 @@ final class AIGenerationSession: ObservableObject {
             }
             guard !final.html.trimmed.isEmpty else { throw AIGenerationError.missingHTML }
             apply(final, partial: false)
+            await installGeneratedAssets(final.assetScripts)
             try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
@@ -228,6 +235,7 @@ Requested change:
             if !output.description.isEmpty { description = output.description }
             if !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
+            await installGeneratedAssets(output.assetScripts)
 
             try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
@@ -441,6 +449,34 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 ? "Independent verifier was unavailable or timed out. Local structural checks passed."
                 : "Independent verifier was unavailable or timed out. Local checks: " + localIssues.joined(separator: " ")
             AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription)
+        }
+    }
+
+    private func installGeneratedAssets(_ assets: [AIGeneratedAsset]) async {
+        guard !assets.isEmpty else { return }
+        var installed = 0
+        var html = streamedHTML
+
+        for asset in assets.prefix(6) {
+            let cleanName = AIHTMLAgent.safeAssetName(asset.name)
+            guard !cleanName.isEmpty,
+                  let png = await AIIconRenderer.render(script: asset.script) else {
+                AIDebugTraceStore.shared.append("ASSET RENDER", "Skipped an asset because its name or IconScript was invalid.")
+                continue
+            }
+            let token = "{{HTMLAPP_ASSET:\(cleanName)}}"
+            guard html.contains(token) else {
+                AIDebugTraceStore.shared.append("ASSET RENDER", "Rendered \(cleanName), but no matching token was present in the generated HTML.")
+                continue
+            }
+            let dataURL = "data:image/png;base64," + png.base64EncodedString()
+            html = html.replacingOccurrences(of: token, with: dataURL)
+            installed += 1
+        }
+
+        streamedHTML = html
+        if installed > 0 {
+            AIDebugTraceStore.shared.append("GENERATED ASSETS", "Rendered and embedded \(installed) portable PNG asset(s) directly into the HTMLApp.")
         }
     }
 
@@ -1289,6 +1325,7 @@ Interrupted/malformed response:
             patch: value("htmlapp_patch", in: text),
             description: value("description", in: text).trimmed,
             iconScript: value("icon_script", in: text).trimmed,
+            assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
             refinedBrief: value("thinking", in: text).trimmed
         )
     }
@@ -1299,8 +1336,49 @@ Interrupted/malformed response:
             patch: partial("htmlapp_patch", in: text),
             description: partial("description", in: text).trimmed,
             iconScript: partial("icon_script", in: text).trimmed,
+            assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
             refinedBrief: partial("thinking", in: text).trimmed
         )
+    }
+
+    static func safeAssetName(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let clean = trimmed.unicodeScalars.map { allowed.contains($0) ? Character(String($0)) : Character("-") }
+        return String(clean).trimmingCharacters(in: CharacterSet(charactersIn: "-.")).prefix(80).description
+    }
+
+    private static func parseAssetScripts(_ text: String) -> [AIGeneratedAsset] {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        var result: [AIGeneratedAsset] = []
+        var currentName: String?
+        var currentLines: [String] = []
+
+        func finish() {
+            guard let currentName else { return }
+            let name = safeAssetName(currentName)
+            let script = currentLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, !script.isEmpty, !result.contains(where: { $0.name == name }) {
+                result.append(AIGeneratedAsset(name: name, script: script))
+            }
+        }
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.uppercased().hasPrefix("ASSET ") {
+                finish()
+                currentName = String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+                currentLines = []
+            } else if line.uppercased() == "END_ASSET" {
+                finish()
+                currentName = nil
+                currentLines = []
+            } else if currentName != nil {
+                currentLines.append(rawLine)
+            }
+        }
+        finish()
+        return Array(result.prefix(6))
     }
 
     static func verification(from text: String) -> String { value("verification", in: text).trimmed }
@@ -1365,6 +1443,7 @@ enum HTMLQualityChecks {
         if count("<style", in: lower) != count("</style>", in: lower) { issues.append("Unbalanced <style> tags.") }
         if lower.contains("alert(") { issues.append("Uses browser alert(); routine feedback should use in-app UI.") }
         if lower.contains("example.com") || lower.contains("your_api_key") || lower.contains("api-key-here") { issues.append("Contains a likely placeholder endpoint or key.") }
+        if html.contains("{{HTMLAPP_ASSET:") { issues.append("Contains an unresolved generated-asset token.") }
         return issues
     }
 
