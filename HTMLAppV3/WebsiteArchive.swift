@@ -18,6 +18,11 @@ struct WebsiteSnapshot {
     let stagingURL: URL
 }
 
+struct WebsiteArchivePortableState: Codable {
+    var sourceManifest: Data?
+    var disabledSources: [String]
+}
+
 enum WebsiteArchiveError: LocalizedError {
     case invalidURL
     case invalidResponse
@@ -54,6 +59,29 @@ final class WebsiteArchiveManager: @unchecked Sendable {
         try? fileManager.createDirectory(at: pendingRoot, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: manifestRoot, withIntermediateDirectories: true)
+    }
+
+    func portableState(appID: String) -> WebsiteArchivePortableState {
+        let manifestURL = manifestRoot.appendingPathComponent(appID + ".json")
+        return WebsiteArchivePortableState(
+            sourceManifest: try? Data(contentsOf: manifestURL),
+            disabledSources: Array(disabledSources(appID: appID)).sorted()
+        )
+    }
+
+    func restorePortableState(_ state: WebsiteArchivePortableState?, appID: String) {
+        let manifestURL = manifestRoot.appendingPathComponent(appID + ".json")
+        try? fileManager.removeItem(at: manifestURL)
+        if let data = state?.sourceManifest {
+            try? data.write(to: manifestURL, options: .atomic)
+        }
+
+        let key = disabledSourcesKeyPrefix + appID
+        if let values = state?.disabledSources, !values.isEmpty {
+            UserDefaults.standard.set(values, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
     func sourceRecords(appID: String) -> [WebsiteSourceRecord] {
