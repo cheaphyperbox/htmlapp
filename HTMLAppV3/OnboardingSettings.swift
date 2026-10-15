@@ -5,15 +5,16 @@ struct OnboardingView: View {
     @State private var page = 0
 
     private let pages = [
-        ("Create an HTML app", "rectangle.stack.badge.plus", "Tap + to generate an app with AI, download a website, paste or write HTML, select a file, or receive one from another device."),
-        ("Generate with AI", "sparkles", "Configure an OpenAI-compatible or Anthropic-compatible API in Settings. Describe what you want, watch the app appear live, then keep it or ask for changes."),
-        ("Optional UI polish", "paintbrush", "You can configure a second AI model just for presentation. It receives the finished app and is told to improve only the UI while preserving every feature and behavior."),
-        ("Downloaded websites", "arrow.down.circle", "Save a website and its referenced resources for offline use. HTMLApp opens the saved copy first and checks for a newer version in the background."),
-        ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold anywhere for the full menu."),
-        ("Choose your layout", "square.grid.3x3", "Use List for details or Grid for an iPhone-style Home Screen. Grid apps automatically continue onto swipeable pages."),
-        ("Device capabilities", "gyroscope", "Each app can have separate camera, microphone, location, notification, and motion/orientation choices. Haptics are available after user interaction without a per-app permission."),
-        ("Add it to Home Screen", "apps.iphone", "Press and hold an app, choose Install Home Screen Web Clip, then follow the iOS profile installation prompts."),
-        ("Open with deep links", "link", "Use htmlapp://open?id=ABC123. You can choose whether HTMLApp asks before replacing an app that is already open.")
+        ("Make, save, and remix", "rectangle.stack.badge.plus", "HTMLApp keeps websites, hand-written HTML, imported files, and AI-created apps together in one native library."),
+        ("An AI team, not one model", "sparkles", "Use one API connection, then choose separate models for planning, web research, coding, UI refinement, icon/assets, and final verification."),
+        ("Agentic first editions", "wand.and.stars", "Describe the outcome you want. Forge plans the product, researches real facts/APIs when useful, anticipates a few likely next-step features, builds a live preview, and repairs concrete issues before you save."),
+        ("Portable generated artwork", "photo.stack", "AI can create a real app icon plus purpose-built IconScript illustrations. Generated artwork is embedded in the HTMLApp so it survives sharing and backups."),
+        ("Save whole websites", "arrow.down.circle", "Download a website and its referenced resources for offline use. HTMLApp opens the saved copy first and can refresh it in the background."),
+        ("Share the actual HTMLApp", "arrow.left.arrow.right.square", "Use Share HTMLApp Package for AirDrop, Files, Messages, or another device. Packages preserve app metadata and cached resources; nearby QR transfer remains available for smaller apps."),
+        ("Back up your library", "shippingbox.fill", "Settings > Backup & Transfer can export selected apps or the complete library as a ZIP, then Merge or fully Restore it on another device."),
+        ("Real device capabilities", "gyroscope", "Generated apps can use HTMLApp's documented camera, microphone, location, contacts, photos, calendar, reminders, notifications, biometrics, Files, Maps, Shortcuts, secure storage, speech, sharing, and local-network bridges when appropriate."),
+        ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold for sharing, permissions, AI editing, icon generation, raw HTML, and advanced actions."),
+        ("Add it to Home Screen", "apps.iphone", "Any saved HTMLApp can still be installed as a Home Screen Web Clip with its saved icon.")
     ]
 
     var body: some View {
