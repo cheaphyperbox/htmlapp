@@ -166,8 +166,12 @@ final class AIGenerationSession: ObservableObject {
             }
             guard !final.html.trimmed.isEmpty else { throw AIGenerationError.missingHTML }
             apply(final, partial: false)
-            await installGeneratedAssets(final.assetScripts)
-            try await ensureValidIcon(config: config)
+            let finalAssets = await refineGeneratedAssets(final.assetScripts)
+            await installGeneratedAssets(finalAssets)
+            try await ensureValidIcon(
+                config: AISettingsStore.configuration(for: .icon),
+                forceRegenerate: true
+            )
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
@@ -235,9 +239,13 @@ Requested change:
             if !output.description.isEmpty { description = output.description }
             if !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
-            await installGeneratedAssets(output.assetScripts)
+            let revisedAssets = await refineGeneratedAssets(output.assetScripts)
+            await installGeneratedAssets(revisedAssets)
 
-            try await ensureValidIcon(config: config)
+            try await ensureValidIcon(
+                config: AISettingsStore.configuration(for: .icon),
+                forceRegenerate: !output.iconScript.isEmpty
+            )
             try await verifyAndRepair(config: config)
             phase = "Ready to review"
         } catch {
@@ -318,12 +326,32 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         throw AIGenerationError.missingHTML
     }
 
-    private func ensureValidIcon(config: AIProviderConfiguration) async throws {
+    private func ensureValidIcon(
+        config: AIProviderConfiguration,
+        forceRegenerate: Bool = false
+    ) async throws {
         phase = iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Generating app icon" : "Checking app icon"
 
         var candidate = iconScript.trimmingCharacters(in: .whitespacesAndNewlines)
         var repairReason: String?
         var lastError: Error?
+
+        if forceRegenerate {
+            phase = "Designing final app icon"
+            do {
+                let designed = try await AIHTMLAgent.generateIconScript(
+                    html: streamedHTML,
+                    originalPrompt: originalPrompt,
+                    previousScript: candidate,
+                    repairReason: "Create the final shipping icon. Treat any existing script only as a draft; simplify or replace it so the selected Icon & Asset model owns the final App Store-style concept.",
+                    config: config
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !designed.isEmpty { candidate = designed }
+            } catch {
+                lastError = error
+                AIDebugTraceStore.shared.append("ICON ARTIST", "The dedicated icon pass failed; validating the coding-agent draft instead. \(error.localizedDescription)")
+            }
+        }
 
         for attempt in 0..<3 {
             if !candidate.isEmpty {
@@ -350,7 +378,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                     originalPrompt: originalPrompt,
                     previousScript: candidate,
                     repairReason: repairReason,
-                    config: AISettingsStore.configuration(for: .icon)
+                    config: config
                 ).trimmingCharacters(in: .whitespacesAndNewlines)
                 if candidate.isEmpty {
                     repairReason = "The previous response omitted the mandatory <icon_script>. Return a complete replacement icon script."
@@ -449,6 +477,23 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 ? "Independent verifier was unavailable or timed out. Local structural checks passed."
                 : "Independent verifier was unavailable or timed out. Local checks: " + localIssues.joined(separator: " ")
             AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription)
+        }
+    }
+
+    private func refineGeneratedAssets(_ assets: [AIGeneratedAsset]) async -> [AIGeneratedAsset] {
+        guard !assets.isEmpty else { return [] }
+        phase = "Refining generated artwork"
+        do {
+            let refined = try await AIHTMLAgent.refineAssetScripts(
+                html: streamedHTML,
+                originalPrompt: originalPrompt,
+                drafts: assets,
+                config: AISettingsStore.configuration(for: .icon)
+            )
+            return refined.isEmpty ? assets : refined
+        } catch {
+            AIDebugTraceStore.shared.append("ASSET ARTIST", "The dedicated asset-art pass failed; using the coding-agent artwork drafts. \(error.localizedDescription)")
+            return assets
         }
     }
 
