@@ -77,14 +77,15 @@ struct SettingsView: View {
     @State private var aiCompatibility = AISettingsStore.compatibility
     @State private var aiURL = AISettingsStore.apiURL
     @State private var aiModel = AISettingsStore.model
+    @State private var plannerModel = AISettingsStore.plannerModel
+    @State private var researchModel = AISettingsStore.researchModel
+    @State private var uiModel = AISettingsStore.uiModel
+    @State private var iconModel = AISettingsStore.iconModel
+    @State private var verifierModel = AISettingsStore.verifierModel
     @State private var aiKey = AISettingsStore.apiKey
     @State private var aiRequestDelay = AISettingsStore.requestDelaySeconds
     @State private var aiSystemPrompt = AISettingsStore.systemPrompt
     @State private var confirmRestoreSystemPrompt = false
-    @State private var uiCompatibility = AISettingsStore.uiCompatibility
-    @State private var uiURL = AISettingsStore.uiAPIURL
-    @State private var uiModel = AISettingsStore.uiModel
-    @State private var uiKey = AISettingsStore.uiAPIKey
     @State private var aiSaved = false
 
     private var selectedSortMode: LibrarySortMode {
@@ -130,101 +131,102 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Compatibility", selection: $aiCompatibility) {
+                    Picker("API Format", selection: $aiCompatibility) {
                         ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
-                    TextField("API URL", text: $aiURL)
+                    TextField("API Base URL", text: $aiURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
-                    TextField("Model", text: $aiModel)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
                     SecureField("API Key (optional for local servers)", text: $aiKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Button(aiSaved ? "Saved" : "Save AI Configuration") { saveAI() }
-                        .disabled(aiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || aiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if !aiKey.isEmpty {
-                        Button("Clear Main API Key", role: .destructive) {
+                        Button("Clear API Key", role: .destructive) {
                             aiKey = ""
                             AISettingsStore.apiKey = ""
                         }
                     }
+                } header: {
+                    Text("AI Provider")
+                } footer: {
+                    Text("Every AI role uses this same API URL, compatibility format, and Keychain-stored API key. Only the model name changes per task.")
+                }
+
+                Section {
+                    modelField("Coding Agent", text: $aiModel, help: "Builds and edits the actual HTMLApp.")
+                    modelField("Prompt Planner", text: $plannerModel, help: "Turns rough requests into complete product plans and anticipates useful next-step features.")
+                    modelField("Research Agent", text: $researchModel, help: "Chooses web searches/pages and summarizes evidence. Leave equal to Planner if you do not need a separate model.")
+                    modelField("UI Overhaul", text: $uiModel, help: "Optional. Leave blank to skip the separate visual-only refinement stage.")
+                    modelField("Icon & Asset Artist", text: $iconModel, help: "Creates App Store-style icons and portable generated artwork using IconScript.")
+                    modelField("QA Verifier", text: $verifierModel, help: "Audits, repairs, and rechecks the finished app before save.")
+
                     Stepper(value: $aiRequestDelay, in: 0...60, step: 0.1) {
                         HStack {
-                            Text("Minimum time between AI requests")
+                            Text("Request spacing")
                             Spacer()
                             Text("\(aiRequestDelay, specifier: "%.1f") s")
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                     }
-                    Text("HTMLApp waits at least this long between provider requests. The default is 0.2 seconds. Increase it if your provider returns rate-limit errors.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+
+                    Button(aiSaved ? "Saved" : "Save AI Setup") { saveAI() }
+                        .disabled(
+                            aiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            aiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
                 } header: {
-                    Text("AI App Generator")
+                    Text("AI Team")
                 } footer: {
-                    Text("This is the main functional generation model. Its API key is stored in this device’s Keychain and is sent only to the API URL you configure.")
+                    Text("Use specialized models without configuring multiple providers. Blank optional roles fall back to the most relevant configured model.")
                 }
 
                 Section {
-                    TextEditor(text: $aiSystemPrompt)
-                        .font(.caption.monospaced())
-                        .frame(minHeight: 320)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Button("Save System Prompt") {
-                        AISettingsStore.systemPrompt = aiSystemPrompt
-                        aiSystemPrompt = AISettingsStore.systemPrompt
-                        aiSaved = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
+                    NavigationLink {
+                        HTMLAppDataTransferView()
+                            .environmentObject(store)
+                    } label: {
+                        Label("Backup & Transfer", systemImage: "arrow.left.arrow.right.square")
                     }
-                    .disabled(aiSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    Button("Restore Default System Prompt", role: .destructive) {
-                        confirmRestoreSystemPrompt = true
+                    LabeledContent("Saved apps", value: "\(store.apps.count)")
+                    LabeledContent("Folders", value: "\(store.folders.count)")
+                } header: {
+                    Text("Sharing & Data")
+                } footer: {
+                    Text("Export one app, selected apps, or the complete library as a portable ZIP. Import on another device with Merge or full Restore.")
+                }
+
+                Section {
+                    DisclosureGroup("Advanced System Prompt") {
+                        TextEditor(text: $aiSystemPrompt)
+                            .font(.caption.monospaced())
+                            .frame(minHeight: 320)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button("Save System Prompt") {
+                            AISettingsStore.systemPrompt = aiSystemPrompt
+                            aiSystemPrompt = AISettingsStore.systemPrompt
+                            aiSaved = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
+                        }
+                        .disabled(aiSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Restore Built-in Agent Prompt", role: .destructive) {
+                            confirmRestoreSystemPrompt = true
+                        }
                     }
                 } header: {
                     HStack {
-                        Text("App Generation System Prompt")
+                        Text("Agent Instructions")
                         Spacer()
-                        Text(AISettingsStore.isUsingCustomSystemPrompt ? "Custom" : "Default")
+                        Text(AISettingsStore.isUsingCustomSystemPrompt ? "Custom" : "Built-in")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } footer: {
-                    Text("This prompt controls initial app generation. Keep {{HTMLAPP_RESEARCH_RESULTS}} where you want HTMLApp to inject the agentic browser/API research. If you remove it, HTMLApp appends the research automatically.")
-                }
-
-                Section {
-                    Picker("Compatibility", selection: $uiCompatibility) {
-                        ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
-                            Text(option.rawValue).tag(option)
-                        }
-                    }
-                    TextField("UI API URL", text: $uiURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    TextField("UI Overhaul Model (optional)", text: $uiModel)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("UI API Key (optional)", text: $uiKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    if !uiKey.isEmpty {
-                        Button("Clear UI API Key", role: .destructive) {
-                            uiKey = ""
-                            AISettingsStore.uiAPIKey = ""
-                        }
-                    }
-                } header: {
-                    Text("UI Overhaul Model")
-                } footer: {
-                    Text("Optional. Leave the model empty to skip this stage. When configured, HTMLApp sends the completed functioning app to this second model for a conservative visual-only pass. It is instructed not to add, remove, or alter functionality. This can use a different provider, URL, key, and model from the main generator.")
+                    Text("Most people should leave this alone. The built-in Forge prompt includes product planning, onboarding decisions, anticipatory features, native/API truthfulness, IconScript assets, and final QA.")
                 }
 
                 Section("Opening Apps") {
@@ -304,6 +306,19 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private func modelField(_ title: String, text: Binding<String>, help: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            TextField(title, text: text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Text(help)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
     private var librarySortDescription: String {
         switch selectedSortMode {
         case .alphabeticalAZ, .alphabeticalZA:
@@ -327,13 +342,14 @@ struct SettingsView: View {
         AISettingsStore.compatibility = aiCompatibility
         AISettingsStore.apiURL = aiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.model = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.plannerModel = plannerModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.researchModel = researchModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.uiModel = uiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.iconModel = iconModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        AISettingsStore.verifierModel = verifierModel.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.apiKey = aiKey
         AISettingsStore.requestDelaySeconds = aiRequestDelay
         AISettingsStore.systemPrompt = aiSystemPrompt
-        AISettingsStore.uiCompatibility = uiCompatibility
-        AISettingsStore.uiAPIURL = uiURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.uiModel = uiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.uiAPIKey = uiKey
         if !silent {
             aiSaved = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
