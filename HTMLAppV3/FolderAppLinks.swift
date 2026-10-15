@@ -25,6 +25,37 @@ final class FolderAppLinkStore {
         Set(links.lazy.filter { $0.folderID == folderID }.map(\.appID))
     }
 
+    func snapshot(appIDs: Set<String>? = nil) -> [LibraryAppLink] {
+        guard let appIDs else { return links }
+        return links.filter { appIDs.contains($0.appID) }
+    }
+
+    func replaceAll(with imported: [LibraryAppLink], canonicalApps: [SavedHTMLApp], folders: [LibraryFolder]) {
+        let validApps = Set(canonicalApps.map(\.id))
+        let validFolders = Set(folders.map(\.id))
+        links = imported.filter {
+            validApps.contains($0.appID) && ($0.folderID.map { validFolders.contains($0) } ?? true)
+        }
+        var seen: Set<String> = []
+        links = links.filter {
+            seen.insert($0.appID + "\u{1F}" + ($0.folderID ?? "<root>")).inserted
+        }
+        persist()
+    }
+
+    func appendImported(
+        _ imported: [LibraryAppLink],
+        appIDMap: [String: String],
+        folderIDMap: [String: String],
+        canonicalApps: [SavedHTMLApp]
+    ) {
+        for link in imported {
+            guard let newAppID = appIDMap[link.appID] else { continue }
+            let newFolderID = link.folderID.flatMap { folderIDMap[$0] }
+            add(appID: newAppID, folderID: newFolderID, canonicalApps: canonicalApps)
+        }
+    }
+
     func contains(appID: String, folderID: String?) -> Bool {
         links.contains { $0.appID == appID && $0.folderID == folderID }
     }
