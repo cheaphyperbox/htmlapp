@@ -217,7 +217,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: "invalid_key", message: "Portable app-data keys must be 1-200 characters.")
             return
         }
-        resolve(id, value: ["value": HTMLAppPortableDataStore.get(appID: appID, key: key) as Any])
+        let stored = HTMLAppPortableDataStore.get(appID: appID, key: key)
+        resolve(id, value: ["value": stored ?? NSNull()])
     }
 
     private func portableDataSet(id: String, args: [String: Any]) {
