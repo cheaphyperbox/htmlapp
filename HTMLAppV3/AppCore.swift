@@ -187,7 +187,12 @@ final class AppStore: ObservableObject {
         let now = Date()
         let id = makeID()
         let destination = validPendingInsertionFolderID()
-        let icon = incoming.favicon ?? await HTMLAppIconTools.savedIcon(html: incoming.html, name: incoming.name)
+        let icon: Data?
+        if let incomingIcon = incoming.favicon {
+            icon = incomingIcon
+        } else {
+            icon = await HTMLAppIconTools.savedIcon(html: incoming.html, name: incoming.name)
+        }
         let app = SavedHTMLApp(
             id: id,
             name: incoming.name,
