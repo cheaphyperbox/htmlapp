@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 struct HTMLAppPortableBundle: Codable {
-    static let currentVersion = 3
+    static let currentVersion = 4
 
     var formatVersion: Int
     var exportedAt: Date
@@ -12,6 +12,7 @@ struct HTMLAppPortableBundle: Codable {
     var permissionChoices: [String: [String: String]]
     var sensorChoices: [String: String]
     var appData: [String: [String: String]]?
+    var websiteStates: [String: WebsiteArchivePortableState]?
 }
 
 enum HTMLAppPackageError: LocalizedError {
@@ -61,6 +62,10 @@ enum HTMLAppPackageTransfer {
             sensorChoices: sensorChoices,
             appData: Dictionary(uniqueKeysWithValues: apps.map {
                 ($0.id, HTMLAppPortableDataStore.all(appID: $0.id))
+            }),
+            websiteStates: Dictionary(uniqueKeysWithValues: apps.compactMap { app in
+                guard app.websiteSourceURL != nil else { return nil }
+                return (app.id, WebsiteArchiveManager.shared.portableState(appID: app.id))
             })
         )
 
