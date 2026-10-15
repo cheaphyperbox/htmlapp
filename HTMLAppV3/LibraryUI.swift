@@ -396,8 +396,15 @@ struct LibraryView: View {
             Button { websiteSourcesApp = app } label: { Label("Downloaded Sources", systemImage: "externaldrive") }
         }
         Divider()
-        Button { senderApp = app } label: { Label("Send to Another Device", systemImage: "qrcode") }
-        Button { store.exportHTML(app) } label: { Label("Export HTML File", systemImage: "square.and.arrow.up") }
+        Button { store.exportPortablePackage(appIDs: [app.id]) } label: {
+            Label("Share HTMLApp Package", systemImage: "square.and.arrow.up.on.square")
+        }
+        Button { senderApp = app } label: {
+            Label("Nearby QR Transfer", systemImage: "qrcode.viewfinder")
+        }
+        Button { store.exportHTML(app) } label: {
+            Label("Export Raw HTML", systemImage: "doc.text")
+        }
         Button { profileApp = app } label: { Label("Install Home Screen Web Clip", systemImage: "apps.iphone") }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
