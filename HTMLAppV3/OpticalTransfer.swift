@@ -9,11 +9,13 @@ struct OpticalImportPayload: Identifiable, Equatable {
     let fileName: String
     let html: String
     let app: SavedHTMLApp?
+    let portableData: [String: String]?
 
-    init(fileName: String, html: String, app: SavedHTMLApp? = nil) {
+    init(fileName: String, html: String, app: SavedHTMLApp? = nil, portableData: [String: String]? = nil) {
         self.fileName = fileName
         self.html = html
         self.app = app
+        self.portableData = portableData
     }
 }
 
@@ -22,19 +24,22 @@ private struct OpticalEnvelope: Codable {
     let fileName: String?
     let html: String?
     let app: SavedHTMLApp?
+    let portableData: [String: String]?
 
     init(fileName: String, html: String) {
         self.formatVersion = 1
         self.fileName = fileName
         self.html = html
         self.app = nil
+        self.portableData = nil
     }
 
     init(app: SavedHTMLApp) {
-        self.formatVersion = 2
+        self.formatVersion = 3
         self.fileName = OpticalTransferCodec.safeFileName(app.name)
         self.html = nil
         self.app = app
+        self.portableData = HTMLAppPortableDataStore.all(appID: app.id)
     }
 }
 
@@ -193,7 +198,8 @@ final class OpticalFrameCollector: ObservableObject {
             completedPayload = OpticalImportPayload(
                 fileName: envelope.fileName ?? OpticalTransferCodec.safeFileName(app.name),
                 html: app.html,
-                app: app
+                app: app,
+                portableData: envelope.portableData
             )
         } else if let html = envelope.html {
             status = "Transfer complete"
@@ -412,7 +418,7 @@ struct ImportHTMLDestinationView: View {
                         if let summary = payload.app?.summary, !summary.isEmpty {
                             Text(summary).font(.caption).foregroundStyle(.secondary)
                         }
-                        Text(payload.app == nil ? "Legacy HTML transfer" : "Includes HTMLApp metadata")
+                        Text(payload.app == nil ? "Legacy HTML transfer" : "Includes HTMLApp metadata and portable app data")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -446,11 +452,15 @@ struct ImportHTMLDestinationView: View {
     private func installNew() {
         working = true
         Task {
-            await store.add(
-                html: payload.html,
-                summary: payload.app?.summary ?? "Imported from \(payload.fileName)"
-            )
-            store.notice = payload.app == nil ? "HTML app imported." : "HTMLApp received from another device."
+            if let transferred = payload.app {
+                await store.addTransferredApp(transferred, portableData: payload.portableData)
+            } else {
+                await store.add(
+                    html: payload.html,
+                    summary: "Imported from \(payload.fileName)"
+                )
+                store.notice = "HTML app imported."
+            }
             dismiss()
         }
     }
@@ -463,6 +473,9 @@ struct ImportHTMLDestinationView: View {
                 html: payload.html,
                 summary: payload.app?.summary ?? app.summary
             )
+            if let portableData = payload.portableData {
+                HTMLAppPortableDataStore.replace(appID: app.id, values: portableData)
+            }
             store.notice = "\(app.name) updated."
             dismiss()
         }
