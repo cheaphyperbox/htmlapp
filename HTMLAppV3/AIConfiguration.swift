@@ -35,13 +35,48 @@ struct AIProviderConfiguration: Equatable {
     }
 }
 
+enum AIModelRole: String, CaseIterable, Identifiable {
+    case planner
+    case coder
+    case research
+    case ui
+    case icon
+    case verifier
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .planner: return "Prompt Planner"
+        case .coder: return "Coding Agent"
+        case .research: return "Research Agent"
+        case .ui: return "UI Overhaul"
+        case .icon: return "Icon & Asset Artist"
+        case .verifier: return "QA Verifier"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .planner: return "Turns rough ideas into a complete product plan and anticipates useful next-step features."
+        case .coder: return "Builds and edits the actual HTMLApp."
+        case .research: return "Chooses searches/pages and summarizes current web evidence."
+        case .ui: return "Optionally performs a conservative visual refinement after the functional build."
+        case .icon: return "Designs app icons and generated visual assets using IconScript."
+        case .verifier: return "Audits finished apps, proposes exact repairs, and rechecks them before save."
+        }
+    }
+}
+
 enum AISettingsStore {
     private static let providerKey = "ai.compatibility"
     private static let urlKey = "ai.apiURL"
     private static let modelKey = "ai.model"
-    private static let uiProviderKey = "ai.ui.compatibility"
-    private static let uiURLKey = "ai.ui.apiURL"
+    private static let plannerModelKey = "ai.role.plannerModel"
+    private static let researchModelKey = "ai.role.researchModel"
     private static let uiModelKey = "ai.ui.model"
+    private static let iconModelKey = "ai.role.iconModel"
+    private static let verifierModelKey = "ai.role.verifierModel"
     private static let systemPromptKey = "ai.appSystemPrompt"
     private static let requestDelayKey = "ai.requestDelaySeconds"
 
@@ -549,7 +584,32 @@ RESEARCH RESULTS
 
     static var model: String {
         get { UserDefaults.standard.string(forKey: modelKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: modelKey) }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: modelKey) }
+    }
+
+    static var plannerModel: String {
+        get { UserDefaults.standard.string(forKey: plannerModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? model }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: plannerModelKey) }
+    }
+
+    static var researchModel: String {
+        get { UserDefaults.standard.string(forKey: researchModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? plannerModel }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: researchModelKey) }
+    }
+
+    static var uiModel: String {
+        get { UserDefaults.standard.string(forKey: uiModelKey) ?? "" }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: uiModelKey) }
+    }
+
+    static var iconModel: String {
+        get { UserDefaults.standard.string(forKey: iconModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? model }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: iconModelKey) }
+    }
+
+    static var verifierModel: String {
+        get { UserDefaults.standard.string(forKey: verifierModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? model }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: verifierModelKey) }
     }
 
     static var apiKey: String {
@@ -560,8 +620,28 @@ RESEARCH RESULTS
         }
     }
 
+    static func model(for role: AIModelRole) -> String {
+        switch role {
+        case .planner: return plannerModel
+        case .coder: return model
+        case .research: return researchModel
+        case .ui: return uiModel.isEmpty ? model : uiModel
+        case .icon: return iconModel
+        case .verifier: return verifierModel
+        }
+    }
+
+    static func configuration(for role: AIModelRole) -> AIProviderConfiguration {
+        AIProviderConfiguration(
+            compatibility: compatibility,
+            apiURL: apiURL,
+            model: model(for: role),
+            apiKey: apiKey
+        )
+    }
+
     static var configuration: AIProviderConfiguration {
-        AIProviderConfiguration(compatibility: compatibility, apiURL: apiURL, model: model, apiKey: apiKey)
+        configuration(for: .coder)
     }
 
     static var requestDelaySeconds: Double {
@@ -612,36 +692,34 @@ RESEARCH RESULTS
         return resolved + "\n\n" + nativeAPIReference
     }
 
+    // Legacy aliases remain so older settings state and call sites migrate cleanly.
+    // All task models now use one provider, base URL, and Keychain API key.
     static var uiCompatibility: AIProviderConfiguration.Compatibility {
-        get { AIProviderConfiguration.Compatibility(rawValue: UserDefaults.standard.string(forKey: uiProviderKey) ?? "") ?? .openAI }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: uiProviderKey) }
+        get { compatibility }
+        set { compatibility = newValue }
     }
 
     static var uiAPIURL: String {
-        get { UserDefaults.standard.string(forKey: uiURLKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: uiURLKey) }
-    }
-
-    static var uiModel: String {
-        get { UserDefaults.standard.string(forKey: uiModelKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: uiModelKey) }
+        get { apiURL }
+        set { apiURL = newValue }
     }
 
     static var uiAPIKey: String {
-        get { KeychainValueStore.read(account: "ai-ui-api-key") ?? "" }
-        set {
-            if newValue.isEmpty { KeychainValueStore.delete(account: "ai-ui-api-key") }
-            else { KeychainValueStore.write(newValue, account: "ai-ui-api-key") }
-        }
+        get { apiKey }
+        set { apiKey = newValue }
     }
 
     static var uiConfiguration: AIProviderConfiguration {
-        AIProviderConfiguration(compatibility: uiCompatibility, apiURL: uiAPIURL, model: uiModel, apiKey: uiAPIKey)
+        configuration(for: .ui)
     }
 
     static var isUIOverhaulEnabled: Bool {
         !uiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && uiConfiguration.isConfigured
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 enum KeychainValueStore {
