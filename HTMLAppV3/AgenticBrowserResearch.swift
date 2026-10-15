@@ -8,7 +8,7 @@ final class AgenticBrowserResearch: ObservableObject {
     @Published var lastReport = ""
 
     func research(for request: String) async -> String {
-        let config = AISettingsStore.configuration
+        let config = AISettingsStore.configuration(for: .research)
         guard config.isConfigured else { return "" }
         isBrowsing = true
         status = "Planning web research…"
