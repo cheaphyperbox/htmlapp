@@ -151,6 +151,19 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "Returns [{name,url,mimeType,size}]. The url is a local relative URL scoped to the current HTMLApp. Cancellation rejects normally."
         ),
         .init(
+            id: "appStorage",
+            title: "Portable per-app data storage",
+            keywords: ["storage", "portable data", "backup", "share app data", "settings", "notes", "favorites", "records", "onboarding", "json", "persistence"],
+            purpose: "Persist important non-secret JSON-compatible user data so it travels with HTMLApp portable packages and restores on another device.",
+            api: "HTMLAppNative.appStorage.get(key); appStorage.set(key,value); appStorage.remove(key); appStorage.all(); appStorage.clear()",
+            example: """
+            const state = (await HTMLAppNative.appStorage.get("state")) ?? { notes: [] };
+            state.notes.push({ id: crypto.randomUUID(), text: "Remember this" });
+            await HTMLAppNative.appStorage.set("state", state);
+            """,
+            constraints: "Use for valuable non-secret generated-app state. Keychain secureStorage is for secrets and is intentionally not backed up. localStorage/IndexedDB remain available but are not the preferred portable store."
+        ),
+        .init(
             id: "downloads",
             title: "Downloads, Blob exports, and native save/share",
             keywords: ["download", "export", "blob", "save file", "pdf", "csv", "zip", "generated file", "share file"],
