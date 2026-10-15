@@ -754,9 +754,11 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
 
     private static let webResearchSignals = [
         "api", "website", "web site", "url", "current", "live", "latest", "weather",
-        "news", "stock", "crypto", "price", "restaurant", "flight", "sports", "score",
-        "search the web", "internet", "online", "remote", "oauth", "server", "fetch",
-        "public data", "real-time", "realtime"
+        "news", "stock", "crypto", "price", "restaurant", "menu", "nearby", "places",
+        "flight", "sports", "score", "search the web", "internet", "online", "remote",
+        "oauth", "server", "fetch", "public data", "real-time", "realtime",
+        "specification", "specifications", "specs", "manual", "handbook", "manufacturer",
+        "product model", "e-bike", "ebike", "business hours", "reviews", "official site"
     ]
 
     private static let deviceCapabilitySignals = [
