@@ -523,6 +523,7 @@ final class AppStore: ObservableObject {
         WebsiteArchiveManager.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
         HTMLSensorPermissionPolicy.reset(appID: app.id)
+        HTMLAppPortableDataStore.clear(appID: app.id)
     }
 
     func exportHTML(_ app: SavedHTMLApp) {
@@ -572,6 +573,7 @@ final class AppStore: ObservableObject {
                 WebsiteArchiveManager.shared.remove(appID: app.id)
                 HTMLPermissionStore.reset(appID: app.id)
                 HTMLSensorPermissionPolicy.reset(appID: app.id)
+                HTMLAppPortableDataStore.clear(appID: app.id)
             }
 
             apps = imported.apps
@@ -585,6 +587,7 @@ final class AppStore: ObservableObject {
             let identityMap = Dictionary(uniqueKeysWithValues: imported.apps.map { ($0.id, $0.id) })
             try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: identityMap)
             restorePortablePermissions(bundle: imported, appIDMap: identityMap)
+            restorePortableAppData(bundle: imported, appIDMap: identityMap)
 
             save()
             persistFolders()
@@ -658,6 +661,7 @@ final class AppStore: ObservableObject {
         )
         try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: appIDMap)
         restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
+        restorePortableAppData(bundle: imported, appIDMap: appIDMap)
 
         save()
         persistFolders()
@@ -796,6 +800,15 @@ final class AppStore: ObservableObject {
                let choice = HTMLPermissionChoice(rawValue: raw) {
                 HTMLSensorPermissionPolicy.set(choice, appID: newID)
             }
+        }
+    }
+
+
+    private func restorePortableAppData(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
+        guard let appData = bundle.appData else { return }
+        for (oldID, values) in appData {
+            guard let newID = appIDMap[oldID] else { continue }
+            HTMLAppPortableDataStore.replace(appID: newID, values: values)
         }
     }
 
