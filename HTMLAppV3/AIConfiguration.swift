@@ -84,7 +84,7 @@ enum AISettingsStore {
 
     static let nativeAPIReference = """
 HTMLAPP NATIVE API REFERENCE (always available in saved apps):
-window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, externalApps.maps/shortcuts, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, and speech.speak/stop.
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, externalApps.maps/shortcuts, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, appStorage.get/set/remove/all/clear, and speech.speak/stop.
 
 The generation pipeline can also inject HTMLAPP DEVICE API CATALOG RESULTS. Those results are the authoritative searchable reference for exact method names, usage examples, return-shape notes, permission expectations, and limitations. Prefer them over remembered assumptions about iOS or Safari. If the catalog says a capability is unavailable, do not invent a bridge for it.
 
@@ -285,7 +285,8 @@ HTMLApp injects a promise-based native API wrapper into saved apps. Use these ex
 - HTMLAppNative.notifications.schedule({title?,body?,at?,afterSeconds?,id?,silent?}) -> schedules a real local iOS notification after permission is granted.
 - HTMLAppNative.notifications.cancel({id?}) -> cancels one scheduled/delivered notification for this HTMLApp, or all of this HTMLApp's native scheduled notifications when no id is supplied.
 - HTMLAppNative.biometrics.authenticate({reason?,biometricsOnly?}) -> native LocalAuthentication using Face ID/Touch ID when available, with device authentication fallback unless biometricsOnly is true.
-- HTMLAppNative.secureStorage.set(key,value), get(key), remove(key) -> per-HTMLApp Keychain-backed string storage for secrets/tokens that should not live in localStorage. get resolves to {value}, where value can be null.
+- HTMLAppNative.secureStorage.set(key,value), get(key), remove(key) -> per-HTMLApp Keychain-backed string storage for secrets/tokens that should not live in localStorage. get resolves to {value}, where value can be null. Keychain secrets are intentionally not included in HTMLApp backups.
+- HTMLAppNative.appStorage.get(key), set(key,value), remove(key), all(), clear() -> per-HTMLApp portable JSON storage for important non-secret user data. Values saved here are included when the HTMLApp is shared/exported as a portable package and restored on another device. Prefer this for settings, notes, records, favorites, onboarding completion, and other user-created state that should travel with the app.
 - HTMLAppNative.speech.speak(text,{language?,rate?,pitch?}) / stop() -> native AVSpeechSynthesizer text-to-speech.
 
 Use try/catch around native wrapper calls. Cancellations and denied permissions are normal UI states, not crashes. Native permission requests must still originate from a meaningful user action. Do not call sensitive wrappers automatically on page load. Do not guess additional HTMLAppNative method names; only the methods documented here are guaranteed.
@@ -343,12 +344,13 @@ Files and user-selected photos/videos
 - Do not claim that the app can enumerate, delete, or silently read the user's entire Photos library unless an explicit native HTMLApp bridge for that operation is present.
 
 Local data and persistence
-- localStorage is available for small preferences and lightweight data.
-- Prefer IndexedDB for larger structured datasets, blobs, offline caches, histories, projects, and user-created documents.
+- Prefer HTMLAppNative.appStorage for important non-secret state that users would expect to move with the HTMLApp when it is shared or restored on another device. Store ordinary JSON-compatible values; HTMLApp serializes them and includes this data in portable backups.
+- localStorage remains suitable for disposable UI preferences, ephemeral caches, or compatibility with imported websites, but do not choose it for valuable generated-app data when portability matters.
+- Prefer IndexedDB for large structured datasets/blobs that exceed the portable appStorage use case. Be aware that generic WebKit IndexedDB is not currently part of HTMLApp portable packages, so expose an export/import path for valuable large data when needed.
 - navigator.storage may be used when available to inspect quota/persistence.
 - Cookies are available where relevant.
-- Persist data that users reasonably expect to survive: settings, drafts, favorites, recent items, filters, local projects, and cached last-known responses.
-- Do not store secrets in localStorage.
+- Persist data that users reasonably expect to survive: settings, onboarding completion, drafts, favorites, notes, records, recent items, filters, local projects, and cached last-known responses.
+- Use HTMLAppNative.secureStorage for small secrets/tokens. Secrets are intentionally excluded from portable backups and must not be placed in appStorage or localStorage.
 
 Networking and realtime
 - fetch is available; browser security and CORS still apply.
@@ -596,7 +598,7 @@ FILL_TEXTURE color1 color2
 FILL_* modifies only the immediately following shape. Use absolute coordinates and CSS/HEX colors. Draw back-to-front. Never use ANIM, GROUP, FPS, SVG, HTML, prose, comments, Markdown, or external assets inside IconScript.
 
 FINAL SILENT QA
-Before returning the four sections, verify:
+Before returning the five sections, verify:
 - the app fulfills the user's request rather than a generic interpretation
 - every visible control works
 - all network/device operations are real or honestly limited
