@@ -75,19 +75,6 @@ struct SettingsView: View {
     @AppStorage("webClipPrecomposed") private var webClipPrecomposed = false
     @AppStorage("allowJavaScript") private var allowJavaScript = true
     @State private var working = false
-    @State private var aiCompatibility = AISettingsStore.compatibility
-    @State private var aiURL = AISettingsStore.apiURL
-    @State private var aiModel = AISettingsStore.model
-    @State private var plannerModel = AISettingsStore.plannerModel
-    @State private var researchModel = AISettingsStore.researchModel
-    @State private var uiModel = AISettingsStore.uiModel
-    @State private var iconModel = AISettingsStore.iconModel
-    @State private var verifierModel = AISettingsStore.verifierModel
-    @State private var aiKey = AISettingsStore.apiKey
-    @State private var aiRequestDelay = AISettingsStore.requestDelaySeconds
-    @State private var aiSystemPrompt = AISettingsStore.systemPrompt
-    @State private var confirmRestoreSystemPrompt = false
-    @State private var aiSaved = false
 
     private var selectedSortMode: LibrarySortMode {
         LibrarySortMode(rawValue: librarySortModeRaw) ?? .alphabeticalAZ
@@ -132,102 +119,22 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("API Format", selection: $aiCompatibility) {
-                        ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
-                            Text(option.rawValue).tag(option)
-                        }
-                    }
-                    TextField("API Base URL", text: $aiURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    SecureField("API Key (optional for local servers)", text: $aiKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    if !aiKey.isEmpty {
-                        Button("Clear API Key", role: .destructive) {
-                            aiKey = ""
-                            AISettingsStore.apiKey = ""
-                        }
-                    }
-                } header: {
-                    Text("AI Provider")
-                } footer: {
-                    Text("Every AI role uses this same API URL, compatibility format, and Keychain-stored API key. Only the model name changes per task.")
-                }
-
-                Section {
-                    modelField("Coding Agent", text: $aiModel, help: "Builds and edits the actual HTMLApp.")
-                    modelField("Prompt Planner", text: $plannerModel, help: "Turns rough requests into complete product plans and anticipates useful next-step features.")
-                    modelField("Research Agent", text: $researchModel, help: "Chooses web searches/pages and summarizes evidence. Leave equal to Planner if you do not need a separate model.")
-                    modelField("UI Overhaul", text: $uiModel, help: "Optional. Leave blank to skip the separate visual-only refinement stage.")
-                    modelField("Icon & Asset Artist", text: $iconModel, help: "Creates App Store-style icons and portable generated artwork using IconScript.")
-                    modelField("QA Verifier", text: $verifierModel, help: "Audits, repairs, and rechecks the finished app before save.")
-
-                    Stepper(value: $aiRequestDelay, in: 0...60, step: 0.1) {
-                        HStack {
-                            Text("Request spacing")
-                            Spacer()
-                            Text("\(aiRequestDelay, specifier: "%.1f") s")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
+                    NavigationLink {
+                        AIConfigurationSettingsView()
+                    } label: {
+                        Label("AI & Creation", systemImage: "sparkles.rectangle.stack")
                     }
 
-                    Button(aiSaved ? "Saved" : "Save AI Setup") { saveAI() }
-                        .disabled(
-                            aiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                            aiModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        )
-                } header: {
-                    Text("AI Team")
-                } footer: {
-                    Text("Use specialized models without configuring multiple providers. Blank optional roles fall back to the most relevant configured model.")
-                }
-
-                Section {
                     NavigationLink {
                         HTMLAppDataTransferView()
                             .environmentObject(store)
                     } label: {
                         Label("Backup & Transfer", systemImage: "arrow.left.arrow.right.square")
                     }
-                    LabeledContent("Saved apps", value: "\(store.apps.count)")
-                    LabeledContent("Folders", value: "\(store.folders.count)")
                 } header: {
-                    Text("Sharing & Data")
+                    Text("Creation & Transfer")
                 } footer: {
-                    Text("Export one app, selected apps, or the complete library as a portable ZIP. Import on another device with Merge or full Restore.")
-                }
-
-                Section {
-                    DisclosureGroup("Advanced System Prompt") {
-                        TextEditor(text: $aiSystemPrompt)
-                            .font(.caption.monospaced())
-                            .frame(minHeight: 320)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        Button("Save System Prompt") {
-                            AISettingsStore.systemPrompt = aiSystemPrompt
-                            aiSystemPrompt = AISettingsStore.systemPrompt
-                            aiSaved = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
-                        }
-                        .disabled(aiSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("Restore Built-in Agent Prompt", role: .destructive) {
-                            confirmRestoreSystemPrompt = true
-                        }
-                    }
-                } header: {
-                    HStack {
-                        Text("Agent Instructions")
-                        Spacer()
-                        Text(AISettingsStore.isUsingCustomSystemPrompt ? "Custom" : "Built-in")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } footer: {
-                    Text("Most people should leave this alone. The built-in Forge prompt includes product planning, onboarding decisions, anticipatory features, native/API truthfulness, IconScript assets, and final QA.")
+                    Text("Configure your specialized AI team in one place, or move selected apps and complete libraries between devices with portable ZIP backups.")
                 }
 
                 Section("Opening Apps") {
@@ -288,36 +195,11 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        saveAI(silent: true)
-                        dismiss()
-                    }
+                    Button("Done") { dismiss() }
                 }
-            }
-            .confirmationDialog("Restore the default AI system prompt?", isPresented: $confirmRestoreSystemPrompt, titleVisibility: .visible) {
-                Button("Restore Default", role: .destructive) {
-                    AISettingsStore.restoreDefaultSystemPrompt()
-                    aiSystemPrompt = AISettingsStore.defaultSystemPrompt
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Your custom app-generation system prompt will be replaced by HTMLApp’s built-in default prompt.")
             }
             .overlay { if working { ProgressView().controlSize(.large) } }
         }
-    }
-
-    @ViewBuilder
-    private func modelField(_ title: String, text: Binding<String>, help: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            TextField(title, text: text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Text(help)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 2)
     }
 
     private var librarySortDescription: String {
@@ -337,24 +219,6 @@ struct SettingsView: View {
 
     private var sortDateBasisTitle: String {
         (LibrarySortDateBasis(rawValue: librarySortDateBasisRaw) ?? .modified).title
-    }
-
-    private func saveAI(silent: Bool = false) {
-        AISettingsStore.compatibility = aiCompatibility
-        AISettingsStore.apiURL = aiURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.model = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.plannerModel = plannerModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.researchModel = researchModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.uiModel = uiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.iconModel = iconModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.verifierModel = verifierModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        AISettingsStore.apiKey = aiKey
-        AISettingsStore.requestDelaySeconds = aiRequestDelay
-        AISettingsStore.systemPrompt = aiSystemPrompt
-        if !silent {
-            aiSaved = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { aiSaved = false }
-        }
     }
 
     private func refreshAll() {
