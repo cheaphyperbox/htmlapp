@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import UIKit
 import WebKit
 import Contacts
@@ -55,6 +56,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             presentShare(id: id, args: args)
         case "system.open":
             openURL(id: id, value: args["url"] as? String ?? "")
+        case "externalApps.maps":
+            openMaps(id: id, args: args)
+        case "externalApps.shortcuts":
+            runShortcut(id: id, args: args)
         case "files.pick":
             pickFiles(id: id, args: args)
         case "contacts.pick":
@@ -196,8 +201,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func openURL(id: String, value: String) {
-        guard let url = URL(string: value), UIApplication.shared.canOpenURL(url) else {
-            reject(id, code: "invalid_url", message: "The requested URL cannot be opened.")
+        guard let url = URL(string: value) else {
+            reject(id, code: "invalid_url", message: "The requested URL is invalid.")
             return
         }
         UIApplication.shared.open(url, options: [:]) { [weak self] success in
@@ -205,6 +210,75 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 guard let self else { return }
                 if success { self.resolve(id, value: ["opened": true]) }
                 else { self.reject(id, code: "open_failed", message: "iOS could not open the requested URL.") }
+            }
+        }
+    }
+
+    private func openMaps(id: String, args: [String: Any]) {
+        let latitude = (args["latitude"] as? NSNumber)?.doubleValue
+        let longitude = (args["longitude"] as? NSNumber)?.doubleValue
+        let query = (args["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = (args["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let directions = args["directions"] as? Bool ?? false
+
+        if let latitude, let longitude,
+           (-90...90).contains(latitude), (-180...180).contains(longitude) {
+            let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
+            if let name, !name.isEmpty { item.name = name }
+            let options = directions ? [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving] : [:]
+            item.openInMaps(launchOptions: options)
+            resolve(id, value: ["opened": true, "app": "maps"])
+            return
+        }
+
+        guard !query.isEmpty else {
+            reject(id, code: "invalid_arguments", message: "Provide a map query or valid latitude/longitude.")
+            return
+        }
+
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: query)
+        ] + (directions ? [URLQueryItem(name: "dirflg", value: "d")] : [])
+        guard let url = components?.url else {
+            reject(id, code: "invalid_arguments", message: "The Maps request could not be created.")
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { [weak self] success in
+            Task { @MainActor in
+                guard let self else { return }
+                if success { self.resolve(id, value: ["opened": true, "app": "maps"]) }
+                else { self.reject(id, code: "open_failed", message: "Apple Maps could not be opened.") }
+            }
+        }
+    }
+
+    private func runShortcut(id: String, args: [String: Any]) {
+        let name = (args["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !name.isEmpty else {
+            reject(id, code: "invalid_arguments", message: "A Shortcut name is required.")
+            return
+        }
+
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "run-shortcut"
+        var items = [URLQueryItem(name: "name", value: name)]
+        if let input = args["input"] as? String, !input.isEmpty {
+            items.append(URLQueryItem(name: "input", value: "text"))
+            items.append(URLQueryItem(name: "text", value: input))
+        }
+        components.queryItems = items
+        guard let url = components.url else {
+            reject(id, code: "invalid_arguments", message: "The Shortcut request could not be created.")
+            return
+        }
+
+        UIApplication.shared.open(url, options: [:]) { [weak self] success in
+            Task { @MainActor in
+                guard let self else { return }
+                if success { self.resolve(id, value: ["opened": true, "app": "shortcuts"]) }
+                else { self.reject(id, code: "open_failed", message: "Shortcuts could not run the requested shortcut.") }
             }
         }
     }
@@ -1028,6 +1102,13 @@ enum HTMLNativeAPIScript {
         },
         system: {
           open: (url) => call('system.open', { url: String(url || '') })
+        },
+        externalApps: {
+          maps: (options = {}) => call('externalApps.maps', options || {}),
+          shortcuts: (name, input = '') => call('externalApps.shortcuts', {
+            name: String(name || ''),
+            input: String(input ?? '')
+          })
         },
         files: {
           pick: (options = {}) => call('files.pick', options)
