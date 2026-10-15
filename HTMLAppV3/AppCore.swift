@@ -536,6 +536,138 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func exportPortablePackage(appIDs requestedIDs: Set<String>? = nil) {
+        let selected = requestedIDs.map { ids in apps.filter { ids.contains($0.id) } } ?? apps
+        guard !selected.isEmpty else {
+            errorMessage = "Choose at least one HTMLApp to export."
+            return
+        }
+
+        let selectedIDs = Set(selected.map(\.id))
+        let links = FolderAppLinkStore.shared.snapshot(appIDs: selectedIDs)
+        let folders = foldersForPortableExport(apps: selected, links: links)
+
+        do {
+            let url = try HTMLAppPackageTransfer.createArchive(
+                apps: selected,
+                folders: folders,
+                links: links
+            )
+            SharePresenter.present(items: [url])
+            notice = selected.count == apps.count
+                ? "HTMLApp backup ready to share."
+                : "Portable package ready for \(selected.count) app\(selected.count == 1 ? "" : "s")."
+        } catch {
+            errorMessage = "The HTMLApp package could not be created: \(error.localizedDescription)"
+        }
+    }
+
+    func importPortablePackage(from url: URL, replaceExisting: Bool) throws {
+        let decoded = try HTMLAppPackageTransfer.readArchive(from: url)
+        let imported = decoded.bundle
+
+        if replaceExisting {
+            for app in apps {
+                SourceCache.shared.remove(appID: app.id)
+                WebsiteArchiveManager.shared.remove(appID: app.id)
+                HTMLPermissionStore.reset(appID: app.id)
+                HTMLSensorPermissionPolicy.reset(appID: app.id)
+            }
+
+            apps = imported.apps
+            folders = imported.folders
+            FolderAppLinkStore.shared.replaceAll(
+                with: imported.links,
+                canonicalApps: apps,
+                folders: folders
+            )
+
+            let identityMap = Dictionary(uniqueKeysWithValues: imported.apps.map { ($0.id, $0.id) })
+            try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: identityMap)
+            restorePortablePermissions(bundle: imported, appIDMap: identityMap)
+
+            save()
+            persistFolders()
+            notice = "Restored \(apps.count) HTMLApp\(apps.count == 1 ? "" : "s") from backup."
+            return
+        }
+
+        var folderIDMap: [String: String] = [:]
+        let importedFoldersByID = Dictionary(uniqueKeysWithValues: imported.folders.map { ($0.id, $0) })
+        var remainingFolders = imported.folders
+        var safety = remainingFolders.count + 2
+
+        while !remainingFolders.isEmpty, safety > 0 {
+            safety -= 1
+            var progressed = false
+
+            for folder in remainingFolders {
+                let canCreate = folder.parentID == nil || folder.parentID.flatMap { folderIDMap[$0] } != nil || importedFoldersByID[folder.parentID ?? ""] == nil
+                guard canCreate else { continue }
+
+                let mappedParent = folder.parentID.flatMap { folderIDMap[$0] }
+                let newID = UUID().uuidString
+                let copied = LibraryFolder(
+                    id: newID,
+                    name: uniqueFolderName(folder.name, parentID: mappedParent),
+                    parentID: mappedParent,
+                    tintHex: folder.tintHex,
+                    createdAt: folder.createdAt
+                )
+                folders.append(copied)
+                folderIDMap[folder.id] = newID
+                remainingFolders.removeAll { $0.id == folder.id }
+                progressed = true
+            }
+
+            if !progressed { break }
+        }
+
+        for folder in remainingFolders {
+            let newID = UUID().uuidString
+            folders.append(LibraryFolder(
+                id: newID,
+                name: uniqueFolderName(folder.name, parentID: nil),
+                parentID: nil,
+                tintHex: folder.tintHex,
+                createdAt: folder.createdAt
+            ))
+            folderIDMap[folder.id] = newID
+        }
+
+        var appIDMap: [String: String] = [:]
+        var importedApps: [SavedHTMLApp] = []
+        for var app in imported.apps {
+            let oldID = app.id
+            let newID = makeID()
+            app.id = newID
+            app.folderID = app.folderID.flatMap { folderIDMap[$0] }
+            app.folderName = nil
+            app.lastOpenedAt = nil
+            app.updatedAt = Date()
+            appIDMap[oldID] = newID
+            importedApps.append(app)
+        }
+
+        apps.insert(contentsOf: importedApps, at: 0)
+        FolderAppLinkStore.shared.appendImported(
+            imported.links,
+            appIDMap: appIDMap,
+            folderIDMap: folderIDMap,
+            canonicalApps: apps
+        )
+        try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: appIDMap)
+        restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
+
+        save()
+        persistFolders()
+        FolderAppLinkStore.shared.prune(
+            validAppIDs: Set(apps.map(\.id)),
+            validFolderIDs: Set(folders.map(\.id))
+        )
+        notice = "Imported \(importedApps.count) HTMLApp\(importedApps.count == 1 ? "" : "s") as portable copies."
+    }
+
     func openDeepLink(_ url: URL) {
         guard url.scheme?.lowercased() == "htmlapp",
               url.host?.lowercased() == "open",
@@ -634,6 +766,36 @@ final class AppStore: ObservableObject {
         runningApp = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
             self?.launch(app)
+        }
+    }
+
+    private func foldersForPortableExport(apps selectedApps: [SavedHTMLApp], links: [LibraryAppLink]) -> [LibraryFolder] {
+        var needed = Set(selectedApps.compactMap(\.folderID))
+        needed.formUnion(links.compactMap(\.folderID))
+
+        var frontier = Array(needed)
+        while let id = frontier.popLast() {
+            guard let folder = folders.first(where: { $0.id == id }),
+                  let parentID = folder.parentID,
+                  needed.insert(parentID).inserted else { continue }
+            frontier.append(parentID)
+        }
+
+        return folders.filter { needed.contains($0.id) }
+    }
+
+    private func restorePortablePermissions(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
+        for (oldID, choices) in bundle.permissionChoices {
+            guard let newID = appIDMap[oldID] else { continue }
+            for permission in HTMLPermission.allCases {
+                guard let raw = choices[permission.rawValue],
+                      let choice = HTMLPermissionChoice(rawValue: raw) else { continue }
+                HTMLPermissionStore.set(choice, for: permission, appID: newID)
+            }
+            if let raw = bundle.sensorChoices[oldID],
+               let choice = HTMLPermissionChoice(rawValue: raw) {
+                HTMLSensorPermissionPolicy.set(choice, appID: newID)
+            }
         }
     }
 
