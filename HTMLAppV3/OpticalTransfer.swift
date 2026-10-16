@@ -10,12 +10,23 @@ struct OpticalImportPayload: Identifiable, Equatable {
     let html: String
     let app: SavedHTMLApp?
     let portableData: [String: String]?
+    let widgets: [HTMLAppWidgetDefinition]?
+    let backgroundJobs: [HTMLAppBackgroundFetchJob]?
 
-    init(fileName: String, html: String, app: SavedHTMLApp? = nil, portableData: [String: String]? = nil) {
+    init(
+        fileName: String,
+        html: String,
+        app: SavedHTMLApp? = nil,
+        portableData: [String: String]? = nil,
+        widgets: [HTMLAppWidgetDefinition]? = nil,
+        backgroundJobs: [HTMLAppBackgroundFetchJob]? = nil
+    ) {
         self.fileName = fileName
         self.html = html
         self.app = app
         self.portableData = portableData
+        self.widgets = widgets
+        self.backgroundJobs = backgroundJobs
     }
 }
 
@@ -25,6 +36,8 @@ private struct OpticalEnvelope: Codable {
     let html: String?
     let app: SavedHTMLApp?
     let portableData: [String: String]?
+    let widgets: [HTMLAppWidgetDefinition]?
+    let backgroundJobs: [HTMLAppBackgroundFetchJob]?
 
     init(fileName: String, html: String) {
         self.formatVersion = 1
@@ -32,14 +45,18 @@ private struct OpticalEnvelope: Codable {
         self.html = html
         self.app = nil
         self.portableData = nil
+        self.widgets = nil
+        self.backgroundJobs = nil
     }
 
     init(app: SavedHTMLApp) {
-        self.formatVersion = 3
+        self.formatVersion = 4
         self.fileName = OpticalTransferCodec.safeFileName(app.name)
         self.html = nil
         self.app = app
         self.portableData = HTMLAppPortableDataStore.all(appID: app.id)
+        self.widgets = HTMLAppWidgetStore.definitions(appID: app.id)
+        self.backgroundJobs = HTMLAppBackgroundJobStore.jobs(appID: app.id)
     }
 }
 
@@ -199,7 +216,9 @@ final class OpticalFrameCollector: ObservableObject {
                 fileName: envelope.fileName ?? OpticalTransferCodec.safeFileName(app.name),
                 html: app.html,
                 app: app,
-                portableData: envelope.portableData
+                portableData: envelope.portableData,
+                widgets: envelope.widgets,
+                backgroundJobs: envelope.backgroundJobs
             )
         } else if let html = envelope.html {
             status = "Transfer complete"
@@ -418,7 +437,7 @@ struct ImportHTMLDestinationView: View {
                         if let summary = payload.app?.summary, !summary.isEmpty {
                             Text(summary).font(.caption).foregroundStyle(.secondary)
                         }
-                        Text(payload.app == nil ? "Legacy HTML transfer" : "Includes HTMLApp metadata and portable app data")
+                        Text(payload.app == nil ? "Legacy HTML transfer" : "Includes metadata, portable data, widgets, and background jobs")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -453,7 +472,12 @@ struct ImportHTMLDestinationView: View {
         working = true
         Task {
             if let transferred = payload.app {
-                await store.addTransferredApp(transferred, portableData: payload.portableData)
+                await store.addTransferredApp(
+                    transferred,
+                    portableData: payload.portableData,
+                    widgets: payload.widgets,
+                    backgroundJobs: payload.backgroundJobs
+                )
             } else {
                 await store.add(
                     html: payload.html,
@@ -476,6 +500,11 @@ struct ImportHTMLDestinationView: View {
             if let portableData = payload.portableData {
                 HTMLAppPortableDataStore.replace(appID: app.id, values: portableData)
             }
+            store.installTransferredIntegrations(
+                appID: app.id,
+                widgets: payload.widgets,
+                backgroundJobs: payload.backgroundJobs
+            )
             store.notice = "\(app.name) updated."
             dismiss()
         }
