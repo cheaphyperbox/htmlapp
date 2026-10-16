@@ -93,7 +93,7 @@ struct AIGenerationView: View {
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("HTMLApp will improve your prompt, plan the app, use a real web-search/page-reading agent when outside information could help, inspect documented APIs and websites, build a live preview, and run a final AI QA pass before you save it.")
+                Text("Forge plans a complete usable app—not a mockup—researches real data/APIs when useful, can add native widgets and iOS-supported background refresh when they improve the product, builds a live preview, and runs final repair/QA before you save.")
             }
 
             Section {
