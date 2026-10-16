@@ -164,6 +164,75 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "Use for valuable non-secret generated-app state. Keychain secureStorage is for secrets and is intentionally not backed up. localStorage/IndexedDB remain available but are not the preferred portable store."
         ),
         .init(
+            id: "widgets",
+            title: "Generated Home Screen and Lock Screen widgets",
+            keywords: ["widget", "widgets", "home screen", "lock screen", "widgetkit", "glanceable", "live metric", "background refresh", "timeline"],
+            purpose: "Publish one or more native WidgetKit widgets from a saved HTMLApp. Widgets can show generated text, metrics, progress, lists, SF Symbols, and embedded images, deep-link back into the originating HTMLApp, and optionally refresh public HTTPS JSON in the background.",
+            api: "HTMLAppNative.widgets.configure(definition); widgets.list(); widgets.remove(id?); widgets.reload()",
+            example: """
+            await HTMLAppNative.widgets.configure({
+              id: "bike-status",
+              name: "Bike Status",
+              primary: true,
+              families: ["systemSmall", "systemMedium", "accessoryRectangular"],
+              snapshot: {
+                layout: "metric",
+                eyebrow: "E-BIKE",
+                title: "Battery",
+                value: "78",
+                unit: "%",
+                subtitle: "About 31 mi estimated",
+                footer: "Updated just now",
+                systemSymbol: "bicycle",
+                progress: 0.78,
+                backgroundHex: "#101820",
+                backgroundSecondaryHex: "#1B3445",
+                foregroundHex: "#FFFFFF",
+                accentHex: "#63D4A7",
+                items: [
+                  { id: "range", label: "Range", value: "31 mi", systemSymbol: "map" },
+                  { id: "odo", label: "Odometer", value: "842 mi", systemSymbol: "gauge" }
+                ]
+              },
+              refresh: {
+                url: "https://api.example.org/status",
+                intervalMinutes: 30,
+                bindings: {
+                  "value": "battery.percent",
+                  "subtitle": "battery.rangeText",
+                  "progress": "battery.fraction",
+                  "items.0.value": "battery.rangeText"
+                }
+              }
+            });
+            """,
+            constraints: "A saved app can publish up to 8 widget definitions. Widget refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript execution. Minimum requested interval is 15 minutes, but WidgetKit decides actual refresh timing. iOS 17+ lets users choose among published HTMLApp widgets; iOS 16 exposes a primary/latest widget. Keep widget content glanceable and do not assume continuous execution."
+        ),
+        .init(
+            id: "background.fetch",
+            title: "Opportunistic background JSON refresh",
+            keywords: ["background", "background refresh", "fetch", "scheduled", "periodic", "sync", "refresh", "offline cache", "background task"],
+            purpose: "Ask iOS to periodically fetch a public HTTPS JSON endpoint while HTMLApp is not in the foreground, then store the selected result in portable appStorage for the generated app to read later.",
+            api: "HTMLAppNative.background.configure(job); background.list(); background.remove(id?); background.refreshNow(id?)",
+            example: """
+            await HTMLAppNative.background.configure({
+              id: "forecast-refresh",
+              url: "https://api.example.org/forecast",
+              intervalMinutes: 30,
+              storageKey: "latestForecast",
+              jsonPath: "forecast",
+              widgetID: "weather"
+            });
+
+            // Test the job immediately while the app is open:
+            await HTMLAppNative.background.refreshNow("forecast-refresh");
+
+            // Later, including after an iOS background refresh:
+            const cached = await HTMLAppNative.appStorage.get("latestForecast");
+            """,
+            constraints: "This is iOS-scheduled BGAppRefresh, not a permanently running process. Jobs are opportunistic, minimum requested interval is 15 minutes, and iOS may delay or skip runs due to user settings, battery, Low Power Mode, or system policy. Jobs support public HTTPS GET JSON only and cannot execute arbitrary HTML/JavaScript in the background. One HTMLApp can register at most 6 jobs."
+        ),
+        .init(
             id: "downloads",
             title: "Downloads, Blob exports, and native save/share",
             keywords: ["download", "export", "blob", "save file", "pdf", "csv", "zip", "generated file", "share file"],
