@@ -12,6 +12,7 @@ import LocalAuthentication
 import UniformTypeIdentifiers
 import AVFoundation
 import Security
+import WidgetKit
 
 @MainActor
 final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
@@ -111,6 +112,23 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "appStorage.clear":
             HTMLAppPortableDataStore.clear(appID: appID)
             resolve(id, value: ["cleared": true])
+        case "widgets.configure":
+            configureWidget(id: id, args: args)
+        case "widgets.list":
+            listWidgets(id: id)
+        case "widgets.remove":
+            removeWidget(id: id, args: args)
+        case "widgets.reload":
+            WidgetCenter.shared.reloadAllTimelines()
+            resolve(id, value: ["reloaded": true])
+        case "background.configure":
+            configureBackgroundJob(id: id, args: args)
+        case "background.list":
+            listBackgroundJobs(id: id)
+        case "background.remove":
+            removeBackgroundJob(id: id, args: args)
+        case "background.refreshNow":
+            refreshBackgroundJobNow(id: id, args: args)
         case "speech.speak":
             speak(id: id, args: args)
         case "speech.stop":
@@ -251,6 +269,263 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
 
     private func portableDataAll(id: String) {
         resolve(id, value: ["values": HTMLAppPortableDataStore.all(appID: appID)])
+    }
+
+    private func configureWidget(id: String, args: [String: Any]) {
+        guard appID != "PREVIEW" else {
+            reject(id, code: "preview_restricted", message: "Widgets can be published only by a saved HTMLApp.")
+            return
+        }
+        guard let widgetID = validGeneratedIdentifier(args["id"] as? String),
+              let snapshotArgs = args["snapshot"] as? [String: Any] else {
+            reject(id, code: "invalid_arguments", message: "widgets.configure requires a safe id and snapshot object.")
+            return
+        }
+
+        let existing = HTMLAppWidgetStore.definitions(appID: appID)
+        if !existing.contains(where: { $0.widgetID == widgetID }), existing.count >= 8 {
+            reject(id, code: "widget_limit", message: "One HTMLApp can publish at most 8 widgets.")
+            return
+        }
+
+        let name = String(((args["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "HTMLApp Widget").prefix(80))
+        let allowedFamilies: Set<String> = [
+            "systemSmall", "systemMedium", "systemLarge",
+            "accessoryInline", "accessoryCircular", "accessoryRectangular"
+        ]
+        let requestedFamilies = (args["families"] as? [String] ?? [])
+            .filter { allowedFamilies.contains($0) }
+        let families = requestedFamilies.isEmpty
+            ? ["systemSmall", "systemMedium", "systemLarge"]
+            : Array(requestedFamilies.prefix(6))
+
+        guard let snapshot = widgetSnapshot(from: snapshotArgs) else {
+            reject(id, code: "invalid_widget", message: "The widget snapshot contains invalid or oversized content.")
+            return
+        }
+
+        var refreshSpec: HTMLAppWidgetRefreshSpec?
+        if let refresh = args["refresh"] as? [String: Any] {
+            guard let rawURL = refresh["url"] as? String,
+                  let url = URL(string: rawURL),
+                  url.scheme?.lowercased() == "https" else {
+                reject(id, code: "invalid_refresh_url", message: "Widget background refresh supports public HTTPS JSON endpoints only.")
+                return
+            }
+            let interval = min(max((refresh["intervalMinutes"] as? NSNumber)?.intValue ?? 30, 15), 1440)
+            let rawBindings = refresh["bindings"] as? [String: Any] ?? [:]
+            var bindings: [String: String] = [:]
+            for (target, source) in rawBindings.prefix(24) {
+                guard let source = source as? String,
+                      target.count <= 80,
+                      source.count <= 240 else { continue }
+                bindings[target] = source
+            }
+            refreshSpec = HTMLAppWidgetRefreshSpec(
+                url: url.absoluteString,
+                intervalMinutes: interval,
+                bindings: bindings
+            )
+        }
+
+        let definition = HTMLAppWidgetDefinition(
+            appID: appID,
+            widgetID: widgetID,
+            name: name,
+            primary: args["primary"] as? Bool ?? existing.isEmpty,
+            families: families,
+            snapshot: snapshot,
+            refresh: refreshSpec,
+            updatedAt: Date(),
+            lastRefreshAt: existing.first(where: { $0.widgetID == widgetID })?.lastRefreshAt,
+            lastError: nil
+        )
+        HTMLAppWidgetStore.save(definition)
+        WidgetCenter.shared.reloadAllTimelines()
+        resolve(id, value: [
+            "id": definition.id,
+            "widgetID": definition.widgetID,
+            "name": definition.name,
+            "families": definition.families,
+            "backgroundRefresh": definition.refresh != nil
+        ])
+    }
+
+    private func listWidgets(id: String) {
+        let values = HTMLAppWidgetStore.definitions(appID: appID).map(widgetJSON)
+        resolve(id, value: ["widgets": values, "count": values.count])
+    }
+
+    private func removeWidget(id: String, args: [String: Any]) {
+        let widgetID = validGeneratedIdentifier(args["id"] as? String)
+        HTMLAppWidgetStore.remove(appID: appID, widgetID: widgetID)
+        WidgetCenter.shared.reloadAllTimelines()
+        resolve(id, value: ["removed": true, "all": widgetID == nil])
+    }
+
+    private func configureBackgroundJob(id: String, args: [String: Any]) {
+        guard appID != "PREVIEW" else {
+            reject(id, code: "preview_restricted", message: "Background jobs can be configured only by a saved HTMLApp.")
+            return
+        }
+        guard let jobID = validGeneratedIdentifier(args["id"] as? String),
+              let rawURL = args["url"] as? String,
+              let url = URL(string: rawURL),
+              url.scheme?.lowercased() == "https",
+              let storageKey = (args["storageKey"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !storageKey.isEmpty,
+              storageKey.count <= 200 else {
+            reject(id, code: "invalid_arguments", message: "background.configure requires id, public HTTPS url, and storageKey.")
+            return
+        }
+
+        let existing = HTMLAppBackgroundJobStore.jobs(appID: appID)
+        if !existing.contains(where: { $0.jobID == jobID }), existing.count >= 6 {
+            reject(id, code: "background_job_limit", message: "One HTMLApp can register at most 6 background fetch jobs.")
+            return
+        }
+
+        let interval = min(max((args["intervalMinutes"] as? NSNumber)?.intValue ?? 30, 15), 1440)
+        let jsonPath = (args["jsonPath"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(240)
+            .description
+        let widgetID = validGeneratedIdentifier(args["widgetID"] as? String)
+        let previous = existing.first(where: { $0.jobID == jobID })
+
+        let job = HTMLAppBackgroundFetchJob(
+            appID: appID,
+            jobID: jobID,
+            url: url.absoluteString,
+            intervalMinutes: interval,
+            storageKey: storageKey,
+            jsonPath: jsonPath?.isEmpty == false ? jsonPath : nil,
+            widgetID: widgetID,
+            enabled: args["enabled"] as? Bool ?? true,
+            updatedAt: Date(),
+            lastRunAt: previous?.lastRunAt,
+            lastError: previous?.lastError
+        )
+        HTMLAppBackgroundJobStore.save(job)
+        HTMLAppBackgroundCoordinator.shared.schedule()
+        resolve(id, value: backgroundJobJSON(job).merging([
+            "scheduled": true,
+            "opportunistic": true
+        ]) { _, new in new })
+    }
+
+    private func listBackgroundJobs(id: String) {
+        let jobs = HTMLAppBackgroundJobStore.jobs(appID: appID).map(backgroundJobJSON)
+        resolve(id, value: ["jobs": jobs, "count": jobs.count])
+    }
+
+    private func removeBackgroundJob(id: String, args: [String: Any]) {
+        let jobID = validGeneratedIdentifier(args["id"] as? String)
+        HTMLAppBackgroundJobStore.remove(appID: appID, jobID: jobID)
+        HTMLAppBackgroundCoordinator.shared.schedule()
+        resolve(id, value: ["removed": true, "all": jobID == nil])
+    }
+
+    private func refreshBackgroundJobNow(id: String, args: [String: Any]) {
+        let jobID = validGeneratedIdentifier(args["id"] as? String)
+        Task { [weak self] in
+            guard let self else { return }
+            let results = await HTMLAppBackgroundCoordinator.shared.runNow(appID: self.appID, jobID: jobID)
+            let payload = results.map(self.backgroundJobJSON)
+            self.resolve(id, value: ["jobs": payload, "count": payload.count])
+        }
+    }
+
+    private func widgetSnapshot(from args: [String: Any]) -> HTMLAppWidgetSnapshot? {
+        func text(_ key: String, limit: Int = 180) -> String? {
+            guard let raw = args[key] as? String else { return nil }
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : String(value.prefix(limit))
+        }
+
+        let rawLayout = text("layout", limit: 24)?.lowercased()
+        let allowedLayouts: Set<String> = ["metric", "list", "status", "progress", "image"]
+        let layout = rawLayout.flatMap { allowedLayouts.contains($0) ? $0 : nil }
+
+        var items: [HTMLAppWidgetItem] = []
+        if let rawItems = args["items"] as? [[String: Any]] {
+            for (index, raw) in rawItems.prefix(8).enumerated() {
+                let label = String(((raw["label"] as? String) ?? "").prefix(80))
+                let value = String(((raw["value"] as? String) ?? "").prefix(120))
+                if label.isEmpty && value.isEmpty { continue }
+                let detail = (raw["detail"] as? String).map { String($0.prefix(120)) }
+                let symbol = (raw["systemSymbol"] as? String).map { String($0.prefix(80)) }
+                let progress = (raw["progress"] as? NSNumber).map { min(max($0.doubleValue, 0), 1) }
+                items.append(.init(
+                    id: (raw["id"] as? String).flatMap(validGeneratedIdentifier) ?? "item-(index)",
+                    label: label,
+                    value: value,
+                    detail: detail,
+                    systemSymbol: symbol,
+                    progress: progress
+                ))
+            }
+        }
+
+        let image = text("imageBase64", limit: 1_500_000)
+        if let image, image.utf8.count > 1_500_000 { return nil }
+
+        return HTMLAppWidgetSnapshot(
+            layout: layout,
+            eyebrow: text("eyebrow"),
+            title: text("title"),
+            subtitle: text("subtitle", limit: 240),
+            value: text("value"),
+            unit: text("unit", limit: 40),
+            footer: text("footer", limit: 180),
+            systemSymbol: text("systemSymbol", limit: 80),
+            progress: (args["progress"] as? NSNumber).map { min(max($0.doubleValue, 0), 1) },
+            backgroundHex: text("backgroundHex", limit: 16),
+            backgroundSecondaryHex: text("backgroundSecondaryHex", limit: 16),
+            foregroundHex: text("foregroundHex", limit: 16),
+            accentHex: text("accentHex", limit: 16),
+            imageBase64: image,
+            items: items.isEmpty ? nil : items
+        )
+    }
+
+    private func widgetJSON(_ widget: HTMLAppWidgetDefinition) -> [String: Any] {
+        var value: [String: Any] = [
+            "id": widget.id,
+            "widgetID": widget.widgetID,
+            "name": widget.name,
+            "primary": widget.primary,
+            "families": widget.families,
+            "updatedAt": widget.updatedAt.timeIntervalSince1970
+        ]
+        if let last = widget.lastRefreshAt { value["lastRefreshAt"] = last.timeIntervalSince1970 }
+        if let error = widget.lastError { value["lastError"] = error }
+        value["backgroundRefresh"] = widget.refresh != nil
+        return value
+    }
+
+    private func backgroundJobJSON(_ job: HTMLAppBackgroundFetchJob) -> [String: Any] {
+        var value: [String: Any] = [
+            "id": job.jobID,
+            "url": job.url,
+            "intervalMinutes": job.intervalMinutes,
+            "storageKey": job.storageKey,
+            "enabled": job.enabled,
+            "opportunistic": true
+        ]
+        if let path = job.jsonPath { value["jsonPath"] = path }
+        if let widgetID = job.widgetID { value["widgetID"] = widgetID }
+        if let last = job.lastRunAt { value["lastRunAt"] = last.timeIntervalSince1970 }
+        if let error = job.lastError { value["lastError"] = error }
+        return value
+    }
+
+    private func validGeneratedIdentifier(_ raw: String?) -> String? {
+        let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty, value.count <= 80 else { return nil }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        guard value.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+        return value
     }
 
     private func openURL(id: String, value: String) {
@@ -1219,6 +1494,18 @@ enum HTMLNativeAPIScript {
             return output;
           },
           clear: () => call('appStorage.clear')
+        },
+        widgets: {
+          configure: (definition) => call('widgets.configure', definition || {}),
+          list: () => call('widgets.list'),
+          remove: (id) => call('widgets.remove', id ? { id: String(id) } : {}),
+          reload: () => call('widgets.reload')
+        },
+        background: {
+          configure: (job) => call('background.configure', job || {}),
+          list: () => call('background.list'),
+          remove: (id) => call('background.remove', id ? { id: String(id) } : {}),
+          refreshNow: (id) => call('background.refreshNow', id ? { id: String(id) } : {})
         },
         speech: {
           speak: (text, options = {}) => call('speech.speak', { ...options, text: String(text ?? '') }),
