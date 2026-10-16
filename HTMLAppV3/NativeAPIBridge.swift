@@ -288,7 +288,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             return
         }
 
-        let name = String(((args["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "HTMLApp Widget").prefix(80))
+        let rawName = (args["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = String((rawName.isEmpty ? "HTMLApp Widget" : rawName).prefix(80))
         let allowedFamilies: Set<String> = [
             "systemSmall", "systemMedium", "systemLarge",
             "accessoryInline", "accessoryCircular", "accessoryRectangular"
