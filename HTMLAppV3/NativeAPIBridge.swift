@@ -272,10 +272,6 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func configureWidget(id: String, args: [String: Any]) {
-        guard appID != "PREVIEW" else {
-            reject(id, code: "preview_restricted", message: "Widgets can be published only by a saved HTMLApp.")
-            return
-        }
         guard let widgetID = validGeneratedIdentifier(args["id"] as? String),
               let snapshotArgs = args["snapshot"] as? [String: Any] else {
             reject(id, code: "invalid_arguments", message: "widgets.configure requires a safe id and snapshot object.")
@@ -341,14 +337,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastRefreshAt: existing.first(where: { $0.widgetID == widgetID })?.lastRefreshAt,
             lastError: nil
         )
-        HTMLAppWidgetStore.save(definition)
-        WidgetCenter.shared.reloadAllTimelines()
+        if appID != "PREVIEW" {
+            HTMLAppWidgetStore.save(definition)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
         resolve(id, value: [
             "id": definition.id,
             "widgetID": definition.widgetID,
             "name": definition.name,
             "families": definition.families,
-            "backgroundRefresh": definition.refresh != nil
+            "backgroundRefresh": definition.refresh != nil,
+            "preview": appID == "PREVIEW"
         ])
     }
 
@@ -365,10 +364,6 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func configureBackgroundJob(id: String, args: [String: Any]) {
-        guard appID != "PREVIEW" else {
-            reject(id, code: "preview_restricted", message: "Background jobs can be configured only by a saved HTMLApp.")
-            return
-        }
         guard let jobID = validGeneratedIdentifier(args["id"] as? String),
               let rawURL = args["url"] as? String,
               let url = URL(string: rawURL),
@@ -407,11 +402,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastRunAt: previous?.lastRunAt,
             lastError: previous?.lastError
         )
-        HTMLAppBackgroundJobStore.save(job)
-        HTMLAppBackgroundCoordinator.shared.schedule()
+        if appID != "PREVIEW" {
+            HTMLAppBackgroundJobStore.save(job)
+            HTMLAppBackgroundCoordinator.shared.schedule()
+        }
         resolve(id, value: backgroundJobJSON(job).merging([
-            "scheduled": true,
-            "opportunistic": true
+            "scheduled": appID != "PREVIEW",
+            "opportunistic": true,
+            "preview": appID == "PREVIEW"
         ]) { _, new in new })
     }
 
