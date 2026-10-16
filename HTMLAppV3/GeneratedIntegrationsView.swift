@@ -30,10 +30,10 @@ struct GeneratedIntegrationsView: View {
 
             if widgets.isEmpty {
                 Section {
-                    ContentUnavailableView(
-                        "No Generated Widgets",
+                    emptyState(
+                        title: "No Generated Widgets",
                         systemImage: "square.grid.2x2",
-                        description: Text("Forge-created apps can publish widgets when a glanceable view genuinely improves the product.")
+                        detail: "Forge-created apps can publish widgets when a glanceable view genuinely improves the product."
                     )
                 }
             } else {
@@ -90,10 +90,10 @@ struct GeneratedIntegrationsView: View {
 
             Section {
                 if jobs.isEmpty {
-                    ContentUnavailableView(
-                        "No Background Jobs",
+                    emptyState(
+                        title: "No Background Jobs",
                         systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                        description: Text("Generated apps can ask iOS to refresh public HTTPS JSON and save it into their portable app data.")
+                        detail: "Generated apps can ask iOS to refresh public HTTPS JSON and save it into their portable app data."
                     )
                 } else {
                     ForEach(jobs) { job in
@@ -165,6 +165,23 @@ struct GeneratedIntegrationsView: View {
         .navigationTitle("Widgets & Background")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: reload)
+    }
+
+    @ViewBuilder
+    private func emptyState(title: String, systemImage: String, detail: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
     }
 
     private var widgetGroups: [(appID: String, appName: String, widgets: [HTMLAppWidgetDefinition])] {
