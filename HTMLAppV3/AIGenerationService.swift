@@ -763,24 +763,28 @@ enum AIProviderClient {
 
 enum AIHTMLAgent {
     static let designGuide = """
-Build one complete, self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. It must behave like a real mobile product: clear hierarchy, native-feeling navigation, useful pressed states, sheets/overlays where appropriate, smooth state transitions, safe areas, 44px minimum touch targets, excellent phone/iPad resizing, polished light/dark appearance, accessible forms, and no dead controls. Respect prefers-reduced-motion, prefers-contrast, and prefers-reduced-transparency.
+Build one complete, self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. Unless the user explicitly requests a demo/mockup/snippet, treat the result as a full application: complete core workflows, real persistent state, appropriate create/edit/delete/search/import/export behavior, useful settings/help when warranted, honest lifecycle behavior, meaningful loading/empty/error/offline/permission states, and no dead controls. It must behave like a real mobile product with clear hierarchy, native-feeling navigation, useful pressed states, sheets/overlays where appropriate, smooth state transitions, 44px minimum touch targets, excellent phone/iPad resizing, polished light/dark appearance, accessible forms, and release-quality cleanup. Respect prefers-reduced-motion, prefers-contrast, and prefers-reduced-transparency.
+
+SAFE AREA IS NON-NEGOTIABLE: use <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"> and reusable env(safe-area-inset-top/right/bottom/left) CSS variables. HTMLApp is edge-to-edge, so the root/top chrome must own the top inset exactly once and interactive content must never sit behind the notch/Dynamic Island/status bar. Bottom bars must own the Home Indicator inset, and landscape must respect left/right cutouts. Full-bleed backgrounds may extend under cutouts; content and controls may not.
 
 Use the HTMLApp runtime rather than assuming ordinary Safari limitations:
 - Camera/mic: navigator.mediaDevices.getUserMedia; stop tracks when finished; MediaRecorder/Web Audio when available.
 - Location: navigator.geolocation.getCurrentPosition and watchPosition are natively bridged; clear watches.
 - Motion/orientation: request DeviceMotionEvent/DeviceOrientationEvent permission from a user gesture when required. Compass can also use window.htmlappCompassHeading and the htmlappcompass event.
 - Haptics: navigator.vibrate is bridged to native iOS feedback; keep it brief and user-initiated.
-- Notifications: Notification.requestPermission and immediate new Notification(...) are bridged to native iOS local notifications. Do not promise remote push/background scheduling.
+- Notifications: Notification.requestPermission and immediate new Notification(...) are bridged to native iOS local notifications. Do not promise remote push or use notifications as a fake background engine.
 - Downloads/export: normal downloads plus Blob/data/object-URL downloads are handled by HTMLApp and open the iOS share sheet after retrieval. Use meaningful MIME types and filenames.
 - Files/photos: use <input type=file> for user-selected files/photos/videos; read with File/Blob/FileReader/arrayBuffer/object URLs; do not claim unrestricted Photo Library access.
 - Storage: prefer HTMLAppNative.appStorage for important non-secret generated-app data that should travel with HTMLApp backups/shares. localStorage is fine for disposable compatibility/preferences; IndexedDB is for larger structured/blob data and should have an explicit export path if valuable. Use secureStorage only for secrets/tokens.
+- Widgets: HTMLAppNative.widgets.configure/list/remove/reload can publish real Home Screen/Lock Screen WidgetKit widgets. Use widgets when glanceable status, quick metrics, reminders, progress, lists, or current public data materially improve the product. Widgets can bind fields to public HTTPS JSON and deep-link back into the HTMLApp.
+- Background refresh: HTMLAppNative.background.configure/list/remove/refreshNow can register opportunistic iOS BGAppRefresh public-HTTPS JSON fetches that store results in appStorage. iOS chooses actual timing; minimum requested interval is 15 minutes. This does not run arbitrary JavaScript after suspension.
 - Networking: fetch/WebSocket/EventSource are allowed subject to CORS, server support, and normal security constraints.
 - iOS handoffs: documented HTMLAppNative.externalApps.maps and externalApps.shortcuts can open Apple Maps or run a user-installed Shortcut from deliberate user actions. Do not invent other structured adapters.
 - Sharing/media/credentials: feature-detect navigator.share/canShare, Media Session, navigator.credentials/WebAuthn, Clipboard, and other optional APIs.
 
-When research contains HTMLAPP DEVICE API CATALOG RESULTS, treat those results as the authoritative runtime reference. Prefer documented HTMLAppNative wrappers for contacts, user-selected Photos media, Calendar, Reminders, local notifications, biometrics, secure storage, portable app storage, Maps/Shortcuts handoffs, speech, Files, sharing, clipboard, device info, and keep-awake behavior when they match the task. Follow the exact method names and constraints from the catalog; never invent adjacent methods.
+When research contains HTMLAPP DEVICE API CATALOG RESULTS, treat those results as the authoritative runtime reference. Prefer documented HTMLAppNative wrappers for contacts, user-selected Photos media, Calendar, Reminders, local notifications, biometrics, secure storage, portable app storage, generated widgets, opportunistic background JSON refresh, Maps/Shortcuts handoffs, speech, Files, sharing, clipboard, device info, and keep-awake behavior when they match the task. Follow the exact method names and constraints from the catalog; never invent adjacent methods.
 
-Never invent native bridges. HealthKit, HomeKit, NFC, Nearby Interaction, arbitrary background execution/location, remote push, Live Activities/Dynamic Island, CallKit/CarPlay, Apple Pay merchant flows, unrestricted hidden Photo Library enumeration/deletion, and other entitlement-gated frameworks are unavailable to generated HTMLApps unless the device catalog explicitly documents a bridge. If a requested capability is unavailable, build the best honest fallback and expose the limitation rather than simulating success.
+Never invent native bridges. HealthKit, HomeKit, NFC, Nearby Interaction, background location, arbitrary continuously running HTML/JavaScript beyond the documented background-fetch/widget mechanisms, remote push, Live Activities/Dynamic Island activities, CallKit/CarPlay, Apple Pay merchant flows, unrestricted hidden Photo Library enumeration/deletion, and other entitlement-gated frameworks are unavailable to generated HTMLApps unless the device catalog explicitly documents a bridge. If a requested capability is unavailable, build the best honest fallback and expose the limitation rather than simulating success.
 
 Other browser APIs such as Bluetooth, USB, Serial, HID, WebGPU, WebXR, Wake Lock, Service Workers, App Badging, Network Information, Battery, keyboard APIs, Audio Session, and similar capabilities are feature-detect-only. Presence of an object is not proof the requested operation will succeed; handle rejection and unsupported states.
 
@@ -811,7 +815,7 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
         "notification", "face id", "touch id", "biometric", "clipboard", "file", "download",
         "share", "speech", "text to speech", "location", "gps", "map", "motion", "orientation",
         "compass", "sensor", "battery", "haptic", "vibrate", "keychain", "secure storage",
-        "passkey", "background", "dynamic island", "live activity", "healthkit", "homekit",
+        "passkey", "widget", "widgets", "widgetkit", "home screen widget", "lock screen widget", "background", "background refresh", "dynamic island", "live activity", "healthkit", "homekit",
         "nfc", "bluetooth", "carplay", "callkit", "apple pay"
     ]
 
@@ -845,12 +849,14 @@ The brief must explicitly cover:
 - STRUCTURE: screens/navigation/sheets/overlays only where useful
 - DATA MODEL: important entities, state, persistence, import/export, and source of truth
 - CAPABILITIES: browser/native/network needs that require verification
+- WIDGETS & BACKGROUND: whether glanceable WidgetKit content or opportunistic background JSON refresh would materially help; if yes, define what information, source, refresh behavior, and deep-link destination are useful. Do not force these into products that do not benefit.
 - ONBOARDING: whether first-run setup is genuinely useful; if so, exactly what must be chosen/explained and how completion persists
 - STATES: loading/empty/error/offline/permission/unsupported/invalid/destructive states that genuinely apply
-- EXPERIENCE: phone-first interaction, iPad behavior, accessibility, visual direction, and meaningful motion
+- EXPERIENCE: phone-first interaction, mandatory notch/Dynamic-Island/Home-Indicator safe-area ownership, iPad behavior, accessibility, visual direction, and meaningful motion
+- COMPLETENESS: what makes this a full usable application rather than a prototype—data management, persistence, settings/help, import/export, recovery, and repeated-use behavior where relevant
 - ACCEPTANCE: observable conditions the finished app must satisfy
 
-Prefer the smallest complete product that already feels like a thoughtful version 1. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
+Prefer the smallest complete product that already feels like a thoughtful first public release, not a mockup or shallow prototype. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
         let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 55, maxTokens: 2200)
         return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
@@ -874,7 +880,7 @@ Plan capability research for an HTMLApp. Return only zero or more tags in these 
 <device_query>concise capability query</device_query>
 <query>concise public/web API discovery query</query>
 
-Use <device_query> whenever the requested app or revision touches iPhone/iPad hardware, sensors, camera/microphone, files, downloads/exports, sharing, contacts, photos, calendar, reminders, notifications, biometrics, secure storage, speech, authentication, background/system integration, or another capability that might be provided by HTMLApp itself. The internal device catalog returns exact supported methods, usage examples, and limitations.
+Use <device_query> whenever the requested app or revision touches iPhone/iPad hardware, sensors, camera/microphone, files, downloads/exports, sharing, contacts, photos, calendar, reminders, notifications, biometrics, secure storage, speech, authentication, widgets, WidgetKit, background refresh/system integration, or another capability that might be provided by HTMLApp itself. The internal device catalog returns exact supported methods, usage examples, and limitations.
 
 Use <query> only when the app needs real-world/live/current remote data or a remote service that cannot be satisfied locally. Prefer documented no-auth APIs, then documented browser-safe free tiers.
 
@@ -1566,6 +1572,9 @@ enum HTMLQualityChecks {
         var issues: [String] = []
         if !lower.contains("<!doctype html") { issues.append("Missing <!DOCTYPE html>.") }
         if !lower.contains("name=\"viewport\"") && !lower.contains("name='viewport'") { issues.append("Missing mobile viewport metadata.") }
+        if !lower.contains("viewport-fit=cover") { issues.append("Viewport must include viewport-fit=cover for HTMLApp's edge-to-edge WebView.") }
+        if !lower.contains("safe-area-inset-top") { issues.append("Missing top safe-area handling; content may sit under the notch or Dynamic Island.") }
+        if !lower.contains("safe-area-inset-bottom") { issues.append("Missing bottom safe-area handling for the Home Indicator.") }
         if count("<script", in: lower) != count("</script>", in: lower) { issues.append("Unbalanced <script> tags.") }
         if count("<style", in: lower) != count("</style>", in: lower) { issues.append("Unbalanced <style> tags.") }
         if lower.contains("alert(") { issues.append("Uses browser alert(); routine feedback should use in-app UI.") }
