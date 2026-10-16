@@ -170,18 +170,29 @@ final class AppStore: ObservableObject {
         await SourceCache.shared.refresh(app: app, force: false)
     }
 
-    func addTransferredApp(_ incoming: SavedHTMLApp, portableData: [String: String]? = nil) async {
+    func addTransferredApp(
+        _ incoming: SavedHTMLApp,
+        portableData: [String: String]? = nil,
+        widgets: [HTMLAppWidgetDefinition]? = nil,
+        backgroundJobs: [HTMLAppBackgroundFetchJob]? = nil
+    ) async {
         if let source = incoming.websiteSourceURL,
            !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            (try? await addWebsite(urlString: source)) != nil {
-            if let imported = apps.first {
-                if let index = apps.firstIndex(where: { $0.id == imported.id }) {
-                    apps[index].summary = incoming.summary
-                    apps[index].isFavorite = incoming.isFavorite
-                    if let favicon = incoming.favicon { apps[index].favicon = favicon }
-                    save()
-                    if let portableData { HTMLAppPortableDataStore.replace(appID: apps[index].id, values: portableData) }
+            if let imported = apps.first,
+               let index = apps.firstIndex(where: { $0.id == imported.id }) {
+                apps[index].summary = incoming.summary
+                apps[index].isFavorite = incoming.isFavorite
+                if let favicon = incoming.favicon { apps[index].favicon = favicon }
+                save()
+                if let portableData {
+                    HTMLAppPortableDataStore.replace(appID: apps[index].id, values: portableData)
                 }
+                installTransferredIntegrations(
+                    appID: apps[index].id,
+                    widgets: widgets,
+                    backgroundJobs: backgroundJobs
+                )
             }
             notice = "Received \(incoming.name) and refreshed its saved website."
             return
@@ -216,9 +227,29 @@ final class AppStore: ObservableObject {
         if let portableData {
             HTMLAppPortableDataStore.replace(appID: id, values: portableData)
         }
+        installTransferredIntegrations(appID: id, widgets: widgets, backgroundJobs: backgroundJobs)
         save()
         await SourceCache.shared.refresh(app: app, force: false)
         notice = "Received \(app.name)."
+    }
+
+    func installTransferredIntegrations(
+        appID: String,
+        widgets: [HTMLAppWidgetDefinition]?,
+        backgroundJobs: [HTMLAppBackgroundFetchJob]?
+    ) {
+        if let widgets {
+            HTMLAppWidgetStore.replace(appID: appID, with: widgets)
+        }
+        if let backgroundJobs {
+            HTMLAppBackgroundJobStore.replace(appID: appID, with: backgroundJobs)
+        }
+        if widgets != nil {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        if backgroundJobs != nil {
+            HTMLAppBackgroundCoordinator.shared.schedule()
+        }
     }
 
     func addWebsite(urlString: String) async throws {
