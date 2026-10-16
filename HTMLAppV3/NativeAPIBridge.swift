@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 import AVFoundation
 import Security
 import WidgetKit
+import SwiftUI
 
 @MainActor
 final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
