@@ -308,6 +308,54 @@ HTMLApp injects a promise-based native API wrapper into saved apps. Use these ex
   Publishing is not the same as installing. iOS does not let a generated HTMLApp silently place a widget on the Home/Lock Screen. If a widget is an important feature, include a small discoverable in-app "Widget" help/setup surface explaining that the user adds the HTMLApp widget through the normal iOS widget picker; do not nag on every launch or claim it was installed.
   Call widgets.configure idempotently whenever the source state that should appear in the widget changes, so the stored snapshot stays current. Do not put secret tokens or private credentials into widget definitions or refresh URLs.
 - HTMLAppNative.background.configure(job), list(), remove(id?), refreshNow(id?) -> registers opportunistic iOS BGAppRefresh JSON fetch jobs. A job uses public HTTPS GET, stores selected JSON into portable appStorage, and may request a related widget refresh. Up to 6 jobs per HTMLApp; minimum requested interval 15 minutes. iOS may delay or skip execution.
+
+WIDGET DEFINITION SHAPE
+Use widgets.configure with:
+{
+  id: "stable-widget-id",
+  name: "Human-readable name",
+  primary: true|false,
+  families: ["systemSmall","systemMedium","systemLarge","accessoryInline","accessoryCircular","accessoryRectangular"],
+  snapshot: {
+    layout: "metric"|"list"|"status"|"progress"|"image",
+    eyebrow?, title?, subtitle?, value?, unit?, footer?, systemSymbol?,
+    progress?: 0...1,
+    backgroundHex?, backgroundSecondaryHex?, foregroundHex?, accentHex?,
+    imageBase64?,
+    items?: [{id?,label,value,detail?,systemSymbol?,progress?}]
+  },
+  refresh?: {
+    url: "https://public-json-endpoint",
+    intervalMinutes: 15...1440,
+    bindings: {
+      "value": "json.path",
+      "subtitle": "json.path",
+      "progress": "json.path",
+      "items.0.value": "json.path"
+    }
+  }
+}
+- Keep IDs stable between launches so configure updates rather than duplicates.
+- Configure no more than the useful widgets the product warrants. Usually one or two is enough.
+- Widget refresh is GET-only public HTTPS JSON. Do not place Authorization tokens, API keys, cookies, user secrets, private URLs, or personal data in a widget refresh URL.
+- imageBase64 is for a reasonably small embedded image when that genuinely improves the widget; do not dump large generated artwork into every widget.
+- The HTMLApp widget renderer adapts the same definition across requested families; prioritize glanceability and short text.
+
+BACKGROUND JOB SHAPE
+Use background.configure with:
+{
+  id: "stable-job-id",
+  url: "https://public-json-endpoint",
+  intervalMinutes: 15...1440,
+  storageKey: "portableAppStorageKey",
+  jsonPath?: "optional.path.with.0.array.indices",
+  widgetID?: "related-widget-id",
+  enabled?: true
+}
+- Configure jobs idempotently with stable IDs.
+- Use background.refreshNow(id) only for a user-requested foreground refresh, first-run warm-up, or testing—not as a scheduler.
+- Read completed background results later through HTMLAppNative.appStorage.get(storageKey).
+- If freshness matters, persist/show a last-updated time and provide a manual refresh path because iOS background timing is never exact.
 - HTMLAppNative.speech.speak(text,{language?,rate?,pitch?}) / stop() -> native AVSpeechSynthesizer text-to-speech.
 
 Use try/catch around native wrapper calls. Cancellations and denied permissions are normal UI states, not crashes. Native permission requests must still originate from a meaningful user action. Do not call sensitive wrappers automatically on page load. Do not guess additional HTMLAppNative method names; only the methods documented here are guaranteed.
