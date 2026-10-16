@@ -7,11 +7,12 @@ struct OnboardingView: View {
     private let pages = [
         ("Make, save, and remix", "rectangle.stack.badge.plus", "HTMLApp keeps websites, hand-written HTML, imported files, and AI-created apps together in one native library."),
         ("An AI team, not one model", "sparkles", "Use one API connection, then choose separate models for planning, web research, coding, UI refinement, icon/assets, and final verification."),
-        ("Agentic first editions", "wand.and.stars", "Describe the outcome you want. Forge plans the product, researches real facts/APIs when useful, anticipates a few likely next-step features, builds a live preview, and repairs concrete issues before you save."),
+        ("Full apps from one request", "wand.and.stars", "Describe the outcome you want. Forge plans a complete first release with persistent data, real workflows, useful settings and recovery states when appropriate—not a shallow mockup."),
         ("Portable generated artwork", "photo.stack", "AI can create a real app icon plus purpose-built IconScript illustrations. Generated artwork is embedded in the HTMLApp so it survives sharing and backups."),
         ("Save whole websites", "arrow.down.circle", "Download a website and its referenced resources for offline use. HTMLApp opens the saved copy first and can refresh it in the background."),
         ("Share the actual HTMLApp", "arrow.left.arrow.right.square", "Use Share HTMLApp Package for AirDrop, Files, Messages, or another device. Packages preserve app metadata and cached resources; nearby QR transfer remains available for smaller apps."),
         ("Back up your library", "shippingbox.fill", "Settings > Backup & Transfer can export selected apps or the complete library as a ZIP, then Merge or fully Restore it on another device."),
+        ("Widgets and background refresh", "square.grid.2x2", "Generated apps can publish native Home Screen and Lock Screen widgets and request iOS-scheduled public-data refresh when the product benefits from glanceable or periodically refreshed information."),
         ("Real device capabilities", "gyroscope", "Generated apps can use HTMLApp's documented camera, microphone, location, contacts, photos, calendar, reminders, notifications, biometrics, Files, Maps, Shortcuts, secure storage, speech, sharing, and local-network bridges when appropriate."),
         ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold for sharing, permissions, AI editing, icon generation, raw HTML, and advanced actions."),
         ("Add it to Home Screen", "apps.iphone", "Any saved HTMLApp can still be installed as a Home Screen Web Clip with its saved icon.")
@@ -126,6 +127,13 @@ struct SettingsView: View {
                     }
 
                     NavigationLink {
+                        GeneratedIntegrationsView()
+                            .environmentObject(store)
+                    } label: {
+                        Label("Widgets & Background", systemImage: "square.grid.2x2")
+                    }
+
+                    NavigationLink {
                         HTMLAppDataTransferView()
                             .environmentObject(store)
                     } label: {
@@ -134,7 +142,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Creation & Transfer")
                 } footer: {
-                    Text("Configure your specialized AI team in one place, or move selected apps and complete libraries between devices with portable ZIP backups.")
+                    Text("Configure your specialized AI team, inspect generated widgets/background refresh jobs, or move selected apps and complete libraries between devices with portable ZIP backups.")
                 }
 
                 Section("Opening Apps") {
