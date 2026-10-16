@@ -8,6 +8,8 @@ struct HTMLAppMain: App {
 
     init() {
         HTMLNotificationCenterDelegate.shared.activate()
+        HTMLAppBackgroundCoordinator.shared.register()
+        HTMLAppBackgroundCoordinator.shared.schedule()
     }
 
     var body: some Scene {
@@ -575,6 +577,9 @@ final class AppStore: ObservableObject {
         HTMLPermissionStore.reset(appID: app.id)
         HTMLSensorPermissionPolicy.reset(appID: app.id)
         HTMLAppPortableDataStore.clear(appID: app.id)
+        HTMLAppWidgetStore.remove(appID: app.id)
+        HTMLAppBackgroundJobStore.remove(appID: app.id)
+        HTMLAppBackgroundCoordinator.shared.schedule()
     }
 
     func exportHTML(_ app: SavedHTMLApp) {
