@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WidgetKit
 
 @main
 struct HTMLAppMain: App {
@@ -630,6 +631,8 @@ final class AppStore: ObservableObject {
                 HTMLPermissionStore.reset(appID: app.id)
                 HTMLSensorPermissionPolicy.reset(appID: app.id)
                 HTMLAppPortableDataStore.clear(appID: app.id)
+                HTMLAppWidgetStore.remove(appID: app.id)
+                HTMLAppBackgroundJobStore.remove(appID: app.id)
             }
 
             apps = imported.apps
@@ -645,6 +648,7 @@ final class AppStore: ObservableObject {
             restorePortablePermissions(bundle: imported, appIDMap: identityMap)
             restorePortableAppData(bundle: imported, appIDMap: identityMap)
             restorePortableWebsiteState(bundle: imported, appIDMap: identityMap)
+            restoreGeneratedIntegrations(bundle: imported, appIDMap: identityMap)
 
             save()
             persistFolders()
@@ -720,6 +724,7 @@ final class AppStore: ObservableObject {
         restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
         restorePortableAppData(bundle: imported, appIDMap: appIDMap)
         restorePortableWebsiteState(bundle: imported, appIDMap: appIDMap)
+        restoreGeneratedIntegrations(bundle: imported, appIDMap: appIDMap)
 
         save()
         persistFolders()
@@ -871,6 +876,26 @@ final class AppStore: ObservableObject {
             guard let newID = appIDMap[oldID] else { continue }
             WebsiteArchiveManager.shared.restorePortableState(state, appID: newID)
         }
+    }
+
+
+    private func restoreGeneratedIntegrations(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
+        for (oldID, newID) in appIDMap {
+            if let definitions = bundle.widgetDefinitions?.filter({ $0.appID == oldID }) {
+                HTMLAppWidgetStore.replace(appID: newID, with: definitions)
+            } else {
+                HTMLAppWidgetStore.remove(appID: newID)
+            }
+
+            if let jobs = bundle.backgroundJobs?.filter({ $0.appID == oldID }) {
+                HTMLAppBackgroundJobStore.replace(appID: newID, with: jobs)
+            } else {
+                HTMLAppBackgroundJobStore.remove(appID: newID)
+            }
+        }
+
+        HTMLAppBackgroundCoordinator.shared.schedule()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func validPendingInsertionFolderID() -> String? {
