@@ -338,6 +338,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastRefreshAt: existing.first(where: { $0.widgetID == widgetID })?.lastRefreshAt,
             lastError: nil
         )
+        if appID != "PREVIEW" && !HTMLAppSharedContainer.appGroupAvailable {
+            reject(id, code: "app_group_unavailable", message: "Widget shared storage is unavailable. Your installed HTMLApp and widget extension must both be signed with the group.com.mekabrine.htmlapp App Group entitlement.")
+            return
+        }
         if appID != "PREVIEW" {
             HTMLAppWidgetStore.save(definition)
             WidgetCenter.shared.reloadAllTimelines()
@@ -348,13 +352,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             "name": definition.name,
             "families": definition.families,
             "backgroundRefresh": definition.refresh != nil,
-            "preview": appID == "PREVIEW"
+            "preview": appID == "PREVIEW",
+            "appGroupAvailable": HTMLAppSharedContainer.appGroupAvailable
         ])
     }
 
     private func listWidgets(id: String) {
         let values = HTMLAppWidgetStore.definitions(appID: appID).map(widgetJSON)
-        resolve(id, value: ["widgets": values, "count": values.count])
+        resolve(id, value: ["widgets": values, "count": values.count, "appGroupAvailable": HTMLAppSharedContainer.appGroupAvailable, "iOS16PrimaryOnly": ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 17])
     }
 
     private func removeWidget(id: String, args: [String: Any]) {
