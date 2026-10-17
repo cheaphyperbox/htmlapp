@@ -8,25 +8,29 @@ struct HTMLAppWidgetEntry: TimelineEntry {
     let definition: HTMLAppWidgetDefinition
 }
 
+enum HTMLAppWidgetTimeline {
+    static func make(definition: HTMLAppWidgetDefinition) async -> Timeline<HTMLAppWidgetEntry> {
+        // Providers are read-only. A slow network response must not revert shared publications.
+        let refreshed = await HTMLAppWidgetNetwork.refreshed(definition)
+        let interval = max(15, refreshed.refresh?.intervalMinutes ?? 60)
+        return Timeline(entries: [.init(date: Date(), definition: refreshed)],
+                        policy: .after(Date().addingTimeInterval(TimeInterval(interval * 60))))
+    }
+}
+
 struct HTMLAppPrimaryWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> HTMLAppWidgetEntry {
         .init(date: Date(), definition: .placeholder())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (HTMLAppWidgetEntry) -> Void) {
-        completion(.init(date: Date(), definition: HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())))
+        completion(.init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: nil, family: String(describing: context.family), phase: "snapshot")))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<HTMLAppWidgetEntry>) -> Void) {
         Task {
-            var definition = HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())
-            definition = await HTMLAppWidgetNetwork.refreshed(definition)
-            if definition.appID != "placeholder" {
-                HTMLAppWidgetStore.save(definition)
-            }
-            let interval = definition.refresh.map { max(15, $0.intervalMinutes) } ?? 60
-            let next = Date().addingTimeInterval(TimeInterval(interval * 60))
-            completion(Timeline(entries: [.init(date: Date(), definition: definition)], policy: .after(next)))
+            let definition = HTMLAppWidgetResolver.load(selectedID: nil, family: String(describing: context.family), phase: "timeline")
+            completion(await HTMLAppWidgetTimeline.make(definition: definition))
         }
     }
 }
@@ -50,20 +54,14 @@ struct HTMLAppWidgetEntityQuery: EntityQuery {
         let available = HTMLAppWidgetStore.all().map {
             HTMLAppWidgetEntity(id: $0.id, name: $0.name)
         }
-        if available.isEmpty {
-            return [HTMLAppWidgetEntity(
-                id: "htmlapp-no-widgets",
-                name: HTMLAppSharedContainer.appGroupAvailable
-                    ? "No published widgets — open HTMLApp"
-                    : "Widget App Group missing — check signing"
-            )]
-        }
-        return available
+        return [HTMLAppWidgetEntity(id: HTMLAppWidgetResolver.primaryID, name: "Selected Primary (choose in HTMLApp)")] + available
     }
 
     func entities(for identifiers: [HTMLAppWidgetEntity.ID]) async throws -> [HTMLAppWidgetEntity] {
-        let wanted = Set(identifiers)
-        return choices.filter { wanted.contains($0.id) }
+        let available = choices
+        return identifiers.map { id in
+            available.first { $0.id == id } ?? HTMLAppWidgetEntity(id: id, name: "Unavailable widget — republish or choose Primary")
+        }
     }
 
     func suggestedEntities() async throws -> [HTMLAppWidgetEntity] {
@@ -91,20 +89,12 @@ struct HTMLAppConfiguredWidgetProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: HTMLAppWidgetConfigurationIntent, in context: Context) async -> HTMLAppWidgetEntry {
-        .init(date: Date(), definition: selected(configuration) ?? .placeholder())
+        .init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: String(describing: context.family), phase: "snapshot"))
     }
 
     func timeline(for configuration: HTMLAppWidgetConfigurationIntent, in context: Context) async -> Timeline<HTMLAppWidgetEntry> {
-        var definition = selected(configuration) ?? HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())
-        definition = await HTMLAppWidgetNetwork.refreshed(definition)
-        if definition.appID != "placeholder" {
-            HTMLAppWidgetStore.save(definition)
-        }
-        let interval = definition.refresh.map { max(15, $0.intervalMinutes) } ?? 60
-        return Timeline(
-            entries: [.init(date: Date(), definition: definition)],
-            policy: .after(Date().addingTimeInterval(TimeInterval(interval * 60)))
-        )
+        let definition = HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: String(describing: context.family), phase: "timeline")
+        return await HTMLAppWidgetTimeline.make(definition: definition)
     }
 
     private func selected(_ configuration: HTMLAppWidgetConfigurationIntent) -> HTMLAppWidgetDefinition? {
@@ -442,6 +432,7 @@ struct HTMLAppConfiguredWidget: Widget {
     }
 }
 
+#if !WIDGET_TESTING
 @main
 struct HTMLAppWidgetsBundle: WidgetBundle {
     @WidgetBundleBuilder
@@ -452,6 +443,8 @@ struct HTMLAppWidgetsBundle: WidgetBundle {
         }
     }
 }
+
+#endif
 
 private extension Color {
     init(htmlAppHex raw: String) {
@@ -481,3 +474,4 @@ private extension Color {
         self.init(red: red, green: green, blue: blue, opacity: alpha)
     }
 }
+

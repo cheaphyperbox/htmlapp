@@ -88,7 +88,7 @@ final class HTMLAppBackgroundCoordinator {
                 if let widgetID = job.widgetID,
                    let widget = HTMLAppWidgetStore.definitions(appID: job.appID).first(where: { $0.widgetID == widgetID }) {
                     let refreshed = await HTMLAppWidgetNetwork.refreshed(widget)
-                    HTMLAppWidgetStore.save(refreshed)
+                    try HTMLAppWidgetStore.repository().refresh(refreshed, original: widget)
                 }
             } catch {
                 job.lastRunAt = Date()
@@ -142,3 +142,4 @@ final class HTMLAppBackgroundCoordinator {
         return string
     }
 }
+

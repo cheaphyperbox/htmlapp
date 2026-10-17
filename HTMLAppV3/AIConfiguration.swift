@@ -309,6 +309,7 @@ HTMLApp injects a promise-based native API wrapper into saved apps. Use these ex
   Call widgets.configure idempotently whenever the source state that should appear in the widget changes, so the stored snapshot stays current. Do not put secret tokens or private credentials into widget definitions or refresh URLs.
   CRITICAL: widgets.reload() only tells WidgetKit to reread already-published snapshots. It does NOT capture new HTML DOM or localStorage values. Any change of an app's goal, streak, progress, settings, counters, or items displayed by a widget MUST rebuild the snapshot and await widgets.configure() with the same stable widget id, then optionally call widgets.reload(). A user editing the saved HTMLApp must receive new data on the next timeline, never a stale cached count.
   Do not say "Added to Home Screen" after widgets.configure; say "Widget ready. Add HTMLApp in the iOS widget gallery." On iOS 16, HTMLApp uses a PRIMARY-only widget; the user cannot choose arbitrary widget definitions in Edit Widget. On iOS 17+, use the configurable widget selector. Recommend supported families but explain the Home Screen placement is managed by iOS.
+  On publication errors display error.code and error.message, never replace them with a generic failure. A successful configure means Published and reload requested, not extension acknowledged, refreshed, or installed. Omit primary on routine state updates to preserve user selection.
   Never present widget preview as successfully installed. During HTMLApp Forge PREVIEW, widgets.configure simulates registration and returns preview:true, so instruct the user that a saved/launched app must publish before iOS can discover it.
   Local widget content refreshes only from published snapshots, not from JavaScript background timers. For date-derived states like streak continuity, calculate and publish when the app opens or explicitly use verified public HTTPS widget bindings; don't assume a local widget reruns the app's JavaScript every day.
 
@@ -903,3 +904,4 @@ enum KeychainValueStore {
         SecItemDelete(query as CFDictionary)
     }
 }
+

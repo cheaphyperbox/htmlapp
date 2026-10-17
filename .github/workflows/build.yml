@@ -55,6 +55,18 @@ jobs:
           test -d "HTMLApp.xcodeproj"
           ls -la
 
+      - name: Test widget storage and provider timelines
+        shell: bash
+        run: bash scripts/test-widgets.sh
+
+      - name: Upload widget test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: widget-test-results
+          path: WidgetTests-*.xcresult
+          if-no-files-found: warn
+
       - name: Build unsigned universal device app
         shell: bash
         run: |
@@ -94,12 +106,14 @@ jobs:
             exit 1
           fi
 
-          rm -rf Payload HTMLApp-unsigned.ipa
+          rm -rf Payload HTMLApp-Feather-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          ditto -c -k --sequesterRsrc --keepParent Payload HTMLApp-unsigned.ipa
-          test -f HTMLApp-unsigned.ipa
-          ls -lh HTMLApp-unsigned.ipa
+          cp HTMLApp/HTMLApp.entitlements Payload/HTMLApp.app/WidgetSigningRequirements.plist
+          cp HTMLAppWidgets/HTMLAppWidgets.entitlements Payload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/WidgetSigningRequirements.plist
+          ditto -c -k --sequesterRsrc --keepParent Payload HTMLApp-Feather-unsigned.ipa
+          test -f HTMLApp-Feather-unsigned.ipa
+          ls -lh HTMLApp-Feather-unsigned.ipa
 
       - name: Create TrollStore entitlement-preserving IPA
         shell: bash
@@ -123,6 +137,9 @@ jobs:
           test -f HTMLApp-TrollStore.ipa
           echo "Verified embedded App Group in both TrollStore executables."
 
+      - name: Verify both packaged archives independently
+        run: python3 scripts/verify-ipa.py HTMLApp-TrollStore.ipa HTMLApp-Feather-unsigned.ipa
+
       - name: Upload TrollStore IPA
         uses: actions/upload-artifact@v4
         with:
@@ -134,8 +151,8 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HTMLApp-unsigned-ipa
-          path: HTMLApp-unsigned.ipa
+          name: HTMLApp-Feather-unsigned-ipa
+          path: HTMLApp-Feather-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -155,15 +172,19 @@ jobs:
             https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
             *) echo "Invalid Discord webhook secret."; exit 1 ;;
           esac
-          MESSAGE="HTMLApp build #${GITHUB_RUN_NUMBER} succeeded. Unsigned IPA attached; native widgets and background refresh require correct App Group entitlements when signing."
+          MESSAGE="HTMLApp build #${GITHUB_RUN_NUMBER} succeeded. Storage/provider tests and package checks passed. Device widget rendering remains unverified. Feather requires authorized App Group profiles for both targets. Artifacts: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "$MESSAGE" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
           STATUS="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out "%{http_code}" --header "Content-Type: application/json" --data-binary "$BODY" "https://mekapc.hostish.site/api/webhook" || true)"
           echo "HOSTISH notification HTTP $STATUS"
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "204" ]; then
-            echo "HOSTISH text notification failed; continuing to attachment delivery."
+            echo "HOSTISH text notification failed."; exit 1
           fi
-          test -f HTMLApp-unsigned.ipa
+          test -f HTMLApp-Feather-unsigned.ipa
           test -f HTMLApp-TrollStore.ipa
-          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp build: Feather unsigned IPA and TrollStore entitlement-preserving IPA attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-unsigned.ipa;filename=HTMLApp-unsigned.ipa;type=application/octet-stream' -F 'files[1]=@HTMLApp-TrollStore.ipa;filename=HTMLApp-TrollStore.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
+          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp build: Feather unsigned IPA and TrollStore entitlement-preserving IPA attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-Feather-unsigned.ipa;filename=HTMLApp-Feather-unsigned.ipa;type=application/octet-stream' -F 'files[1]=@HTMLApp-TrollStore.ipa;filename=HTMLApp-TrollStore.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
           echo "Discord attachment HTTP $UPLOAD"
-          test "$UPLOAD" = "200" -o "$UPLOAD" = "204"
+          test "$UPLOAD" = "200"
+          jq -e '[.attachments[] | select(.size > 0) | .filename] | (index("HTMLApp-Feather-unsigned.ipa") != null and index("HTMLApp-TrollStore.ipa") != null)' discord-delivery-response.json >/dev/null
+          rm discord-delivery-response.json
+          echo "Discord confirmed both nonempty IPA attachments."
+

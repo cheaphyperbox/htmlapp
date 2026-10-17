@@ -6,6 +6,9 @@ struct GeneratedIntegrationsView: View {
     @State private var widgets: [HTMLAppWidgetDefinition] = []
     @State private var jobs: [HTMLAppBackgroundFetchJob] = []
     @State private var refreshingJobID: String?
+    @State private var diagnostic = ""
+    @State private var installedStatus = "Widget placement: checking"
+    @State private var widgetError: String?
 
     var body: some View {
         List {
@@ -37,6 +40,21 @@ struct GeneratedIntegrationsView: View {
                 Text("WidgetKit controls the actual refresh schedule. A generated app can request periodic refresh, but iOS may coalesce or delay it.")
             }
 
+            Section("Shared-container diagnostic") {
+                Text(diagnostic).font(.caption.monospaced()).textSelection(.enabled)
+                Text(installedStatus).font(.caption)
+                Text("Published means the main app saved and read back a snapshot. Selected Primary chooses the iOS 16 / Primary widget. WidgetKit reports configured widgets separately; a reload request is not a completed refresh or proof of visible rendering.").font(.footnote)
+                Button("Start Extension Read Test") {
+                    do {
+                        _ = try HTMLAppWidgetDiagnostics.begin()
+                        WidgetCenter.shared.reloadAllTimelines()
+                    } catch { widgetError = error.localizedDescription }
+                    reload()
+                }
+                Button("Read Diagnostic Result", action: reload)
+                if let widgetError { Text(widgetError).foregroundStyle(.red).font(.caption) }
+            }
+
             if widgets.isEmpty {
                 Section {
                     emptyState(
@@ -62,7 +80,7 @@ struct GeneratedIntegrationsView: View {
                                     }
                                     Spacer()
                                     if widget.primary {
-                                        Text("Primary")
+                                        Text("Selected Primary")
                                             .font(.caption2.bold())
                                             .padding(.horizontal, 7)
                                             .padding(.vertical, 4)
@@ -70,9 +88,10 @@ struct GeneratedIntegrationsView: View {
                                     }
                                 }
 
-                                if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 17 && !widget.primary {
-                                    Button("Set as Home Screen Primary") {
-                                        HTMLAppWidgetStore.setPrimary(compositeID: widget.id)
+                                if !widget.primary {
+                                    Button("Select Primary") {
+                                        do { try HTMLAppWidgetStore.setPrimaryVerified(compositeID: widget.id) }
+                                        catch { widgetError = error.localizedDescription; return }
                                         WidgetCenter.shared.reloadAllTimelines()
                                         reload()
                                     }
@@ -92,7 +111,8 @@ struct GeneratedIntegrationsView: View {
                             }
                             .swipeActions {
                                 Button(role: .destructive) {
-                                    HTMLAppWidgetStore.remove(appID: widget.appID, widgetID: widget.widgetID)
+                                    do { try HTMLAppWidgetStore.removeVerified(appID: widget.appID, widgetID: widget.widgetID) }
+                                    catch { widgetError = error.localizedDescription; return }
                                     WidgetCenter.shared.reloadAllTimelines()
                                     reload()
                                 } label: {
@@ -215,6 +235,16 @@ struct GeneratedIntegrationsView: View {
     }
 
     private func reload() {
+        diagnostic = HTMLAppWidgetDiagnostics.summary()
+        WidgetCenter.shared.getCurrentConfigurations { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let configurations):
+                    installedStatus = "WidgetKit configured instances: \(configurations.count) (placement and visible rendering are not reported)"
+                case .failure: installedStatus = "WidgetKit configured instances: unavailable"
+                }
+            }
+        }
         let valid = Set(store.apps.map(\.id))
         widgets = HTMLAppWidgetStore.all().filter { valid.contains($0.appID) }
         jobs = HTMLAppBackgroundJobStore.all()
@@ -233,3 +263,4 @@ struct GeneratedIntegrationsView: View {
         }
     }
 }
+

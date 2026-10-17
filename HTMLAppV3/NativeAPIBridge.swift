@@ -330,7 +330,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             appID: appID,
             widgetID: widgetID,
             name: name,
-            primary: args["primary"] as? Bool ?? existing.isEmpty,
+            primary: args["primary"] as? Bool ?? existing.first(where: { $0.widgetID == widgetID })?.primary ?? HTMLAppWidgetStore.all().isEmpty,
             families: families,
             snapshot: snapshot,
             refresh: refreshSpec,
@@ -343,8 +343,16 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             return
         }
         if appID != "PREVIEW" {
-            HTMLAppWidgetStore.save(definition)
-            WidgetCenter.shared.reloadAllTimelines()
+            do {
+                _ = try HTMLAppWidgetStore.saveVerified(definition)
+                // A failed probe must not misrepresent a successfully persisted publication.
+                _ = try? HTMLAppWidgetDiagnostics.begin()
+                WidgetCenter.shared.reloadAllTimelines()
+            } catch {
+                let failure = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_write_failed", error)
+                reject(id, code: failure.code, message: failure.message)
+                return
+            }
         }
         resolve(id, value: [
             "id": definition.id,
@@ -353,6 +361,9 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             "families": definition.families,
             "backgroundRefresh": definition.refresh != nil,
             "preview": appID == "PREVIEW",
+            "published": appID != "PREVIEW",
+            "reloadRequested": appID != "PREVIEW",
+            "extensionVerified": false,
             "appGroupAvailable": HTMLAppSharedContainer.appGroupAvailable
         ])
     }
@@ -364,7 +375,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
 
     private func removeWidget(id: String, args: [String: Any]) {
         let widgetID = validGeneratedIdentifier(args["id"] as? String)
-        HTMLAppWidgetStore.remove(appID: appID, widgetID: widgetID)
+        do { try HTMLAppWidgetStore.removeVerified(appID: appID, widgetID: widgetID) }
+        catch {
+            let failure = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_write_failed", error)
+            reject(id, code: failure.code, message: failure.message)
+            return
+        }
         WidgetCenter.shared.reloadAllTimelines()
         resolve(id, value: ["removed": true, "all": widgetID == nil])
     }
@@ -1400,7 +1416,7 @@ enum HTMLNativeAPIScript {
           return;
         }
         const id = `native-${Date.now()}-${++sequence}`;
-        pending.set(id, { resolve, reject });
+        pending.set(id, { resolve, reject, method });
         handler.postMessage({ id, method, args });
       });
 
@@ -1409,11 +1425,31 @@ enum HTMLNativeAPIScript {
         if (!item) return;
         pending.delete(id);
         if (ok) {
+          if (item.method === 'widgets.configure') document.getElementById('__htmlappWidgetError')?.remove();
           item.resolve(value);
           return;
         }
         const error = new Error(value?.message || 'Native operation failed.');
         error.code = value?.code || 'native_error';
+        if (item.method === 'widgets.configure') {
+          // Existing generated apps may swallow the rejection behind a generic error.
+          // Show a safe native diagnostic without changing their saved HTML/local data.
+          let panel = document.getElementById('__htmlappWidgetError');
+          if (!panel) {
+            panel = document.createElement('div');
+            panel.id = '__htmlappWidgetError';
+            panel.setAttribute('role', 'alert');
+            panel.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;z-index:2147483647;padding:16px;background:#321b20;color:white;border:1px solid #f99;border-radius:12px;font:14px system-ui;max-height:40vh;overflow:auto';
+            (document.body || document.documentElement).appendChild(panel);
+          }
+          panel.replaceChildren();
+          const detail = document.createElement('div');
+          detail.textContent = 'Widget publication failed [' + error.code + ']: ' + error.message;
+          const close = document.createElement('button');
+          close.textContent = 'Dismiss';
+          close.onclick = () => panel.remove();
+          panel.append(detail, close);
+        }
         item.reject(error);
       };
 

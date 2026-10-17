@@ -147,3 +147,27 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+
+  HTMLAppWidgetTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: HTMLAppShared
+      - path: HTMLAppWidgets/HTMLAppWidgets.swift
+      - path: HTMLAppWidgetTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp.widgettests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_TESTING"
+
+schemes:
+  HTMLAppWidgetTests:
+    build:
+      targets:
+        HTMLAppWidgetTests: all
+    test:
+      targets:
+        - HTMLAppWidgetTests

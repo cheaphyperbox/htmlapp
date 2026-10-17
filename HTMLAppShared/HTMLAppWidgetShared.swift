@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 enum HTMLAppSharedContainer {
     static let appGroupID = "group.com.mekabrine.htmlapp"
@@ -127,95 +128,235 @@ struct HTMLAppWidgetDefinition: Codable, Hashable, Identifiable {
     }
 }
 
-enum HTMLAppWidgetStore {
-    private static let key = "htmlapp.shared.widgets.v1"
+struct HTMLAppWidgetStoreError: LocalizedError {
+    let code: String
+    let message: String
+    var errorDescription: String? { "\(code): \(message)" }
+    static let unavailable = Self(code: "app_group_unavailable", message: "Shared container unavailable in this process. Both app and extension need the same App Group authorized by their signing profiles. Entitlement injection alone cannot authorize Feather installations.")
+}
 
-    private static var sharedFile: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID)?
-            .appendingPathComponent("htmlapp-widgets-v2.json", isDirectory: false)
+// All read/modify/write transactions coordinate on the same URL across processes.
+// The existing array schema and filename remain compatible with installed versions.
+final class HTMLAppWidgetRepository {
+    let file: URL
+    let legacy: () -> Data?
+    init(directory: URL, legacy: @escaping () -> Data? = { nil }) {
+        file = directory.appendingPathComponent("htmlapp-widgets-v2.json")
+        self.legacy = legacy
     }
 
-    static func all() -> [HTMLAppWidgetDefinition] {
-        guard let sharedFile else { return [] }
-        // WidgetKit is a separate process. Read directly from the shared file instead
-        // of relying on UserDefaults notifications or process-local preference caches.
-        if let data = try? Data(contentsOf: sharedFile),
-           let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: data) {
-            return values.sorted { $0.updatedAt > $1.updatedAt }
-        }
-        // Migrate installations that saved widget definitions using the original
-        // App Group UserDefaults storage.
-        if let legacy = HTMLAppSharedContainer.defaults.data(forKey: key),
-           let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: legacy) {
-            persist(values)
-            return values.sorted { $0.updatedAt > $1.updatedAt }
-        }
-        return []
-    }
-
-    static func definitions(appID: String) -> [HTMLAppWidgetDefinition] {
-        all().filter { $0.appID == appID }
-    }
-
-    static func definition(compositeID: String) -> HTMLAppWidgetDefinition? {
-        all().first { $0.id == compositeID }
-    }
-
-    static func preferredDefinition() -> HTMLAppWidgetDefinition? {
-        let values = all()
-        return values.first(where: { $0.primary }) ?? values.first
-    }
-
-    static func save(_ definition: HTMLAppWidgetDefinition) {
-        var values = all()
-        values.removeAll { $0.id == definition.id }
-        var fresh = definition
-        fresh.updatedAt = Date()
-        if fresh.primary {
-            for i in values.indices { values[i].primary = false }
-        }
-        values.append(fresh)
-        persist(values)
-    }
-
-    static func setPrimary(compositeID: String) {
-        var values = all()
-        guard values.contains(where: { $0.id == compositeID }) else { return }
-        for i in values.indices { values[i].primary = values[i].id == compositeID }
-        persist(values)
-    }
-
-    static func replace(appID: String, with definitions: [HTMLAppWidgetDefinition]) {
-        var values = all().filter { $0.appID != appID }
-        values.append(contentsOf: definitions.map { value in
-            var copy = value
-            copy.appID = appID
-            copy.updatedAt = Date()
-            return copy
-        })
-        persist(values)
-    }
-
-    static func remove(appID: String, widgetID: String? = nil) {
-        var values = all()
-        if let widgetID {
-            values.removeAll { $0.appID == appID && $0.widgetID == widgetID }
+    private func coordinated<T>(write: Bool, _ body: (URL) throws -> T) throws -> T {
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+        let accessor: (URL) -> Void = { url in result = Result { try body(url) } }
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        if write {
+            coordinator.coordinate(writingItemAt: file, options: [], error: &coordinationError, byAccessor: accessor)
         } else {
-            values.removeAll { $0.appID == appID }
+            coordinator.coordinate(readingItemAt: file, options: [], error: &coordinationError, byAccessor: accessor)
         }
-        persist(values)
+        if let error = coordinationError { throw Self.failure("store_coordination_failed", error) }
+        guard let result else { throw HTMLAppWidgetStoreError(code: "store_coordination_failed", message: "Shared file access did not run.") }
+        return try result.get()
     }
 
-    private static func persist(_ values: [HTMLAppWidgetDefinition]) {
-        guard let sharedFile, let data = try? JSONEncoder().encode(values) else { return }
-        // Atomic replacement prevents WidgetKit from observing a partial JSON file.
+    static func failure(_ code: String, _ error: Error) -> HTMLAppWidgetStoreError {
+        // Never emit localized filesystem errors: they can contain private paths.
+        let e = error as NSError
+        return .init(code: code, message: "Shared widget storage failed (\(e.domain), \(e.code)). Unlock the device and check both signing profiles and App Group authorization.")
+    }
+
+    private func read(_ url: URL) throws -> [HTMLAppWidgetDefinition] {
+        let data: Data
+        do { data = try Data(contentsOf: url) }
+        catch {
+            let e = error as NSError
+            guard e.domain == NSCocoaErrorDomain && e.code == NSFileReadNoSuchFileError else {
+                throw Self.failure("store_read_failed", error)
+            }
+            guard let old = legacy() else { return [] }
+            data = old
+        }
+        do { return Self.normalized(try JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: data)) }
+        catch { throw HTMLAppWidgetStoreError(code: "store_decode_failed", message: "Widget data could not be decoded. Existing data was preserved; restore a compatible backup or republish after diagnosis.") }
+    }
+
+    static func normalized(_ values: [HTMLAppWidgetDefinition]) -> [HTMLAppWidgetDefinition] {
+        let sorted = values.sorted { $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt }
+        var seen = Set<String>()
+        var unique = sorted.filter { seen.insert($0.id).inserted }
+        let primary = unique.first(where: { $0.primary })?.id ?? unique.first?.id
+        for i in unique.indices { unique[i].primary = unique[i].id == primary }
+        return unique
+    }
+
+    func all() throws -> [HTMLAppWidgetDefinition] { try coordinated(write: false, read) }
+
+    @discardableResult
+    func mutate(_ change: (inout [HTMLAppWidgetDefinition]) throws -> Void) throws -> [HTMLAppWidgetDefinition] {
+        try coordinated(write: true) { url in
+            var values = try read(url)
+            try change(&values)
+            values = Self.normalized(values)
+            do {
+                let data = try JSONEncoder().encode(values)
+                try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                let verified = try JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: Data(contentsOf: url))
+                guard verified == values else { throw HTMLAppWidgetStoreError(code: "store_verify_failed", message: "Saved snapshot did not match read-back.") }
+            } catch let error as HTMLAppWidgetStoreError { throw error }
+            catch { throw Self.failure("store_write_failed", error) }
+            return values
+        }
+    }
+
+    func save(_ definition: HTMLAppWidgetDefinition) throws -> HTMLAppWidgetDefinition {
+        let values = try mutate { values in
+            values.removeAll { $0.id == definition.id }
+            var fresh = definition
+            fresh.updatedAt = Date()
+            if fresh.primary { for i in values.indices { values[i].primary = false } }
+            values.append(fresh)
+        }
+        return values.first { $0.id == definition.id }!
+    }
+
+    // A network request started before a publication must never overwrite that publication.
+    func refresh(_ refreshed: HTMLAppWidgetDefinition, original: HTMLAppWidgetDefinition) throws {
+        try mutate { values in
+            guard let i = values.firstIndex(where: { $0.id == original.id }), values[i] == original else { return }
+            values[i].snapshot = refreshed.snapshot
+            values[i].lastRefreshAt = refreshed.lastRefreshAt
+            values[i].lastError = refreshed.lastError
+            values[i].updatedAt = refreshed.updatedAt
+        }
+    }
+}
+
+enum HTMLAppWidgetStore {
+    static func repository() throws -> HTMLAppWidgetRepository {
+        guard let directory = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID) else { throw HTMLAppWidgetStoreError.unavailable }
+        return HTMLAppWidgetRepository(directory: directory) {
+            UserDefaults(suiteName: HTMLAppSharedContainer.appGroupID)?.data(forKey: "htmlapp.shared.widgets.v1")
+        }
+    }
+    static func readAll() throws -> [HTMLAppWidgetDefinition] { try repository().all() }
+    static func all() -> [HTMLAppWidgetDefinition] { (try? readAll()) ?? [] }
+    static func definitions(appID: String) -> [HTMLAppWidgetDefinition] { all().filter { $0.appID == appID } }
+    static func definition(compositeID: String) -> HTMLAppWidgetDefinition? { all().first { $0.id == compositeID } }
+    static func preferredDefinition() -> HTMLAppWidgetDefinition? { all().first(where: { $0.primary }) }
+    @discardableResult
+    static func saveVerified(_ definition: HTMLAppWidgetDefinition) throws -> HTMLAppWidgetDefinition { try repository().save(definition) }
+    static func save(_ definition: HTMLAppWidgetDefinition) { report { _ = try saveVerified(definition) } }
+    static func setPrimaryVerified(compositeID: String) throws {
+        try repository().mutate { values in
+            guard values.contains(where: { $0.id == compositeID }) else { throw HTMLAppWidgetStoreError(code: "widget_not_found", message: "Republish this widget before selecting it.") }
+            for i in values.indices { values[i].primary = values[i].id == compositeID }
+        }
+    }
+    static func setPrimary(compositeID: String) { report { try setPrimaryVerified(compositeID: compositeID) } }
+    static func replace(appID: String, with definitions: [HTMLAppWidgetDefinition]) {
+        report {
+            try repository().mutate { values in
+                values.removeAll { $0.appID == appID }
+                values.append(contentsOf: definitions.map { value in
+                    var copy = value; copy.appID = appID; copy.updatedAt = Date(); return copy
+                })
+            }
+        }
+    }
+    static func removeVerified(appID: String, widgetID: String? = nil) throws {
+        try repository().mutate { values in values.removeAll { $0.appID == appID && (widgetID == nil || $0.widgetID == widgetID) } }
+    }
+    static func remove(appID: String, widgetID: String? = nil) { report { try removeVerified(appID: appID, widgetID: widgetID) } }
+    static func report(_ work: () throws -> Void) {
+        do { try work() } catch { NSLog("HTMLApp widget operation failed: %@", error.localizedDescription) }
+    }
+}
+
+struct HTMLAppWidgetProbe: Codable {
+    let nonce: String
+    let createdAt: Date
+}
+struct HTMLAppWidgetReceipt: Codable {
+    let nonce: String
+    let process: String
+    let phase: String
+    let family: String
+    let definitionDigest: String?
+    let status: String
+    let date: Date
+}
+
+enum HTMLAppWidgetDiagnostics {
+    private static func url(_ name: String) throws -> URL {
+        guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID) else { throw HTMLAppWidgetStoreError.unavailable }
+        return root.appendingPathComponent(name)
+    }
+    static func digest(_ definition: HTMLAppWidgetDefinition) -> String {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        return SHA256.hash(data: (try? encoder.encode(definition)) ?? Data()).map { String(format: "%02x", $0) }.joined()
+    }
+    static func begin() throws -> String {
+        let probe = HTMLAppWidgetProbe(nonce: UUID().uuidString, createdAt: Date())
         do {
-            try data.write(to: sharedFile, options: [.atomic])
-            // Preserve the legacy copy for compatibility with old installations.
-            HTMLAppSharedContainer.defaults.set(data, forKey: key)
+            try JSONEncoder().encode(probe).write(to: url("widget-probe.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } catch { throw HTMLAppWidgetRepository.failure("probe_write_failed", error) }
+        return probe.nonce
+    }
+    static func acknowledge(phase: String, family: String, definition: HTMLAppWidgetDefinition?, status: String) {
+        // Only an extension process can acknowledge; app-side preview reads are not evidence.
+        guard Bundle.main.bundleURL.pathExtension == "appex",
+              let data = try? Data(contentsOf: url("widget-probe.json")),
+              let probe = try? JSONDecoder().decode(HTMLAppWidgetProbe.self, from: data) else { return }
+        let receipt = HTMLAppWidgetReceipt(nonce: probe.nonce, process: "widget-extension", phase: phase, family: family,
+            definitionDigest: definition.map(digest), status: status, date: Date())
+        try? JSONEncoder().encode(receipt).write(to: url("widget-receipt-\(phase).json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    static func summary() -> String {
+        var lines = ["Main process container: \(HTMLAppSharedContainer.appGroupAvailable ? "available" : "unavailable")",
+            "Effective entitlements: not inspectable using public iOS APIs; verify installed signatures and profiles separately."]
+        do { lines.append("Decoded definitions: \(try HTMLAppWidgetStore.readAll().count)") }
+        catch { lines.append(error.localizedDescription) }
+        guard let data = try? Data(contentsOf: url("widget-probe.json")),
+              let probe = try? JSONDecoder().decode(HTMLAppWidgetProbe.self, from: data) else { return lines.joined(separator: "\n") }
+        lines.append("Probe: \(probe.nonce)")
+        if let data = try? Data(contentsOf: url("widget-receipt-timeline.json")),
+           let receipt = try? JSONDecoder().decode(HTMLAppWidgetReceipt.self, from: data), receipt.nonce == probe.nonce {
+            lines.append("Extension acknowledged: \(receipt.status), \(receipt.family), \(receipt.date.formatted())")
+            let matches = HTMLAppWidgetStore.all().contains { digest($0) == receipt.definitionDigest }
+            lines.append("Timeline decoded current published snapshot: \(matches ? "yes" : "no")")
+        } else { lines.append("Extension acknowledgement pending. This does not prove a signing failure; add a widget and request reload.") }
+        return lines.joined(separator: "\n")
+    }
+}
+
+// Both providers use this resolver. Failures are real timeline entries, never a generic gallery placeholder.
+enum HTMLAppWidgetResolver {
+    static let primaryID = "htmlapp-primary"
+    static func resolve(values: [HTMLAppWidgetDefinition], selectedID: String?, family: String) throws -> HTMLAppWidgetDefinition {
+        let values = HTMLAppWidgetRepository.normalized(values)
+        let definition: HTMLAppWidgetDefinition?
+        if let id = selectedID, id != primaryID {
+            definition = values.first { $0.id == id }
+        } else { definition = values.first { $0.primary } }
+        guard let definition else { throw HTMLAppWidgetStoreError(code: "widget_not_found", message: "Publish a widget in HTMLApp, then select it in Widgets & Background or Edit Widget.") }
+        guard definition.families.contains(family) else { throw HTMLAppWidgetStoreError(code: "widget_family_mismatch", message: "Republish this widget for this size or add one of its published sizes.") }
+        return definition
+    }
+    static func load(selectedID: String?, family: String, phase: String) -> HTMLAppWidgetDefinition {
+        do {
+            let definition = try resolve(values: HTMLAppWidgetStore.readAll(), selectedID: selectedID, family: family)
+            HTMLAppWidgetDiagnostics.acknowledge(phase: phase, family: family, definition: definition, status: "decoded")
+            return definition
         } catch {
-            // Never pretend that a failed shared-container write succeeded.
-            NSLog("HTMLApp widget shared data write failed: %@", String(describing: error))
+            let error = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_read_failed", error)
+            HTMLAppWidgetDiagnostics.acknowledge(phase: phase, family: family, definition: nil, status: error.code)
+            var definition = HTMLAppWidgetDefinition.unavailable()
+            definition.snapshot.title = "Widget needs attention"
+            definition.snapshot.eyebrow = error.code
+            definition.snapshot.subtitle = error.message
+            definition.snapshot.footer = "Open Widgets & Background"
+            return definition
         }
     }
 }
@@ -429,3 +570,4 @@ enum HTMLAppWidgetNetwork {
         }
     }
 }
+
