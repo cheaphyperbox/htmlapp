@@ -70,6 +70,15 @@ struct GeneratedIntegrationsView: View {
                                     }
                                 }
 
+                                if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 17 && !widget.primary {
+                                    Button("Set as Home Screen Primary") {
+                                        HTMLAppWidgetStore.setPrimary(compositeID: widget.id)
+                                        WidgetCenter.shared.reloadAllTimelines()
+                                        reload()
+                                    }
+                                    .font(.caption)
+                                    .buttonStyle(.bordered)
+                                }
                                 if widget.refresh != nil {
                                     Label("Background JSON refresh enabled", systemImage: "arrow.triangle.2.circlepath")
                                         .font(.caption)
