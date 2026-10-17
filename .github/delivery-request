@@ -1,1 +1,1 @@
-Deliver validated build 39067318367, source 859ce3671f5d227d242cfb10f0b6f2f548b3b087
+Retry build 39067318367 delivery with literal multipart JSON; previous HTTP 400 did not confirm delivery.
