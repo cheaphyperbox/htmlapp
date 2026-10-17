@@ -108,3 +108,31 @@ jobs:
           path: HTMLApp-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
+
+      - name: Deliver IPA to Discord (optional)
+        if: ${{ success() }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "Discord delivery not configured; add DISCORD_WEBHOOK_URL as a repository Actions secret."
+            exit 0
+          fi
+          echo "::add-mask::$DISCORD_WEBHOOK_URL"
+          case "$DISCORD_WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo "Invalid Discord webhook secret."; exit 1 ;;
+          esac
+          MESSAGE="HTMLApp build #${GITHUB_RUN_NUMBER} succeeded. Unsigned IPA attached; native widgets and background refresh require correct App Group entitlements when signing."
+          BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "$MESSAGE" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
+          STATUS="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out "%{http_code}" --header "Content-Type: application/json" --data-binary "$BODY" "https://mekapc.hostish.site/api/webhook" || true)"
+          echo "HOSTISH notification HTTP $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "204" ]; then
+            echo "HOSTISH text notification failed; continuing to attachment delivery."
+          fi
+          test -f HTMLApp-unsigned.ipa
+          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp unsigned IPA build attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-unsigned.ipa;filename=HTMLApp-unsigned.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
+          echo "Discord attachment HTTP $UPLOAD"
+          test "$UPLOAD" = "200" -o "$UPLOAD" = "204"
