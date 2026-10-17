@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - .github/build-request
+      - .github/delivery-request
 
 concurrency:
   group: htmlapp-main-build
@@ -13,6 +14,7 @@ concurrency:
 
 jobs:
   build:
+    if: "!contains(github.event.head_commit.message, '[delivery-only]')"
     name: Build HTMLApp IPA
     runs-on: macos-15
 
@@ -163,30 +165,31 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
-            echo "Discord delivery not configured; add DISCORD_WEBHOOK_URL as a repository Actions secret."
-            exit 0
-          fi
-          echo "::add-mask::$DISCORD_WEBHOOK_URL"
-          case "$DISCORD_WEBHOOK_URL" in
-            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
-            *) echo "Invalid Discord webhook secret."; exit 1 ;;
-          esac
-          MESSAGE="HTMLApp build #${GITHUB_RUN_NUMBER} succeeded. Storage/provider tests and package checks passed. Device widget rendering remains unverified. Feather requires authorized App Group profiles for both targets. Artifacts: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "$MESSAGE" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
-          STATUS="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out "%{http_code}" --header "Content-Type: application/json" --data-binary "$BODY" "https://mekapc.hostish.site/api/webhook" || true)"
-          echo "HOSTISH notification HTTP $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "204" ]; then
-            echo "HOSTISH text notification failed."; exit 1
-          fi
-          test -f HTMLApp-Feather-unsigned.ipa
-          test -f HTMLApp-TrollStore.ipa
-          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp build: Feather unsigned IPA and TrollStore entitlement-preserving IPA attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-Feather-unsigned.ipa;filename=HTMLApp-Feather-unsigned.ipa;type=application/octet-stream' -F 'files[1]=@HTMLApp-TrollStore.ipa;filename=HTMLApp-TrollStore.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
-          echo "Discord attachment HTTP $UPLOAD"
-          test "$UPLOAD" = "200"
-          jq -e '[.attachments[] | select(.size > 0) | .filename] | (index("HTMLApp-Feather-unsigned.ipa") != null and index("HTMLApp-TrollStore.ipa") != null)' discord-delivery-response.json >/dev/null
-          rm discord-delivery-response.json
-          echo "Discord confirmed both nonempty IPA attachments."
+        run: bash scripts/deliver-widgets.sh
 
+  deliver_saved:
+    if: contains(github.event.head_commit.message, '[delivery-only]')
+    name: Deliver previously validated widget IPAs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download validated TrollStore IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: HTMLApp-TrollStore-ipa
+          run-id: 39067318367
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download validated Feather IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: HTMLApp-Feather-unsigned-ipa
+          run-id: 39067318367
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deliver validated attachments and notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SOURCE_RUN_ID: '39067318367'
+        run: bash scripts/deliver-widgets.sh
