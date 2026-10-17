@@ -99,6 +99,18 @@ struct HTMLAppWidgetDefinition: Codable, Hashable, Identifiable {
 
     var id: String { appID + "::" + widgetID }
 
+    static func unavailable() -> HTMLAppWidgetDefinition {
+        var definition = placeholder(id: "unavailable")
+        definition.snapshot.title = "Widget unavailable"
+        definition.snapshot.subtitle = "HTMLApp and Widgets need the same signed App Group."
+        definition.snapshot.eyebrow = "SIGNING"
+        definition.snapshot.value = "!"
+        definition.snapshot.footer = "Check Settings"
+        definition.snapshot.systemSymbol = "exclamationmark.triangle.fill"
+        definition.snapshot.accentHex = "#FFB347"
+        return definition
+    }
+
     static func placeholder(id: String = "placeholder") -> HTMLAppWidgetDefinition {
         HTMLAppWidgetDefinition(
             appID: "placeholder",
