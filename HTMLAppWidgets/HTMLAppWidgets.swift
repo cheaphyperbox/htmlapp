@@ -3,6 +3,21 @@ import SwiftUI
 import AppIntents
 import UIKit
 
+extension WidgetFamily {
+    var storageName: String {
+        switch self {
+        case .systemSmall: return "systemSmall"
+        case .systemMedium: return "systemMedium"
+        case .systemLarge: return "systemLarge"
+        case .systemExtraLarge: return "systemExtraLarge"
+        case .accessoryInline: return "accessoryInline"
+        case .accessoryCircular: return "accessoryCircular"
+        case .accessoryRectangular: return "accessoryRectangular"
+        @unknown default: return "unsupported"
+        }
+    }
+}
+
 struct HTMLAppWidgetEntry: TimelineEntry {
     let date: Date
     let definition: HTMLAppWidgetDefinition
@@ -24,12 +39,12 @@ struct HTMLAppPrimaryWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (HTMLAppWidgetEntry) -> Void) {
-        completion(.init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: nil, family: String(describing: context.family), phase: "snapshot")))
+        completion(.init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: nil, family: context.family.storageName, phase: "snapshot")))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<HTMLAppWidgetEntry>) -> Void) {
         Task {
-            let definition = HTMLAppWidgetResolver.load(selectedID: nil, family: String(describing: context.family), phase: "timeline")
+            let definition = HTMLAppWidgetResolver.load(selectedID: nil, family: context.family.storageName, phase: "timeline")
             completion(await HTMLAppWidgetTimeline.make(definition: definition))
         }
     }
@@ -51,10 +66,14 @@ struct HTMLAppWidgetEntity: AppEntity {
 @available(iOS 17.0, *)
 struct HTMLAppWidgetEntityQuery: EntityQuery {
     private var choices: [HTMLAppWidgetEntity] {
-        let available = HTMLAppWidgetStore.all().map {
-            HTMLAppWidgetEntity(id: $0.id, name: $0.name)
+        do {
+            let available = try HTMLAppWidgetStore.readAll().map {
+                HTMLAppWidgetEntity(id: $0.id, name: $0.name)
+            }
+            return [HTMLAppWidgetEntity(id: HTMLAppWidgetResolver.primaryID, name: "Selected Primary (choose in HTMLApp)")] + available
+        } catch {
+            return [HTMLAppWidgetEntity(id: HTMLAppWidgetResolver.primaryID, name: "Storage unavailable — open HTMLApp diagnostics")]
         }
-        return [HTMLAppWidgetEntity(id: HTMLAppWidgetResolver.primaryID, name: "Selected Primary (choose in HTMLApp)")] + available
     }
 
     func entities(for identifiers: [HTMLAppWidgetEntity.ID]) async throws -> [HTMLAppWidgetEntity] {
@@ -89,18 +108,15 @@ struct HTMLAppConfiguredWidgetProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: HTMLAppWidgetConfigurationIntent, in context: Context) async -> HTMLAppWidgetEntry {
-        .init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: String(describing: context.family), phase: "snapshot"))
+        .init(date: Date(), definition: HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: context.family.storageName, phase: "snapshot"))
     }
 
     func timeline(for configuration: HTMLAppWidgetConfigurationIntent, in context: Context) async -> Timeline<HTMLAppWidgetEntry> {
-        let definition = HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: String(describing: context.family), phase: "timeline")
+        let definition = HTMLAppWidgetResolver.load(selectedID: configuration.widget?.id, family: context.family.storageName, phase: "timeline")
         return await HTMLAppWidgetTimeline.make(definition: definition)
     }
 
-    private func selected(_ configuration: HTMLAppWidgetConfigurationIntent) -> HTMLAppWidgetDefinition? {
-        guard let id = configuration.widget?.id else { return nil }
-        return HTMLAppWidgetStore.definition(compositeID: id)
-    }
+
 }
 
 struct HTMLAppWidgetView: View {

@@ -1,0 +1,25 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const swift = fs.readFileSync('HTMLAppV3/NativeAPIBridge.swift', 'utf8');
+const source = swift.split('static let source = #"""')[1].split('"""#')[0];
+const messages = [], nodes = new Map();
+const element = () => ({style:{},setAttribute(){},replaceChildren(){},append(...children){this.children=children},remove(){nodes.delete(this.id)}});
+const document = {getElementById:id=>nodes.get(id),createElement:element,body:{appendChild:n=>nodes.set(n.id,n)},addEventListener(){}};
+const window = {webkit:{messageHandlers:{htmlappNative:{postMessage:message=>messages.push(message)}}},addEventListener(){}};
+vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navigator:{}});
+(async () => {
+  const result = window.HTMLAppNative.widgets.configure({id:'focus-streak',snapshot:{value:'7'}}).catch(e=>e);
+  const first = messages.shift();
+  assert.equal(first.method,'widgets.configure');
+  window.__htmlappNativeResolve(first.id,false,{code:'app_group_unavailable',message:'Both profiles must authorize the group.'});
+  const error = await result;
+  assert.equal(error.code,'app_group_unavailable');
+  assert.match(error.message,/Both profiles/);
+  assert.match(nodes.get('__htmlappWidgetError').children[0].textContent,/app_group_unavailable/);
+  const published = window.HTMLAppNative.widgets.configure({id:'focus-streak',snapshot:{value:'8'}});
+  window.__htmlappNativeResolve(messages.shift().id,true,{published:true,reloadRequested:true,extensionVerified:false});
+  assert.equal((await published).extensionVerified,false);
+  assert.equal(nodes.size,0);
+  console.log('Widget bridge: rejection code/message, visible diagnostics, and publication states passed.');
+})().catch(e=>{console.error(e);process.exitCode=1});

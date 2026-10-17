@@ -44,8 +44,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew update
-          brew install xcodegen
+          brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+
+      - name: Test JavaScript widget rejection diagnostics
+        run: node scripts/test-widget-bridge.js
 
       - name: Generate Xcode project
         shell: bash
@@ -119,7 +121,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew install ldid
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid
           test -f "Payload/HTMLApp.app/HTMLApp"
           test -f "Payload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/HTMLAppWidgets"
           cp -R Payload TrollStorePayload

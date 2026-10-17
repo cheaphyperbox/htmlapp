@@ -369,7 +369,13 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func listWidgets(id: String) {
-        let values = HTMLAppWidgetStore.definitions(appID: appID).map(widgetJSON)
+        let values: [[String: Any]]
+        do { values = try HTMLAppWidgetStore.readAll().filter { $0.appID == appID }.map(widgetJSON) }
+        catch {
+            let failure = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_read_failed", error)
+            reject(id, code: failure.code, message: failure.message)
+            return
+        }
         resolve(id, value: ["widgets": values, "count": values.count, "appGroupAvailable": HTMLAppSharedContainer.appGroupAvailable, "iOS16PrimaryOnly": ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 17])
     }
 
