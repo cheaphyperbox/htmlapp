@@ -14,12 +14,12 @@ struct HTMLAppPrimaryWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (HTMLAppWidgetEntry) -> Void) {
-        completion(.init(date: Date(), definition: HTMLAppWidgetStore.preferredDefinition() ?? .placeholder()))
+        completion(.init(date: Date(), definition: HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<HTMLAppWidgetEntry>) -> Void) {
         Task {
-            var definition = HTMLAppWidgetStore.preferredDefinition() ?? .placeholder()
+            var definition = HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())
             definition = await HTMLAppWidgetNetwork.refreshed(definition)
             if definition.appID != "placeholder" {
                 HTMLAppWidgetStore.save(definition)
@@ -82,7 +82,7 @@ struct HTMLAppConfiguredWidgetProvider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: HTMLAppWidgetConfigurationIntent, in context: Context) async -> Timeline<HTMLAppWidgetEntry> {
-        var definition = selected(configuration) ?? HTMLAppWidgetStore.preferredDefinition() ?? .placeholder()
+        var definition = selected(configuration) ?? HTMLAppWidgetStore.preferredDefinition() ?? (HTMLAppSharedContainer.appGroupAvailable ? .placeholder() : .unavailable())
         definition = await HTMLAppWidgetNetwork.refreshed(definition)
         if definition.appID != "placeholder" {
             HTMLAppWidgetStore.save(definition)
