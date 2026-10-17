@@ -130,13 +130,27 @@ struct HTMLAppWidgetDefinition: Codable, Hashable, Identifiable {
 enum HTMLAppWidgetStore {
     private static let key = "htmlapp.shared.widgets.v1"
 
+    private static var sharedFile: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID)?
+            .appendingPathComponent("htmlapp-widgets-v2.json", isDirectory: false)
+    }
+
     static func all() -> [HTMLAppWidgetDefinition] {
-        guard HTMLAppSharedContainer.appGroupAvailable else { return [] }
-        guard let data = HTMLAppSharedContainer.defaults.data(forKey: key),
-              let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: data) else {
-            return []
+        guard let sharedFile else { return [] }
+        // WidgetKit is a separate process. Read directly from the shared file instead
+        // of relying on UserDefaults notifications or process-local preference caches.
+        if let data = try? Data(contentsOf: sharedFile),
+           let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: data) {
+            return values.sorted { $0.updatedAt > $1.updatedAt }
         }
-        return values.sorted { $0.updatedAt > $1.updatedAt }
+        // Migrate installations that saved widget definitions using the original
+        // App Group UserDefaults storage.
+        if let legacy = HTMLAppSharedContainer.defaults.data(forKey: key),
+           let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: legacy) {
+            persist(values)
+            return values.sorted { $0.updatedAt > $1.updatedAt }
+        }
+        return []
     }
 
     static func definitions(appID: String) -> [HTMLAppWidgetDefinition] {
@@ -193,9 +207,16 @@ enum HTMLAppWidgetStore {
     }
 
     private static func persist(_ values: [HTMLAppWidgetDefinition]) {
-        guard HTMLAppSharedContainer.appGroupAvailable else { return }
-        guard let data = try? JSONEncoder().encode(values) else { return }
-        HTMLAppSharedContainer.defaults.set(data, forKey: key)
+        guard let sharedFile, let data = try? JSONEncoder().encode(values) else { return }
+        // Atomic replacement prevents WidgetKit from observing a partial JSON file.
+        do {
+            try data.write(to: sharedFile, options: [.atomic])
+            // Preserve the legacy copy for compatibility with old installations.
+            HTMLAppSharedContainer.defaults.set(data, forKey: key)
+        } catch {
+            // Never pretend that a failed shared-container write succeeded.
+            NSLog("HTMLApp widget shared data write failed: %@", String(describing: error))
+        }
     }
 }
 
