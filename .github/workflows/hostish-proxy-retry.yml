@@ -1,0 +1,48 @@
+name: HOSTISH Proxy Retry
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: read
+  contents: read
+
+jobs:
+  test:
+    if: github.event.issue.title == 'HOSTISH proxy retry' && github.event.comment.user.login == 'mekabrine'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check health and send test through HOSTISH
+        shell: bash
+        run: |
+          set -euo pipefail
+          WEBHOOK_URL="$(jq -r '.comment.body' "$GITHUB_EVENT_PATH")"
+          echo "::add-mask::$WEBHOOK_URL"
+
+          HEALTH_STATUS="$(curl --silent --show-error --max-time 20             --output health.json             --write-out "%{http_code}"             "https://mekapc.hostish.site/api/webhook/health" || true)"
+          echo "HOSTISH health HTTP status: $HEALTH_STATUS"
+          if [ -s health.json ]; then
+            head -c 1000 health.json || true
+            echo
+          fi
+
+          BODY="$(jq -nc --arg webhook "$WEBHOOK_URL" '{
+            webhook_url: $webhook,
+            wait: true,
+            payload: {
+              content: "HTMLApp HOSTISH proxy retry test succeeded.",
+              username: "HTMLApp Build Bot",
+              allowed_mentions: {parse: []}
+            }
+          }')"
+
+          STATUS="$(curl --silent --show-error --max-time 30             --output response.json             --write-out "%{http_code}"             --header "Content-Type: application/json"             --data-binary "$BODY"             "https://mekapc.hostish.site/api/webhook" || true)"
+
+          echo "HOSTISH webhook HTTP status: $STATUS"
+          if [ -s response.json ]; then
+            head -c 1500 response.json || true
+            echo
+          fi
+
+          test "$STATUS" = "200" -o "$STATUS" = "204"
