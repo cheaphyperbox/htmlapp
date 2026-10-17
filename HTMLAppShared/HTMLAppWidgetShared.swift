@@ -3,6 +3,8 @@ import Foundation
 enum HTMLAppSharedContainer {
     static let appGroupID = "group.com.mekabrine.htmlapp"
 
+    static var appGroupAvailable: Bool { UserDefaults(suiteName: appGroupID) != nil }
+
     static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
     }
