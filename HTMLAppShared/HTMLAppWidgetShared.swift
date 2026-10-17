@@ -3,7 +3,9 @@ import Foundation
 enum HTMLAppSharedContainer {
     static let appGroupID = "group.com.mekabrine.htmlapp"
 
-    static var appGroupAvailable: Bool { UserDefaults(suiteName: appGroupID) != nil }
+    static var appGroupAvailable: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil
+    }
 
     static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
@@ -117,6 +119,7 @@ enum HTMLAppWidgetStore {
     private static let key = "htmlapp.shared.widgets.v1"
 
     static func all() -> [HTMLAppWidgetDefinition] {
+        guard HTMLAppSharedContainer.appGroupAvailable else { return [] }
         guard let data = HTMLAppSharedContainer.defaults.data(forKey: key),
               let values = try? JSONDecoder().decode([HTMLAppWidgetDefinition].self, from: data) else {
             return []
@@ -168,6 +171,7 @@ enum HTMLAppWidgetStore {
     }
 
     private static func persist(_ values: [HTMLAppWidgetDefinition]) {
+        guard HTMLAppSharedContainer.appGroupAvailable else { return }
         guard let data = try? JSONEncoder().encode(values) else { return }
         HTMLAppSharedContainer.defaults.set(data, forKey: key)
     }
@@ -193,6 +197,7 @@ enum HTMLAppBackgroundJobStore {
     private static let key = "htmlapp.shared.backgroundJobs.v1"
 
     static func all() -> [HTMLAppBackgroundFetchJob] {
+        guard HTMLAppSharedContainer.appGroupAvailable else { return [] }
         guard let data = HTMLAppSharedContainer.defaults.data(forKey: key),
               let values = try? JSONDecoder().decode([HTMLAppBackgroundFetchJob].self, from: data) else {
             return []
@@ -244,6 +249,7 @@ enum HTMLAppBackgroundJobStore {
     }
 
     private static func persist(_ values: [HTMLAppBackgroundFetchJob]) {
+        guard HTMLAppSharedContainer.appGroupAvailable else { return }
         guard let data = try? JSONEncoder().encode(values) else { return }
         HTMLAppSharedContainer.defaults.set(data, forKey: key)
     }
