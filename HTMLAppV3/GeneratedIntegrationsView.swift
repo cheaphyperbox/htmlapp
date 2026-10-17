@@ -9,6 +9,15 @@ struct GeneratedIntegrationsView: View {
 
     var body: some View {
         List {
+            if !HTMLAppSharedContainer.appGroupAvailable {
+                Section("Widget Signing Problem") {
+                    Label("App Group storage is unavailable on this installation.", systemImage: "exclamationmark.triangle")
+                    Text("The HTMLApp main app and the widget extension must both be signed with the same group.com.mekabrine.htmlapp entitlement. Unsigned or incorrectly re-signed IPAs may build successfully but cannot share widget data.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 Label("Generated apps can publish native Home Screen and Lock Screen widgets.", systemImage: "square.grid.2x2")
                 Text("On iOS 17 and later, add an HTMLApp widget and choose a widget published by one of your saved apps. On iOS 16, HTMLApp shows the current primary widget.")
