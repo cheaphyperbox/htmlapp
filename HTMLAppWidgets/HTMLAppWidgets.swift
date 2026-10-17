@@ -40,7 +40,7 @@ struct HTMLAppWidgetEntity: AppEntity {
     var name: String
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "(name)")
+        DisplayRepresentation(title: "\(name)")
     }
 }
 
