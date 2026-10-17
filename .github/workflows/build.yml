@@ -101,6 +101,36 @@ jobs:
           test -f HTMLApp-unsigned.ipa
           ls -lh HTMLApp-unsigned.ipa
 
+      - name: Create TrollStore entitlement-preserving IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install ldid
+          test -f "Payload/HTMLApp.app/HTMLApp"
+          test -f "Payload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/HTMLAppWidgets"
+          cp -R Payload TrollStorePayload
+          ldid -SHTMLApp/HTMLApp.entitlements "TrollStorePayload/HTMLApp.app/HTMLApp"
+          ldid -SHTMLAppWidgets/HTMLAppWidgets.entitlements "TrollStorePayload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/HTMLAppWidgets"
+          for path in "TrollStorePayload/HTMLApp.app/HTMLApp" "TrollStorePayload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/HTMLAppWidgets"; do
+            ldid -e "$path" > "$path.entitlements.check"
+            plutil -lint "$path.entitlements.check"
+            grep -q 'group.com.mekabrine.htmlapp' "$path.entitlements.check"
+            rm "$path.entitlements.check"
+          done
+          mkdir -p TrollStoreIPA/Payload
+          cp -R TrollStorePayload/HTMLApp.app TrollStoreIPA/Payload/
+          (cd TrollStoreIPA && ditto -c -k --sequesterRsrc --keepParent Payload ../HTMLApp-TrollStore.ipa)
+          test -f HTMLApp-TrollStore.ipa
+          echo "Verified embedded App Group in both TrollStore executables."
+
+      - name: Upload TrollStore IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HTMLApp-TrollStore-ipa
+          path: HTMLApp-TrollStore.ipa
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
@@ -133,6 +163,7 @@ jobs:
             echo "HOSTISH text notification failed; continuing to attachment delivery."
           fi
           test -f HTMLApp-unsigned.ipa
-          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp unsigned IPA build attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-unsigned.ipa;filename=HTMLApp-unsigned.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
+          test -f HTMLApp-TrollStore.ipa
+          UPLOAD="$(curl --silent --show-error --max-time 120 --output discord-delivery-response.json --write-out "%{http_code}" -F 'payload_json={"content":"HTMLApp build: Feather unsigned IPA and TrollStore entitlement-preserving IPA attached.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-unsigned.ipa;filename=HTMLApp-unsigned.ipa;type=application/octet-stream' -F 'files[1]=@HTMLApp-TrollStore.ipa;filename=HTMLApp-TrollStore.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
           echo "Discord attachment HTTP $UPLOAD"
           test "$UPLOAD" = "200" -o "$UPLOAD" = "204"
