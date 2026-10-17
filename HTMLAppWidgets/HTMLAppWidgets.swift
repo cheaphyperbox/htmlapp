@@ -46,19 +46,32 @@ struct HTMLAppWidgetEntity: AppEntity {
 
 @available(iOS 17.0, *)
 struct HTMLAppWidgetEntityQuery: EntityQuery {
+    private var choices: [HTMLAppWidgetEntity] {
+        let available = HTMLAppWidgetStore.all().map {
+            HTMLAppWidgetEntity(id: $0.id, name: $0.name)
+        }
+        if available.isEmpty {
+            return [HTMLAppWidgetEntity(
+                id: "htmlapp-no-widgets",
+                name: HTMLAppSharedContainer.appGroupAvailable
+                    ? "No published widgets — open HTMLApp"
+                    : "Widget App Group missing — check signing"
+            )]
+        }
+        return available
+    }
+
     func entities(for identifiers: [HTMLAppWidgetEntity.ID]) async throws -> [HTMLAppWidgetEntity] {
         let wanted = Set(identifiers)
-        return HTMLAppWidgetStore.all()
-            .filter { wanted.contains($0.id) }
-            .map { .init(id: $0.id, name: $0.name) }
+        return choices.filter { wanted.contains($0.id) }
     }
 
     func suggestedEntities() async throws -> [HTMLAppWidgetEntity] {
-        HTMLAppWidgetStore.all().map { .init(id: $0.id, name: $0.name) }
+        choices
     }
 
     func defaultResult() async -> HTMLAppWidgetEntity? {
-        HTMLAppWidgetStore.preferredDefinition().map { .init(id: $0.id, name: $0.name) }
+        choices.first
     }
 }
 
