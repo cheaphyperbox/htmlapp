@@ -157,7 +157,17 @@ enum HTMLAppWidgetStore {
         values.removeAll { $0.id == definition.id }
         var fresh = definition
         fresh.updatedAt = Date()
+        if fresh.primary {
+            for i in values.indices { values[i].primary = false }
+        }
         values.append(fresh)
+        persist(values)
+    }
+
+    static func setPrimary(compositeID: String) {
+        var values = all()
+        guard values.contains(where: { $0.id == compositeID }) else { return }
+        for i in values.indices { values[i].primary = values[i].id == compositeID }
         persist(values)
     }
 
