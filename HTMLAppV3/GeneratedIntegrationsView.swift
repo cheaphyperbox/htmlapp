@@ -9,13 +9,15 @@ struct GeneratedIntegrationsView: View {
     @State private var diagnostic = ""
     @State private var installedStatus = "Widget placement: checking"
     @State private var widgetError: String?
+    @State private var pendingGroup: String?
+    @State private var confirmGroup = false
 
     var body: some View {
         List {
             if !HTMLAppSharedContainer.appGroupAvailable {
                 Section("Widget Signing Problem") {
                     Label("App Group storage is unavailable on this installation.", systemImage: "exclamationmark.triangle")
-                    Text("The HTMLApp main app and the widget extension must both be signed with the same group.com.mekabrine.htmlapp entitlement. Unsigned or incorrectly re-signed IPAs may build successfully but cannot share widget data.")
+                    Text("Select an authorized group below. Both signed binaries and their provisioning profiles must authorize the same group. A certificate alone is insufficient.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -38,6 +40,20 @@ struct GeneratedIntegrationsView: View {
                 Text("Widgets")
             } footer: {
                 Text("WidgetKit controls the actual refresh schedule. A generated app can request periodic refresh, but iOS may coalesce or delay it.")
+            }
+
+            Section("Signing group setup") {
+                Text("Current: \(HTMLAppSharedContainer.appGroupID)").font(.caption.monospaced())
+                Text("Provider groups may also be accessible to other apps signed by that provider. Publish only non-sensitive snapshots. Saved HTMLApps stay in private app storage. Switching groups requires republishing your widgets.").font(.footnote)
+                ForEach(HTMLAppSigningGroups.common, id: \.self) { group in
+                    Button("Use \(group)") { pendingGroup = group; confirmGroup = true }
+                }
+                if HTMLAppSigningGroups.common.isEmpty {
+                    Text("No common declared App Group could be inspected. Ask your signer to preserve XML App Group entitlements in both binaries and supply matching profiles.").font(.caption)
+                }
+                Button("Use original HTMLApp group") {
+                    pendingGroup = HTMLAppSharedContainer.originalGroupID; confirmGroup = true
+                }
             }
 
             Section("Shared-container diagnostic") {
@@ -203,6 +219,21 @@ struct GeneratedIntegrationsView: View {
         .navigationTitle("Widgets & Background")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: reload)
+        .alert("Use this shared signing group?", isPresented: $confirmGroup) {
+            Button("Cancel", role: .cancel) {}
+            Button("Use Group") {
+                guard let group = pendingGroup else { return }
+                do {
+                    try HTMLAppProviderStorage.activate(group)
+                    _ = try HTMLAppWidgetDiagnostics.begin()
+                    widgetError = nil
+                    WidgetCenter.shared.reloadAllTimelines()
+                } catch { widgetError = error.localizedDescription }
+                reload()
+            }
+        } message: {
+            Text("Other apps with access to this group may read or change published snapshots, refresh URLs and widget diagnostics. Use only non-sensitive content. Encryption with a key shared through this group would not prevent that access.")
+        }
     }
 
     @ViewBuilder

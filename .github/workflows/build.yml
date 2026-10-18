@@ -1,4 +1,4 @@
-name: Build Unsigned IPA
+name: Build HTMLApp IPA
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - .github/build-request
-      - .github/delivery-request
 
 concurrency:
   group: htmlapp-main-build
@@ -14,7 +13,6 @@ concurrency:
 
 jobs:
   build:
-    if: "!contains(github.event.head_commit.message, '[delivery-only]')"
     name: Build HTMLApp IPA
     runs-on: macos-15
 
@@ -144,19 +142,14 @@ jobs:
       - name: Verify both packaged archives independently
         run: python3 scripts/verify-ipa.py HTMLApp-TrollStore.ipa HTMLApp-Feather-unsigned.ipa
 
-      - name: Upload TrollStore IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: HTMLApp-TrollStore-ipa
-          path: HTMLApp-TrollStore.ipa
-          if-no-files-found: error
-          retention-days: 30
+      - name: Package single distribution artifact
+        run: cp HTMLApp-TrollStore.ipa HTMLApp.ipa
 
-      - name: Upload IPA artifact
+      - name: Upload HTMLApp IPA
         uses: actions/upload-artifact@v4
         with:
-          name: HTMLApp-Feather-unsigned-ipa
-          path: HTMLApp-Feather-unsigned.ipa
+          name: HTMLApp-ipa
+          path: HTMLApp.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -165,31 +158,4 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         shell: bash
-        run: bash scripts/deliver-widgets.sh
-
-  deliver_saved:
-    if: contains(github.event.head_commit.message, '[delivery-only]')
-    name: Deliver previously validated widget IPAs
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download validated TrollStore IPA
-        uses: actions/download-artifact@v4
-        with:
-          name: HTMLApp-TrollStore-ipa
-          run-id: 39067318367
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Download validated Feather IPA
-        uses: actions/download-artifact@v4
-        with:
-          name: HTMLApp-Feather-unsigned-ipa
-          run-id: 39067318367
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Deliver validated attachments and notification
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SOURCE_RUN_ID: '39067318367'
         run: bash scripts/deliver-widgets.sh

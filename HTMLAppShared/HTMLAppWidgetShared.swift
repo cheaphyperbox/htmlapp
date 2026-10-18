@@ -2,14 +2,16 @@ import Foundation
 import CryptoKit
 
 enum HTMLAppSharedContainer {
-    static let appGroupID = "group.com.mekabrine.htmlapp"
+    static let originalGroupID = "group.com.mekabrine.htmlapp"
+    static var appGroupID: String { HTMLAppProviderStorage.selectedGroup }
+    static var directory: URL? { HTMLAppProviderStorage.directory(group: appGroupID) }
 
     static var appGroupAvailable: Bool {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil
     }
 
     static var defaults: UserDefaults {
-        UserDefaults(suiteName: appGroupID) ?? .standard
+        appGroupID == originalGroupID ? (UserDefaults(suiteName: originalGroupID) ?? .standard) : .standard
     }
 }
 
@@ -234,9 +236,9 @@ final class HTMLAppWidgetRepository {
 
 enum HTMLAppWidgetStore {
     static func repository() throws -> HTMLAppWidgetRepository {
-        guard let directory = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID) else { throw HTMLAppWidgetStoreError.unavailable }
+        guard let directory = HTMLAppSharedContainer.directory else { throw HTMLAppWidgetStoreError.unavailable }
         return HTMLAppWidgetRepository(directory: directory) {
-            UserDefaults(suiteName: HTMLAppSharedContainer.appGroupID)?.data(forKey: "htmlapp.shared.widgets.v1")
+            HTMLAppSharedContainer.appGroupID == HTMLAppSharedContainer.originalGroupID ? UserDefaults(suiteName: HTMLAppSharedContainer.originalGroupID)?.data(forKey: "htmlapp.shared.widgets.v1") : nil
         }
     }
     static func readAll() throws -> [HTMLAppWidgetDefinition] { try repository().all() }
@@ -289,7 +291,7 @@ struct HTMLAppWidgetReceipt: Codable {
 
 enum HTMLAppWidgetDiagnostics {
     private static func url(_ name: String) throws -> URL {
-        guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: HTMLAppSharedContainer.appGroupID) else { throw HTMLAppWidgetStoreError.unavailable }
+        guard let root = HTMLAppSharedContainer.directory else { throw HTMLAppWidgetStoreError.unavailable }
         return root.appendingPathComponent(name)
     }
     static func digest(_ definition: HTMLAppWidgetDefinition) -> String {
@@ -300,7 +302,8 @@ enum HTMLAppWidgetDiagnostics {
         let probe = HTMLAppWidgetProbe(nonce: UUID().uuidString, createdAt: Date())
         do {
             try JSONEncoder().encode(probe).write(to: url("widget-probe.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        } catch { throw HTMLAppWidgetRepository.failure("probe_write_failed", error) }
+        } catch let error as HTMLAppWidgetStoreError { throw error }
+        catch { throw HTMLAppWidgetRepository.failure("probe_write_failed", error) }
         return probe.nonce
     }
     static func acknowledge(phase: String, family: String, definition: HTMLAppWidgetDefinition?, status: String) {
@@ -314,7 +317,8 @@ enum HTMLAppWidgetDiagnostics {
     }
     static func summary() -> String {
         var lines = ["Main process container: \(HTMLAppSharedContainer.appGroupAvailable ? "available" : "unavailable")",
-            "Effective entitlements: not inspectable using public iOS APIs; verify installed signatures and profiles separately."]
+            "Selected group: \(HTMLAppSharedContainer.appGroupID)",
+            "Declared groups in this binary: \(HTMLAppSigningGroups.declared.count). Declaration alone is not proof of sandbox access."]
         do { lines.append("Decoded definitions: \(try HTMLAppWidgetStore.readAll().count)") }
         catch { lines.append(error.localizedDescription) }
         guard let data = try? Data(contentsOf: url("widget-probe.json")),

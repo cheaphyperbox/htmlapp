@@ -339,7 +339,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastError: nil
         )
         if appID != "PREVIEW" && !HTMLAppSharedContainer.appGroupAvailable {
-            reject(id, code: "app_group_unavailable", message: "Widget shared storage is unavailable. Your installed HTMLApp and widget extension must both be signed with the group.com.mekabrine.htmlapp App Group entitlement.")
+            reject(id, code: "app_group_unavailable", message: "Widget shared storage is unavailable. Open Widgets & Background to select an authorized signing group. Both app and extension require matching App Group authorization.")
             return
         }
         if appID != "PREVIEW" {

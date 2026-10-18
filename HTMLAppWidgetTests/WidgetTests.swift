@@ -84,3 +84,34 @@ final class WidgetTests: XCTestCase {
         XCTAssertEqual(suggested.first?.id, HTMLAppWidgetResolver.primaryID)
     }
 }
+
+final class SigningGroupTests: XCTestCase {
+    func testNoSilentProviderSelectionAndDeterministicChoice() {
+        typealias S = HTMLAppProviderStorage.Selection
+        XCTAssertNil(HTMLAppProviderStorage.selected(from: [], allowed: ["group.provider"]))
+        let a = S(version: 1, group: "group.a", date: Date(timeIntervalSince1970: 1))
+        let b = S(version: 1, group: "group.b", date: Date(timeIntervalSince1970: 2))
+        XCTAssertEqual(HTMLAppProviderStorage.selected(from: [b, a], allowed: [a.group, b.group]), b.group)
+        XCTAssertEqual(HTMLAppProviderStorage.selected(from: [b, a], allowed: [a.group]), a.group)
+        XCTAssertNil(HTMLAppProviderStorage.selected(from: [S(version: 2, group: a.group, date: a.date)], allowed: [a.group]))
+    }
+    func testSignedGroupsParserAndMalformedBounds() throws {
+        let xml = try PropertyListSerialization.data(fromPropertyList: ["com.apple.security.application-groups": ["group.test", "group.test"]], format: .xml, options: 0)
+        func word(_ value: Int, big: Bool = false) -> Data {
+            let bytes = (0..<4).map { UInt8((value >> ($0 * 8)) & 255) }
+            return Data(big ? Array(bytes.reversed()) : bytes)
+        }
+        var binary = word(0xfeedfacf) + Data(repeating: 0, count: 12)
+        binary += word(1) + word(16) + Data(repeating: 0, count: 8)
+        binary += word(0x1d) + word(16) + word(48) + word(28 + xml.count)
+        binary += word(0xfade0cc0, big: true) + word(28 + xml.count, big: true) + word(1, big: true)
+        binary += word(5, big: true) + word(20, big: true)
+        binary += word(0xfade7171, big: true) + word(8 + xml.count, big: true) + xml
+        XCTAssertEqual(HTMLAppSigningGroups.groups(in: binary), ["group.test"])
+        for length in 0..<binary.count {
+            XCTAssertEqual(HTMLAppSigningGroups.groups(in: Data(binary.prefix(length))), [])
+        }
+        binary.replaceSubrange(44..<48, with: word(Int(UInt32.max)))
+        XCTAssertEqual(HTMLAppSigningGroups.groups(in: binary), [])
+    }
+}
