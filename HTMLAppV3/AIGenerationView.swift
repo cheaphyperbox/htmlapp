@@ -6,6 +6,7 @@ struct AIGenerationView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var dictation = ForgeDictation()
     @State private var dictationPrefix = ""
+    @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
     @State private var showActivity = false
     @StateObject private var session = AIGenerationSession()
@@ -92,7 +93,8 @@ struct AIGenerationView: View {
         .onDisappear { generationTask?.cancel(); dictation.stop() }
         .onChange(of: scenePhase) { value in if value != .active { dictation.stop() } }
         .onChange(of: dictation.transcript) { value in
-            prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + value
+            let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
+            if dictationForEdit { changePrompt = merged } else { prompt = merged }
         }
     }
 
@@ -104,7 +106,7 @@ struct AIGenerationView: View {
                     .font(.body)
                 Button {
                     if dictation.recording { dictation.stop() }
-                    else { dictationPrefix = prompt; Task { await dictation.start() } }
+                    else { dictationForEdit = false; dictationPrefix = prompt; Task { await dictation.start() } }
                 } label: {
                     Label(dictation.recording ? "Stop Dictation" : "Dictate Your Idea", systemImage: dictation.recording ? "stop.circle.fill" : "mic.fill")
                 }
@@ -224,11 +226,27 @@ struct AIGenerationView: View {
                                 TextField("Tell AI what to change…", text: $changePrompt, axis: .vertical)
                                     .lineLimit(1...4)
                                     .textFieldStyle(.roundedBorder)
+                                Button {
+                                    if dictation.recording { dictation.stop() }
+                                    else {
+                                        dictationForEdit = true
+                                        dictationPrefix = changePrompt
+                                        Task { await dictation.start() }
+                                    }
+                                } label: {
+                                    Image(systemName: dictation.recording && dictationForEdit ? "stop.circle.fill" : "mic.fill")
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(dictation.requestingPermission)
+                                .accessibilityLabel(dictation.recording && dictationForEdit ? "Stop edit dictation" : "Dictate edit")
                                 Button("Apply") { applyAIChange() }
                                     .buttonStyle(.borderedProminent)
                                     .disabled(changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
-                            Text("AI edits use exact patches so unrelated HTML, JavaScript, APIs, storage, and behavior stay intact. The browser agent can research the requested change first when current web information is useful.")
+                            if dictationForEdit && (dictation.recording || dictation.requestingPermission) {
+                                Text(dictation.status).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Text("Dictate or type your change. Forge checks existing code and relevant web documentation before patching; source review is not a device test.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
