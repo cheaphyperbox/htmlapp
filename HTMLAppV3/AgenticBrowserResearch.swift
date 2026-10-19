@@ -44,6 +44,7 @@ enum WebResearchAgent {
     ) async throws -> String {
         var notebook = "Discovery leads (not fetched documentation):\n" + ForgeProductContract.catalog
         var visited = Set<String>()
+        var successfullyOpenedPages = 0
 
         for step in 0..<maximumSteps {
             try Task.checkCancellation()
@@ -80,7 +81,7 @@ Pick the single best next action.
             } catch {
                 if !notebook.isEmpty {
                     await status("Using gathered research…")
-                    return fallbackReport(notebook: notebook, request: request)
+                    return fallbackReport(notebook: notebook, request: request, pagesRead: successfullyOpenedPages)
                 }
                 throw error
             }
@@ -106,13 +107,17 @@ Pick the single best next action.
                 visited.insert(url.absoluteString)
                 await status("Reading \(url.host ?? short(url.absoluteString, limit: 48))…")
                 let page = await PublicWebBrowser.read(url: url)
+                if page.hasPrefix("URL:") { successfullyOpenedPages += 1 }
                 await status(page.hasPrefix("URL:") ? "Read \(url.host ?? "page")" : "Page unavailable: \(url.host ?? "page")")
                 append("OPENED: \(url.absoluteString)\n\(page)", to: &notebook)
                 continue
             }
 
             if let summary = tagged("done", in: decision), !summary.isEmpty {
-                return summary + (notebook.isEmpty ? "" : "\n\nBrowsed evidence:\n" + compactEvidence(notebook))
+                let provenance = successfullyOpenedPages == 0
+                    ? "Discovery leads only: no remote documentation page was successfully read. Do not treat endpoint, CORS, pricing or availability claims as verified.\\n\\n"
+                    : "Documentation pages read: \\(successfullyOpenedPages).\\n\\n"
+                return provenance + summary + "\\n\\nResearch navigation:\\n" + compactEvidence(notebook)
             }
 
             // If the model emitted malformed tool syntax, give it one useful fallback observation.
@@ -136,15 +141,18 @@ Summarize the browser notebook for an HTML app generator. Include only supported
                 timeout: 45,
                 maxTokens: 1600
             )
-            return final.trimmingCharacters(in: .whitespacesAndNewlines) + (notebook.isEmpty ? "" : "\n\nBrowsed evidence:\n" + compactEvidence(notebook))
+            let provenance = successfullyOpenedPages == 0
+                ? "Discovery leads only; no documentation page was read. Verify before wiring external APIs.\\n\\n"
+                : "Documentation pages read: \\(successfullyOpenedPages).\\n\\n"
+            return provenance + final.trimmingCharacters(in: .whitespacesAndNewlines) + "\\n\\nResearch navigation:\\n" + compactEvidence(notebook)
         } catch {
             guard !notebook.isEmpty else { throw error }
             await status("Using gathered research…")
-            return fallbackReport(notebook: notebook, request: request)
+            return fallbackReport(notebook: notebook, request: request, pagesRead: successfullyOpenedPages)
         }
     }
 
-    private static func fallbackReport(notebook: String, request: String) -> String {
+    private static func fallbackReport(notebook: String, request: String, pagesRead: Int) -> String {
         let evidence: String
         if notebook.count <= 14_000 {
             evidence = notebook
@@ -154,8 +162,9 @@ Summarize the browser notebook for an HTML app generator. Include only supported
                 + String(notebook.suffix(8_500))
         }
         return """
-Browser research gathered usable evidence for: \(request)
-The research model stopped before writing its final summary. Use only the concrete documentation and page text below; do not infer undocumented endpoints, parameters, fields, or capabilities.
+Browser research attempted for: \(request)
+Successfully opened documentation pages: \(pagesRead).
+The research model stopped before writing its final summary. If zero pages were read, the results below are search/discovery leads only, NOT verified API guidance. Use only concrete opened page text where available; do not infer undocumented endpoints, parameters, fields, CORS or capabilities.
 
 \(evidence)
 """
