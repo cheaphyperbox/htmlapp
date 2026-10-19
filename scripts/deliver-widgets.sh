@@ -11,8 +11,13 @@ case "$DISCORD_WEBHOOK_URL" in
 esac
 MESSAGE="HTMLApp Forge and sharing build: automated tests and packaged IPA checks passed. Dictation, nearby transfer and Safari profile installation require physical-device validation. Feather requires App Group authorization in both profiles. Build: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID:-$GITHUB_RUN_ID}"
 BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "$MESSAGE" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
-STATUS="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data-binary "$BODY" 'https://mekapc.hostish.site/api/webhook' || true)"
-echo "HOSTISH notification HTTP $STATUS"
+STATUS="000"
+for attempt in 1 2 3; do
+  STATUS="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data-binary "$BODY" 'https://mekapc.hostish.site/api/webhook' || true)"
+  echo "HOSTISH notification attempt $attempt HTTP $STATUS"
+  if [ "$STATUS" = '200' ] || [ "$STATUS" = '204' ]; then break; fi
+  if [ "$attempt" -lt 3 ]; then sleep "$((attempt * 3))"; fi
+done
 # A proxy outage must not suppress the independently supported attachment route.
 test -s HTMLApp.ipa
 UPLOAD="$(curl --silent --show-error --connect-timeout 15 --max-time 120 --output discord-delivery-response.json --write-out '%{http_code}' --form-string 'payload_json={"content":"HTMLApp Forge and sharing build: Single HTMLApp.ipa attached: install with TrollStore or re-sign with Feather, then configure an authorized signing group. Device validation remains required; see the GitHub build summary.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp.ipa;filename=HTMLApp.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
