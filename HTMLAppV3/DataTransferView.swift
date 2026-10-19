@@ -30,6 +30,13 @@ struct HTMLAppDataTransferView: View {
                 Text("Backups are normal .zip files containing a versioned HTMLApp manifest plus offline website resources. Generated AI artwork is embedded directly in each app, so it moves with the package automatically.")
             }
 
+            Section("Nearby Sharing") {
+                NavigationLink("Experimental Nearby Transfer") {
+                    NearbyAppTransferView(appIDs: selectedIDs)
+                }
+                Text("Select apps below to send, or open Nearby Transfer on the receiving device. Uses encrypted Wi-Fi/Bluetooth discovery and transfer.").font(.footnote)
+            }
+
             if !store.apps.isEmpty {
                 Section {
                     HStack {

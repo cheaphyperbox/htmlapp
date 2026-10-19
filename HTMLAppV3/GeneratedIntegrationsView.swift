@@ -45,14 +45,17 @@ struct GeneratedIntegrationsView: View {
             Section("Signing group setup") {
                 Text("Current: \(HTMLAppSharedContainer.appGroupID)").font(.caption.monospaced())
                 Text("Provider groups may also be accessible to other apps signed by that provider. Publish only non-sensitive snapshots. Saved HTMLApps stay in private app storage. Switching groups requires republishing your widgets.").font(.footnote)
-                ForEach(HTMLAppSigningGroups.common, id: \.self) { group in
-                    Button("Use \(group)") { pendingGroup = group; confirmGroup = true }
+                ForEach(HTMLAppSigningGroups.common.filter { $0 != HTMLAppSharedContainer.originalGroupID }, id: \.self) { group in
+                    Button("Use \(group)") { widgetError = nil; pendingGroup = group; confirmGroup = true }
                 }
                 if HTMLAppSigningGroups.common.isEmpty {
                     Text("No common declared App Group could be inspected. Ask your signer to preserve XML App Group entitlements in both binaries and supply matching profiles.").font(.caption)
                 }
                 Button("Use original HTMLApp group") {
                     pendingGroup = HTMLAppSharedContainer.originalGroupID; confirmGroup = true
+                }.disabled(!HTMLAppProviderStorage.originalAvailable)
+                if !HTMLAppProviderStorage.originalAvailable {
+                    Text("The original group is not authorized or accessible on this installation. Keep your working provider group. Restoring the original requires profiles authorizing group.com.mekabrine.htmlapp for both app and extension, or the TrollStore installation. Changing groups here cannot change signing authorization.").font(.caption)
                 }
             }
 
@@ -67,7 +70,7 @@ struct GeneratedIntegrationsView: View {
                     } catch { widgetError = error.localizedDescription }
                     reload()
                 }
-                Button("Read Diagnostic Result", action: reload)
+                Button("Read Diagnostic Result") { widgetError = nil; reload() }
                 if let widgetError { Text(widgetError).foregroundStyle(.red).font(.caption) }
             }
 

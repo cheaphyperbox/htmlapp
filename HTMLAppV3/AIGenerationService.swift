@@ -42,7 +42,10 @@ enum AIGenerationError: LocalizedError {
 
 @MainActor
 final class AIGenerationSession: ObservableObject {
-    @Published var phase = "Preparing"
+    @Published var activity: [String] = []
+    @Published var phase = "Preparing" {
+        didSet { if oldValue != phase { activity.append(phase); if activity.count > 40 { activity.removeFirst() } } }
+    }
     @Published var streamedHTML = ""
     @Published var refinedBrief = ""
     @Published var description = ""
@@ -128,6 +131,7 @@ final class AIGenerationSession: ObservableObject {
                     messages: [("user", improved)]
                 )
                 for try await piece in stream {
+                    try Task.checkCancellation()
                     full += piece
                     receivedCharacters += piece.count
                     let now = Date()
@@ -146,6 +150,7 @@ final class AIGenerationSession: ObservableObject {
                     apply(partial, partial: true)
                 }
             } catch {
+                try Task.checkCancellation()
                 phase = "Retrying generation without streaming"
                 full = try await AIProviderClient.complete(
                     config: config,
@@ -173,6 +178,7 @@ final class AIGenerationSession: ObservableObject {
                 forceRegenerate: true
             )
             try await verifyAndRepair(config: config)
+            try Task.checkCancellation()
             phase = "Ready to review"
         } catch {
             errorMessage = error.localizedDescription
@@ -247,6 +253,7 @@ Requested change:
                 forceRegenerate: !output.iconScript.isEmpty
             )
             try await verifyAndRepair(config: config)
+            try Task.checkCancellation()
             phase = "Ready to review"
         } catch {
             errorMessage = error.localizedDescription
@@ -268,6 +275,7 @@ Requested change:
         do {
             try await ensureValidIcon(config: config)
             try await verifyAndRepair(config: config)
+            try Task.checkCancellation()
             phase = "Ready to review"
         } catch {
             errorMessage = error.localizedDescription
@@ -415,7 +423,8 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             var changedOnPreviousPass = false
 
             for pass in 1...2 {
-                phase = pass == 1 ? "Auditing the finished app" : "Rechecking repaired app"
+                try Task.checkCancellation()
+                phase = pass == 1 ? "Reviewing source (not running device tests)" : "Rechecking repaired app"
                 let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
                 let response = try await AIHTMLAgent.reviewArtifact(
                     html: streamedHTML,
@@ -762,7 +771,7 @@ enum AIProviderClient {
 }
 
 enum AIHTMLAgent {
-    static let designGuide = """
+    static let designGuide = ForgeProductContract.rules + "\n\n" + """
 Build one complete, self-contained standards-compliant HTML file with semantic HTML, all CSS in <style>, all JavaScript in <script>, inline SVG icons, and no build step. Unless the user explicitly requests a demo/mockup/snippet, treat the result as a full application: complete core workflows, real persistent state, appropriate create/edit/delete/search/import/export behavior, useful settings/help when warranted, honest lifecycle behavior, meaningful loading/empty/error/offline/permission states, and no dead controls. It must behave like a real mobile product with clear hierarchy, native-feeling navigation, useful pressed states, sheets/overlays where appropriate, smooth state transitions, 44px minimum touch targets, excellent phone/iPad resizing, polished light/dark appearance, accessible forms, and release-quality cleanup. Respect prefers-reduced-motion, prefers-contrast, and prefers-reduced-transparency.
 
 SAFE AREA IS NON-NEGOTIABLE: use <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"> and reusable env(safe-area-inset-top/right/bottom/left) CSS variables. HTMLApp is edge-to-edge, so the root/top chrome must own the top inset exactly once and interactive content must never sit behind the notch/Dynamic Island/status bar. Bottom bars must own the Home Indicator inset, and landscape must respect left/right cutouts. Full-bleed backgrounds may extend under cutouts; content and controls may not.
@@ -833,6 +842,7 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
         let system = """
 You are HTMLApp Forge's product-specification agent. Convert the user's raw app idea into a compact but implementation-ready product brief for another coding agent.
+\(ForgeProductContract.rules)
 
 Preserve the user's actual intent, then think one step ahead: infer what the user is likely to ask for immediately after trying the first version. Add a small number of high-value adjacent features when they clearly advance the same goal. Do not inflate the scope with generic startup features, dashboards, accounts, analytics, or decorative complexity. Never invent live data sources, native capabilities, APIs, or backend infrastructure.
 
@@ -909,7 +919,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
     }
 
     static func systemPrompt(research: String) -> String {
-        AISettingsStore.resolvedSystemPrompt(research: research) + """
+        AISettingsStore.resolvedSystemPrompt(research: research) + "\n" + ForgeProductContract.rules + """
 
 HTMLAPP FACT-CHECK OVERRIDES:
 - Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or the documented HTMLApp/browser runtime.
@@ -1588,16 +1598,13 @@ enum HTMLQualityChecks {
 
 enum SafePublicAPIResearch {
     private static let publicAPIsURL = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
-    private static let APIsGuruURL = URL(string: "https://api.apis.guru/v2/list.json")!
     private static let excluded = ["gambling", "betting", "casino", "alcohol", "beer", "wine", "weapon", "firearm", "drug", "porn", "adult", "malware"]
 
     static func research(queries: [String]) async -> String {
         guard !queries.isEmpty else { return "" }
         async let publicCatalog = fetchText(publicAPIsURL)
-        async let guruData = fetchData(APIsGuruURL)
         let catalog = await publicCatalog
-        let guru = await guruData
-        var output: [String] = []
+        var output: [String] = [ForgeProductContract.catalog]
 
         for query in queries where safe(query) {
             let terms = searchTerms(query)
@@ -1607,30 +1614,16 @@ enum SafePublicAPIResearch {
                 let rows = catalog.split(separator: "\n").map(String.init).filter { row in
                     guard row.hasPrefix("|") else { return false }
                     let lower = row.lowercased()
-                    return safe(lower) && terms.contains(where: { lower.contains($0) })
+                    let columns = row.split(separator: "|", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+                    let noKey = columns.count > 3 && (columns[3].isEmpty || columns[3].lowercased() == "no")
+                    return noKey && safe(lower) && terms.contains(where: { lower.contains($0) })
                 }
                 matches.append(contentsOf: rows.prefix(6))
             }
 
-            if let guru,
-               let object = try? JSONSerialization.jsonObject(with: guru) as? [String: Any] {
-                for (name, raw) in object where matches.count < 10 {
-                    guard let service = raw as? [String: Any] else { continue }
-                    let lower = (name + " " + String(describing: service)).lowercased()
-                    guard safe(lower), terms.contains(where: { lower.contains($0) }) else { continue }
-                    var line = "APIs.guru: \(name)"
-                    if let preferred = service["preferred"] as? String,
-                       let versions = service["versions"] as? [String: Any],
-                       let version = versions[preferred] as? [String: Any] {
-                        if let info = version["info"] as? [String: Any], let title = info["title"] as? String { line += " — \(title)" }
-                        if let swagger = version["swaggerUrl"] as? String { line += " — OpenAPI: \(swagger)" }
-                    }
-                    matches.append(line)
-                }
-            }
 
             if matches.isEmpty {
-                output.append("Query: \(query)\nNo matching documented public API was found in the checked catalogs. Do not invent one.")
+                output.append("Query: \(query)\nNo matching no-key API listing was found. Browse official documentation or use a local fallback.")
             } else {
                 output.append("Query: \(query)\n" + matches.joined(separator: "\n"))
             }
@@ -1641,10 +1634,6 @@ enum SafePublicAPIResearch {
     private static func fetchText(_ url: URL) async -> String? {
         guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
         return String(data: data, encoding: .utf8)
-    }
-
-    private static func fetchData(_ url: URL) async -> Data? {
-        try? await URLSession.shared.data(from: url).0
     }
 
     private static func searchTerms(_ query: String) -> [String] {

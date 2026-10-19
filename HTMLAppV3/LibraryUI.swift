@@ -184,7 +184,7 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) { profileApp = nil }
         } message: {
-            Text("Safari will open the generated profile with its embedded icon. Then follow the iOS profile installation prompts.")
+            Text("A temporary download on this device opens in your browser. Allow the profile download in Safari, then open Settings → Profile Downloaded to install it. If the download expires, return here and retry. You can also export the profile.")
         }
         .confirmationDialog(
             "Delete \(pendingDelete?.name ?? "this app")?",

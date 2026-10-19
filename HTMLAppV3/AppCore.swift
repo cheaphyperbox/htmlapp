@@ -625,6 +625,16 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func createNearbyPackage(appIDs: Set<String>) throws -> URL {
+        let selected = apps.filter { appIDs.contains($0.id) }
+        guard !selected.isEmpty else { throw HTMLAppPackageError.invalidArchive }
+        let links = FolderAppLinkStore.shared.snapshot(appIDs: Set(selected.map(\.id)))
+        let url = try HTMLAppPackageTransfer.createArchive(apps: selected, folders: foldersForPortableExport(apps: selected, links: links), links: links)
+        let unique = FileManager.default.temporaryDirectory.appendingPathComponent("Nearby-Send-\(UUID().uuidString).zip")
+        try FileManager.default.copyItem(at: url, to: unique)
+        return unique
+    }
+
     func exportPortablePackage(appIDs requestedIDs: Set<String>? = nil) {
         let selected = requestedIDs.map { ids in apps.filter { ids.contains($0.id) } } ?? apps
         guard !selected.isEmpty else {
@@ -798,7 +808,7 @@ final class AppStore: ObservableObject {
         WebClipInstaller.shared.install(app: app) { [weak self] result in
             switch result {
             case .success:
-                self?.notice = "Profile opened in Safari. Follow the iOS install prompts."
+                self?.notice = "Profile download opened. Allow it in Safari, then install from Settings → Profile Downloaded."
             case .failure(let error):
                 self?.errorMessage = error.localizedDescription
             }

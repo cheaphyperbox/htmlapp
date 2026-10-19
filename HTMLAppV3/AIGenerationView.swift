@@ -3,6 +3,11 @@ import SwiftUI
 struct AIGenerationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var dictation = ForgeDictation()
+    @State private var dictationPrefix = ""
+    @State private var generationTask: Task<Void, Never>?
+    @State private var showActivity = false
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
@@ -60,6 +65,8 @@ struct AIGenerationView: View {
                 titleVisibility: .visible
             ) {
                 Button("Discard and Close", role: .destructive) {
+                    generationTask?.cancel()
+                    dictation.stop()
                     AIDebugTraceStore.shared.clear()
                     dismiss()
                 }
@@ -82,6 +89,11 @@ struct AIGenerationView: View {
             session.load(existing: existingApp)
         }
         .interactiveDismissDisabled(true)
+        .onDisappear { generationTask?.cancel(); dictation.stop() }
+        .onChange(of: scenePhase) { value in if value != .active { dictation.stop() } }
+        .onChange(of: dictation.transcript) { value in
+            prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + value
+        }
     }
 
     private var promptView: some View {
@@ -90,6 +102,14 @@ struct AIGenerationView: View {
                 TextEditor(text: $prompt)
                     .frame(minHeight: 170)
                     .font(.body)
+                Button {
+                    if dictation.recording { dictation.stop() }
+                    else { dictationPrefix = prompt; Task { await dictation.start() } }
+                } label: {
+                    Label(dictation.recording ? "Stop Dictation" : "Dictate Your Idea", systemImage: dictation.recording ? "stop.circle.fill" : "mic.fill")
+                }
+                Text(dictation.status).font(.caption).foregroundStyle(.secondary)
+                Text("No speech API key required. On-device recognition is preferred; otherwise Apple may process audio with your permission.").font(.caption2).foregroundStyle(.secondary)
             } header: {
                 Text("What do you want to make?")
             } footer: {
@@ -157,7 +177,7 @@ struct AIGenerationView: View {
                         }
                     }
                     if browserResearch.isBrowsing {
-                        Text("Live web agent • searches and page reads are real network actions")
+                        Text("Research in progress • blocked or unavailable pages are reported")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -176,6 +196,19 @@ struct AIGenerationView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(.bar)
+
+                DisclosureGroup("Activity & research", isExpanded: $showActivity) {
+                    ScrollView {
+                        Text((browserResearch.activity + session.activity).suffix(30).joined(separator: "\n"))
+                            .font(.caption.monospaced()).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                    }.frame(maxHeight: 130)
+                    if !browserResearch.lastReport.isEmpty {
+                        DisclosureGroup("Research evidence") {
+                            ScrollView { Text(browserResearch.lastReport).font(.caption).textSelection(.enabled) }.frame(maxHeight: 150)
+                        }
+                    }
+                    Text("Source review is not a device test. Try your app before saving.").font(.caption2)
+                }.padding(.horizontal, 16).padding(.vertical, 6)
 
                 HTMLWebView(
                     html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
@@ -236,11 +269,12 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        dictation.stop()
         let originalPrompt = prompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.isWorking = true
-        Task {
+        generationTask = Task {
             let webReport: String
             if AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
                 session.phase = "Generating live preview"
@@ -255,6 +289,7 @@ struct AIGenerationView: View {
                 webReport = ""
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this request can be resolved against HTMLApp's internal device API catalog.")
             }
+            guard !Task.isCancelled else { return }
             await session.generate(
                 prompt: originalPrompt,
                 originalUserPrompt: originalPrompt,
@@ -272,7 +307,7 @@ struct AIGenerationView: View {
         showingChange = false
         uiPolishNotice = nil
         session.isWorking = true
-        Task {
+        generationTask = Task {
             let researchRequest = """
 Existing HTMLApp goal:
 \(session.refinedBrief)
@@ -290,6 +325,7 @@ Requested edit:
                 webReport = ""
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this edit does not require public-web research; the internal device API catalog remains available.")
             }
+            guard !Task.isCancelled else { return }
             await session.revise(change: change, researchReport: webReport)
             guard session.errorMessage == nil else { return }
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
@@ -314,7 +350,7 @@ Requested edit:
             session.acceptExternalHTML(functionalHTML)
             session.isWorking = false
             session.phase = "Ready to review"
-            uiPolishNotice = "UI Overhaul was skipped because it failed. The verified functional version was preserved."
+            uiPolishNotice = "UI Overhaul was skipped because it failed. The previous version was preserved."
         }
     }
 

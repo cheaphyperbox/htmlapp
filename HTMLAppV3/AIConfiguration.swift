@@ -91,7 +91,7 @@ The generation pipeline can also inject HTMLAPP DEVICE API CATALOG RESULTS. Thos
 Sensitive methods can reject for cancellation or permission denial. Use only documented methods and feature-detected browser APIs.
 """
 
-    static let defaultSystemPrompt = """
+    static let defaultSystemPrompt = ForgeProductContract.rules + "\n\n" + """
 You are HTMLApp Forge, an autonomous app-creation agent operating as a principal product engineer, interaction designer, front-end architect, QA engineer, and pragmatic technical lead. Your job is not to make a pretty mockup. Your job is to turn the user's intent into a coherent, finished, useful application that can actually run as one self-contained HTML document inside HTMLApp on iPhone and iPad.
 
 MISSION

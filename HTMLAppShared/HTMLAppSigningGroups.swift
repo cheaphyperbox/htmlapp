@@ -76,8 +76,12 @@ enum HTMLAppProviderStorage {
         }
         return selected(from: markers, allowed: groups) ?? HTMLAppSharedContainer.originalGroupID
     }
+    static var originalAvailable: Bool {
+        guard directory(group: HTMLAppSharedContainer.originalGroupID) != nil else { return false }
+        return HTMLAppSigningGroups.common.contains(HTMLAppSharedContainer.originalGroupID)
+    }
     static func activate(_ group: String) throws {
-        guard group == HTMLAppSharedContainer.originalGroupID || HTMLAppSigningGroups.common.contains(group),
+        guard HTMLAppSigningGroups.common.contains(group),
               let directory = directory(group: group) else {
             throw HTMLAppWidgetStoreError(code: "group_not_authorized", message: "This group must be present in both signed binaries and accessible to the app. Ask the signer for matching app and extension profiles.")
         }

@@ -115,3 +115,19 @@ final class SigningGroupTests: XCTestCase {
         XCTAssertEqual(HTMLAppSigningGroups.groups(in: binary), [])
     }
 }
+
+final class LocalProfileResponseTests: XCTestCase {
+    func testOnlyExactGETRouteDeliversProfile() {
+        let profile = Data("profile-body".utf8)
+        let path = "/unguessable/HTMLApp.mobileconfig"
+        let good = HTMLAppLocalProfileResponse.response(request: "GET \(path) HTTP/1.1\r\nHost: localhost\r\n\r\n", path: path, profile: profile)
+        XCTAssertTrue(String(decoding: good, as: UTF8.self).contains("200 OK"))
+        XCTAssertTrue(String(decoding: good, as: UTF8.self).contains("application/x-apple-aspen-config"))
+        XCTAssertTrue(good.suffix(profile.count).elementsEqual(profile))
+        for request in ["GET / HTTP/1.1", "POST \(path) HTTP/1.1", "GET \(path)?other HTTP/1.1", "invalid"] {
+            let result = HTMLAppLocalProfileResponse.response(request: request, path: path, profile: profile)
+            XCTAssertFalse(String(decoding: result, as: UTF8.self).contains("profile-body"))
+            XCTAssertTrue(String(decoding: result, as: UTF8.self).contains("404 Not Found"))
+        }
+    }
+}

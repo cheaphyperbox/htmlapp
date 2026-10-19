@@ -251,17 +251,15 @@ final class WebClipInstaller {
     static let shared = WebClipInstaller()
 
     func install(app: SavedHTMLApp, completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            let url = try WebClipProfile.dataURL(for: app)
-            UIApplication.shared.open(url, options: [:]) { opened in
-                if opened {
-                    completion(.success(()))
-                } else {
-                    completion(.failure(WebClipProfile.ProfileError.unableToOpen))
+        LocalProfileDownload.shared.start(profile: WebClipProfile.mobileConfigData(for: app)) { result in
+            switch result {
+            case .success(let url):
+                UIApplication.shared.open(url, options: [:]) { opened in
+                    if opened { completion(.success(())) }
+                    else { completion(.failure(WebClipProfile.ProfileError.unableToOpen)) }
                 }
+            case .failure(let error): completion(.failure(error))
             }
-        } catch {
-            completion(.failure(error))
         }
     }
 }
