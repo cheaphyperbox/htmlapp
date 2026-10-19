@@ -115,9 +115,9 @@ Pick the single best next action.
 
             if let summary = tagged("done", in: decision), !summary.isEmpty {
                 let provenance = successfullyOpenedPages == 0
-                    ? "Discovery leads only: no remote documentation page was successfully read. Do not treat endpoint, CORS, pricing or availability claims as verified.\\n\\n"
-                    : "Documentation pages read: \\(successfullyOpenedPages).\\n\\n"
-                return provenance + summary + "\\n\\nResearch navigation:\\n" + compactEvidence(notebook)
+                    ? "Discovery leads only: no remote documentation page was successfully read. Do not treat endpoint, CORS, pricing or availability claims as verified.\n\n"
+                    : "Documentation pages read: \(successfullyOpenedPages).\n\n"
+                return provenance + summary + "\n\nResearch navigation:\n" + compactEvidence(notebook)
             }
 
             // If the model emitted malformed tool syntax, give it one useful fallback observation.
@@ -142,9 +142,9 @@ Summarize the browser notebook for an HTML app generator. Include only supported
                 maxTokens: 1600
             )
             let provenance = successfullyOpenedPages == 0
-                ? "Discovery leads only; no documentation page was read. Verify before wiring external APIs.\\n\\n"
-                : "Documentation pages read: \\(successfullyOpenedPages).\\n\\n"
-            return provenance + final.trimmingCharacters(in: .whitespacesAndNewlines) + "\\n\\nResearch navigation:\\n" + compactEvidence(notebook)
+                ? "Discovery leads only; no documentation page was read. Verify before wiring external APIs.\n\n"
+                : "Documentation pages read: \(successfullyOpenedPages).\n\n"
+            return provenance + final.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\nResearch navigation:\n" + compactEvidence(notebook)
         } catch {
             guard !notebook.isEmpty else { throw error }
             await status("Using gathered research…")
