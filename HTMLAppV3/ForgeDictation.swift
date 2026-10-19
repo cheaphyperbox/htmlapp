@@ -5,6 +5,7 @@ import AVFoundation
 @MainActor
 final class ForgeDictation: ObservableObject {
     @Published var recording = false
+    @Published var requestingPermission = false
     @Published var transcript = ""
     @Published var status = "Dictate your idea. Review the text before generating."
     private let engine = AVAudioEngine()
@@ -15,14 +16,19 @@ final class ForgeDictation: ObservableObject {
     private var timeout: Task<Void, Never>?
 
     func start() async {
-        guard !recording else { return }
+        guard !recording, !requestingPermission else { return }
+        requestingPermission = true
+        defer { requestingPermission = false }
+        let attempt = generation
         let permission = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
+        guard generation == attempt, !Task.isCancelled else { return }
         guard permission == .authorized else { status = "Enable Speech Recognition for HTMLApp in Settings, or type your idea."; return }
         let microphone = await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
         }
+        guard generation == attempt, !Task.isCancelled else { return }
         guard microphone else { status = "Enable Microphone for HTMLApp in Settings, or type your idea."; return }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable else {
             status = "Speech recognition is unavailable for this language or connection. You can still type."; return
@@ -66,6 +72,7 @@ final class ForgeDictation: ObservableObject {
     }
     func stop() {
         generation = UUID()
+        if recording { status = "Dictation stopped. Review your text before generating." }
         timeout?.cancel(); timeout = nil
         engine.stop()
         if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }

@@ -108,6 +108,7 @@ struct AIGenerationView: View {
                 } label: {
                     Label(dictation.recording ? "Stop Dictation" : "Dictate Your Idea", systemImage: dictation.recording ? "stop.circle.fill" : "mic.fill")
                 }
+                .disabled(dictation.requestingPermission)
                 Text(dictation.status).font(.caption).foregroundStyle(.secondary)
                 Text("No speech API key required. On-device recognition is preferred; otherwise Apple may process audio with your permission.").font(.caption2).foregroundStyle(.secondary)
             } header: {
