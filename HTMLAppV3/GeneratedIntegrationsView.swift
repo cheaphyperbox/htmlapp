@@ -43,7 +43,11 @@ struct GeneratedIntegrationsView: View {
             }
 
             Section("Signing group setup") {
-                Text("Current: \(HTMLAppSharedContainer.appGroupID)").font(.caption.monospaced())
+                Text("Active widget storage: \(HTMLAppSharedContainer.appGroupID)").font(.caption.monospaced())
+                if HTMLAppSharedContainer.appGroupID != HTMLAppSharedContainer.originalGroupID {
+                    Label("Compatible signer group in use. Original bundle ID and private saved apps are unchanged.", systemImage: "checkmark.circle")
+                        .font(.caption)
+                }
                 Text("Provider groups may also be accessible to other apps signed by that provider. Publish only non-sensitive snapshots. Saved HTMLApps stay in private app storage. Switching groups requires republishing your widgets.").font(.footnote)
                 ForEach(HTMLAppSigningGroups.common.filter { $0 != HTMLAppSharedContainer.originalGroupID }, id: \.self) { group in
                     Button("Use \(group)") { widgetError = nil; pendingGroup = group; confirmGroup = true }
@@ -55,7 +59,19 @@ struct GeneratedIntegrationsView: View {
                     pendingGroup = HTMLAppSharedContainer.originalGroupID; confirmGroup = true
                 }.disabled(!HTMLAppProviderStorage.originalAvailable)
                 if !HTMLAppProviderStorage.originalAvailable {
-                    Text("The original group is not authorized or accessible on this installation. Keep your working provider group. Restoring the original requires profiles authorizing group.com.mekabrine.htmlapp for both app and extension, or the TrollStore installation. Changing groups here cannot change signing authorization.").font(.caption)
+                    Text("The original group.com.mekabrine.htmlapp is not authorized by this installation. Swift cannot repair a provisioning profile. The compatible mode below uses a different, verified shared group for widgets, without changing the app's bundle ID or saved apps.").font(.caption)
+                    if let compatible = HTMLAppProviderStorage.recommendedCompatibleGroup {
+                        Button {
+                            widgetError = nil
+                            pendingGroup = compatible
+                            confirmGroup = true
+                        } label: {
+                            Label("Repair Widget Storage with Compatible Group", systemImage: "checkmark.shield")
+                        }
+                        Text("Compatible container: \(compatible). Choosing it shares published widget snapshots with other apps authorized for that provider group; do not publish secrets. Republish your widgets after switching.").font(.caption)
+                    } else {
+                        Text("No accessible common App Group was found. Re-sign both the main app and the widget extension with a matching authorized group, then reopen HTMLApp.").font(.caption)
+                    }
                 }
             }
 
