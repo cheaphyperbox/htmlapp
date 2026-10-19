@@ -80,6 +80,19 @@ enum HTMLAppProviderStorage {
         guard directory(group: HTMLAppSharedContainer.originalGroupID) != nil else { return false }
         return HTMLAppSigningGroups.common.contains(HTMLAppSharedContainer.originalGroupID)
     }
+    // A signer's profile may authorize a provider-specific group but not our original
+    // group. Re-signing or Swift cannot grant that entitlement. Offer an explicit,
+    // user-approved compatible group rather than selecting an unusable container.
+    static var compatibleGroups: [String] {
+        HTMLAppSigningGroups.common.filter {
+            $0 != HTMLAppSharedContainer.originalGroupID && directory(group: $0) != nil
+        }
+    }
+    static var recommendedCompatibleGroup: String? {
+        let candidates = compatibleGroups
+        return candidates.contains(selectedGroup) ? selectedGroup : candidates.first
+    }
+
     static func activate(_ group: String) throws {
         guard HTMLAppSigningGroups.common.contains(group),
               let directory = directory(group: group) else {
