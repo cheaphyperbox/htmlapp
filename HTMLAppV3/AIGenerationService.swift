@@ -82,6 +82,7 @@ final class AIGenerationSession: ObservableObject {
     private var lastResearch = ""
     private var editingExistingApp = false
     private var checkpointExistingAppID: String?
+    private var latestPartialHTML = ""
 
     private static func defaultProgressNote(for phase: String) -> String {
         switch phase {
@@ -555,8 +556,9 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
     }
 
     func persistCheckpoint() {
+        let checkpointHTML = latestPartialHTML.isEmpty ? streamedHTML : latestPartialHTML
         guard !originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              !checkpointHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !refinedBrief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ForgeDraftCheckpointStore.save(
             ForgeDraftCheckpoint(
@@ -564,7 +566,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
                 originalPrompt: originalPrompt,
                 refinedBrief: refinedBrief,
                 research: lastResearch,
-                html: streamedHTML,
+                html: checkpointHTML,
                 description: description,
                 iconScript: iconScript,
                 phase: phase,
@@ -581,6 +583,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         refinedBrief = checkpoint.refinedBrief
         lastResearch = checkpoint.research
         streamedHTML = checkpoint.html
+        latestPartialHTML = ""
         description = checkpoint.description
         iconScript = checkpoint.iconScript
         renderedIconData = existingIcon
@@ -594,6 +597,14 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
 
     func clearCheckpoint() {
         ForgeDraftCheckpointStore.clear()
+    }
+
+    func keepCurrentPartialDraft() {
+        if !latestPartialHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            streamedHTML = latestPartialHTML
+            latestPartialHTML = ""
+        }
+        persistCheckpoint()
     }
 
     func acceptExternalHTML(_ html: String) {
@@ -911,7 +922,14 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
     }
 
     private func apply(_ output: AIGenerationOutput, partial: Bool) {
-        if !output.html.isEmpty { streamedHTML = partial ? HTMLStreamRepair.previewDocument(output.html) : output.html }
+        if !output.html.isEmpty {
+            if partial {
+                latestPartialHTML = HTMLStreamRepair.previewDocument(output.html)
+            } else {
+                streamedHTML = output.html
+                latestPartialHTML = ""
+            }
+        }
         if !output.description.isEmpty { description = output.description }
         if !output.iconScript.isEmpty { iconScript = output.iconScript }
         if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
