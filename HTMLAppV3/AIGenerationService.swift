@@ -1532,9 +1532,9 @@ Use the local static warnings as leads, not unquestionable facts. Use research e
 
 Do not rewrite functioning code for taste. Patch only concrete defects. SEARCH text must be copied exactly from the supplied HTML and be as small and unique as practical. If there is no concrete defect worth changing, leave <htmlapp_patch> empty. Replace the icon only if it is actually missing, invalid, or mismatched.
 
-Return only:
-<verification>concise release-gate result, including remaining limitations</verification>
+Return only, in this order so any required repair is completed before commentary:
 <htmlapp_patch>optional exact SEARCH/REPLACE blocks</htmlapp_patch>
+<verification>concise release-gate result, including remaining limitations</verification>
 <icon_script>optional complete replacement icon script</icon_script>
 """
         let user = """
@@ -1559,7 +1559,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 2200)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 70, maxTokens: 4800)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
@@ -1598,7 +1598,7 @@ HTML to review:
     ) async throws -> String {
         let system = """
 You are HTMLApp's recovery editor. The previous app-generation response was truncated or malformed. Reconstruct it into one complete, valid HTMLApp response while preserving all useful work already present. Fix unclosed HTML/CSS/JavaScript, missing required sections, duplicated cutoff text, and obvious source errors. Do not invent APIs or data. Return exactly:
-<thinking>concise implementation plan</thinking>
+<build_summary>concise implementation conclusions</build_summary>
 <description>one sentence</description>
 <icon_script>static icon drawing script</icon_script>
 <asset_scripts>optional ASSET filename / END_ASSET IconScript blocks needed by the recovered HTML</asset_scripts>
