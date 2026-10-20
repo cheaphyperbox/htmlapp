@@ -46,7 +46,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.allowsInlineMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = .all
+        configuration.mediaTypesRequiringUserActionForPlayback = []
 
         let controller = configuration.userContentController
         controller.addUserScript(WKUserScript(
@@ -141,10 +141,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         _ = try? await evaluate(Self.clickProbeScript, in: webView)
         try? await Task.sleep(nanoseconds: 220_000_000)
 
-        if let recorded = try? await evaluate(
+        let recordedValue = try? await evaluate(
             "JSON.stringify((window.__htmlappRuntimeIssues || []).slice(0, 40))",
             in: webView
-        ) as? String,
+        )
+        if let recorded = recordedValue as? String,
            let data = recorded.data(using: .utf8),
            let values = try? JSONDecoder().decode([String].self, from: data) {
             values.forEach(appendIssue)
@@ -164,7 +165,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         webView.layoutIfNeeded()
         try? await Task.sleep(nanoseconds: 90_000_000)
 
-        guard let object = try? await evaluate(
+        let snapshotValue = try? await evaluate(
             """
             (() => ({
               domNonEmpty: !!document.body && (
@@ -178,7 +179,8 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             }))()
             """,
             in: webView
-        ) as? [String: Any] else { return nil }
+        )
+        guard let object = snapshotValue as? [String: Any] else { return nil }
 
         return Snapshot(
             domNonEmpty: object["domNonEmpty"] as? Bool ?? false,
@@ -187,7 +189,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
     }
 
     private func evaluate(_ script: String, in webView: WKWebView) async throws -> Any? {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any?, Error>) in
             webView.evaluateJavaScript(script) { value, error in
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume(returning: value) }
