@@ -759,8 +759,14 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             return
         }
 
-        if let lastError { throw lastError }
-        throw AIGenerationError.missingIcon
+        AIDebugTraceStore.shared.append(
+            "ICON FALLBACK",
+            lastError.map { "Icon generation failed and the local script fallback did not render: \($0.localizedDescription). Saving remains available; HTMLApp will derive a local icon from the document." }
+                ?? "The local icon fallback did not render. Saving remains available; HTMLApp will derive a local icon from the document."
+        )
+        iconScript = ""
+        renderedIconData = nil
+        return
     }
 
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
