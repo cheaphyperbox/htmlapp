@@ -72,7 +72,7 @@ final class AgenticBrowserResearch: ObservableObject {
 }
 
 enum WebResearchAgent {
-    private static let maximumSteps = 8
+    private static let maximumSteps = 4
     private static let maximumNotebookCharacters = 24_000
 
     static func run(
