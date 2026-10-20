@@ -839,7 +839,7 @@ enum AIProviderClient {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                     if Task.isCancelled { break }
                     if await activity.shouldTimeout(after: 120) {
-                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 120 seconds. Retrying without streaming."))
+                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 120 seconds. Continuing from any partial output."))
                         worker.cancel()
                         break
                     }
