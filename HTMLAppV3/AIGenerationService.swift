@@ -114,6 +114,49 @@ final class AIGenerationSession: ObservableObject {
         }
     }
 
+    private static func friendlyMessage(for error: Error) -> String {
+        if let provider = error as? AIProviderRequestError {
+            switch provider.statusCode {
+            case 401, 403:
+                return "The AI provider rejected the API key or account access. Check your key in Settings, then retry."
+            case 404:
+                return "The configured AI endpoint or model was not found. Check the API URL and model name in Settings."
+            case 408:
+                return "The AI provider timed out. Your current draft was kept; retry when the connection is stable."
+            case 429:
+                if let retryAfter = provider.retryAfter, retryAfter > 0 {
+                    return "The AI provider is rate limiting requests. Try again in about \(Int(ceil(retryAfter))) seconds."
+                }
+                return "The AI provider is rate limiting requests. Your current draft was kept; wait a moment and retry."
+            case 500...599:
+                return "The AI provider is temporarily unavailable. Your current draft was kept; retry shortly."
+            default:
+                let lower = provider.message.lowercased()
+                if lower.contains("context") && (lower.contains("length") || lower.contains("token")) {
+                    return "This request exceeded the model's context limit. Shorten the request or use a model with a larger context window."
+                }
+                if lower.contains("max_tokens") || lower.contains("max_completion_tokens") {
+                    return "The model rejected the configured output-token setting. Forge tried its compatibility fallback; check the selected model if this continues."
+                }
+                return "The AI provider could not complete this step. Your current draft was kept. Open AI Debug for the technical details."
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet:
+                return "You appear to be offline. Your current draft was kept; reconnect and retry."
+            case .timedOut:
+                return "The AI request timed out. Your current draft was kept; retry when the connection is stable."
+            default:
+                return "The network request failed. Your current draft was kept; retry when the connection is stable."
+            }
+        }
+        if error is AIGenerationError {
+            return error.localizedDescription
+        }
+        return "Forge could not complete this step. Your current draft was kept. Open AI Debug for technical details, then retry."
+    }
+
     private func publishModelProgress(_ raw: String) {
         let clean = raw.replacingOccurrences(of: "\n", with: " ")
             .split(whereSeparator: { $0.isWhitespace })
@@ -288,8 +331,14 @@ final class AIGenerationSession: ObservableObject {
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"
+        } catch is CancellationError {
+            errorMessage = nil
+            persistCheckpoint()
+            phase = "Generation stopped"
         } catch {
-            errorMessage = error.localizedDescription
+            AIDebugTraceStore.shared.append("GENERATION ERROR", error.localizedDescription)
+            errorMessage = Self.friendlyMessage(for: error)
+            persistCheckpoint()
             phase = "Generation stopped"
         }
         isWorking = false
@@ -385,8 +434,14 @@ Requested change:
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"
+        } catch is CancellationError {
+            errorMessage = nil
+            persistCheckpoint()
+            phase = "Edit stopped"
         } catch {
-            errorMessage = error.localizedDescription
+            AIDebugTraceStore.shared.append("EDIT ERROR", error.localizedDescription)
+            errorMessage = Self.friendlyMessage(for: error)
+            persistCheckpoint()
             phase = "Edit stopped"
         }
         isWorking = false
@@ -551,8 +606,14 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"
+        } catch is CancellationError {
+            errorMessage = nil
+            persistCheckpoint()
+            phase = "Verification stopped"
         } catch {
-            errorMessage = error.localizedDescription
+            AIDebugTraceStore.shared.append("VERIFICATION ERROR", error.localizedDescription)
+            errorMessage = Self.friendlyMessage(for: error)
+            persistCheckpoint()
             phase = "Verification stopped"
         }
         isWorking = false
