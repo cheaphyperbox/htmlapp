@@ -746,7 +746,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             }
         }
 
-        for attempt in 0..<3 {
+        for attempt in 0..<2 {
             if !candidate.isEmpty {
                 if let rendered = await AIIconRenderer.render(script: candidate) {
                     if let qualityIssue = AIHTMLAgent.iconQualityIssue(candidate) {
@@ -1451,7 +1451,8 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
               !needsWebResearch(for: clean) else { return false }
         let selfContainedSignals = [
             "calculator", "counter", "timer", "stopwatch", "converter", "checklist",
-            "notepad", "notes app", "flashcards", "pomodoro", "random picker", "dice roller"
+            "notepad", "notes app", "flashcards", "pomodoro", "random picker", "dice roller",
+            "packing list", "trip packing", "trip planner", "shopping list", "to-do list"
         ]
         return selfContainedSignals.contains(where: { containsSignal($0, in: clean) })
     }

@@ -129,6 +129,7 @@ IOS EXPERIENCE
 - Use -apple-system typography, semantic light/dark colors, restrained translucent chrome with opaque fallbacks, clear selected states, 44px minimum touch targets, keyboard-safe forms, visible focus, accessible labels, and readable contrast.
 - Respect prefers-reduced-motion, prefers-contrast, and prefers-reduced-transparency.
 - Motion should communicate state: short press feedback, small state transitions, and restrained sheet/navigation transitions. Avoid decorative animation systems.
+- For ordinary multi-screen apps, use tactile press/squish feedback, spring-like ease-out expansion and contraction on tabs, pill selection indicators, sheets, menus and popups (roughly 160–280 ms). Make motion subtle, interruptible and transform/opacity-based; respect reduced motion and avoid bounce on every tap.
 
 HTMLAPP RUNTIME
 Prefer documented HTMLAppNative wrappers or first-class bridged browser APIs when they match the task. Feature-detect optional Web APIs. Never invent adjacent methods because iOS supports a native framework.

@@ -12,6 +12,7 @@ struct AIGenerationView: View {
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
+    @AppStorage("developerMode") private var developerMode = false
     @State private var prompt = ""
     @State private var changePrompt = ""
     @State private var showingChange = false
@@ -61,7 +62,7 @@ struct AIGenerationView: View {
                     }
                     .disabled(saving)
                 }
-                if debugTrace.isActive {
+                if developerMode && debugTrace.isActive {
                     ToolbarItem(placement: .confirmationAction) {
                         Button { showDebug = true } label: { Image(systemName: "ladybug") }
                             .accessibilityLabel("View AI debug trace")
@@ -116,7 +117,7 @@ struct AIGenerationView: View {
                     plan: session.refinedBrief,
                     research: browserResearch.lastReport,
                     qa: session.verificationReport,
-                    debug: debugTrace.text
+                    debug: developerMode ? debugTrace.text : ""
                 )
             }
         }
@@ -252,9 +253,10 @@ struct AIGenerationView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .lineLimit(1)
                             Text(currentProgressNote)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .contentTransition(.opacity)
                         }
                         Spacer(minLength: 8)
@@ -277,6 +279,12 @@ struct AIGenerationView: View {
                         .accessibilityLabel("Open Forge details")
                     }
 
+                    if session.isWorking && !session.refinedBrief.isEmpty {
+                        Text(session.refinedBrief.components(separatedBy: "\n").first ?? session.refinedBrief)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                     HStack(spacing: 10) {
                         if session.streamedByteCount > 0 {
                             Text(ByteCountFormatter.string(fromByteCount: Int64(session.streamedByteCount), countStyle: .file) + " generated")
@@ -302,6 +310,12 @@ struct AIGenerationView: View {
 
                 if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty {
                     VStack(spacing: 10) {
+                        if let uiPolishNotice {
+                            Text(uiPolishNotice)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         if showingChange {
                             HStack(spacing: 8) {
                                 TextField("Tell AI what to change…", text: $changePrompt, axis: .vertical)
@@ -320,14 +334,16 @@ struct AIGenerationView: View {
                                 .buttonStyle(.bordered)
                                 .disabled(dictation.requestingPermission)
                                 .accessibilityLabel(dictation.recording && dictationForEdit ? "Stop edit dictation" : "Dictate edit")
-                                Button("Apply") { applyAIChange() }
-                                    .buttonStyle(.borderedProminent)
+                            }
+                            HStack(spacing: 10) {
+                                Button("Apply Change") { applyAIChange() }
+                                    .buttonStyle(.bordered)
                                     .disabled(changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                Button(existingApp == nil ? "Save App" : "Save Changes") { saveGeneratedApp() }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(saving)
                             }
-                            if dictationForEdit && (dictation.recording || dictation.requestingPermission) {
-                                Text(dictation.status).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text("Dictate or type your change. Forge checks existing code and relevant web documentation before patching; source review is not a device test.")
+                            Text("Save the current app now, or apply another AI change first.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -335,14 +351,13 @@ struct AIGenerationView: View {
                             HStack(spacing: 10) {
                                 Button(existingApp == nil ? "Change this…" : "Ask AI to edit…") { showingChange = true }
                                     .buttonStyle(.bordered)
-                                    .frame(maxWidth: .infinity)
-                                Button(existingApp == nil ? "Looks good" : "Save Changes") { saveGeneratedApp() }
+                                Button(existingApp == nil ? "Save App" : "Save Changes") { saveGeneratedApp() }
                                     .buttonStyle(.borderedProminent)
-                                    .frame(maxWidth: .infinity)
                                     .disabled(saving)
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity)
                     .padding(14)
                     .background(.bar)
                 }

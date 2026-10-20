@@ -75,6 +75,7 @@ struct SettingsView: View {
     @AppStorage("webClipFullScreen") private var webClipFullScreen = true
     @AppStorage("webClipPrecomposed") private var webClipPrecomposed = false
     @AppStorage("allowJavaScript") private var allowJavaScript = true
+    @AppStorage("developerMode") private var developerMode = false
     @State private var working = false
 
     private var selectedSortMode: LibrarySortMode {
@@ -142,9 +143,16 @@ struct SettingsView: View {
                 } header: {
                     Text("Creation & Transfer")
                 } footer: {
-                    Text("Configure your specialized AI team, inspect generated widgets/background refresh jobs, or move selected apps and complete libraries between devices with portable ZIP backups.")
+                    Text("Set up AI generation, manage widgets, or send apps directly to a nearby device. You can also export a backup.")
                 }
 
+                Section("Developer") {
+                    Toggle("Developer Mode", isOn: $developerMode)
+                    Text("Shows diagnostic tools, advanced library settings, detailed AI configuration, and debugging controls.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                if developerMode {
                 Section("Opening Apps") {
                     Toggle("Ask before switching apps", isOn: $askBeforeSwitch)
                     Text("When a URL scheme arrives while an HTML app is open, HTMLApp can ask before unloading it and opening the linked app.")
@@ -186,6 +194,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
+                }
                 Section("Tutorial") {
                     Button("Show Tutorial Again") {
                         onboardingComplete = false

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AIConfigurationSettingsView: View {
+    @AppStorage("developerMode") private var developerMode = false
     @State private var compatibility = AISettingsStore.compatibility
     @State private var apiURL = AISettingsStore.apiURL
     @State private var apiKey = AISettingsStore.apiKey
@@ -50,6 +51,7 @@ struct AIConfigurationSettingsView: View {
                     icon: "hammer.fill",
                     help: "Builds and edits the actual HTMLApp. This is the required model."
                 )
+                if developerMode {
                 modelField(
                     "Prompt Planner",
                     text: $plannerModel,
@@ -80,12 +82,14 @@ struct AIConfigurationSettingsView: View {
                     icon: "checkmark.shield.fill",
                     help: "Runs the independent release audit, applies concrete repairs, and rechecks the result."
                 )
+                }
             } header: {
                 Text("AI Team")
             } footer: {
-                Text("Blank Planner, Research, Icon, or QA fields fall back to another configured role. UI Overhaul is intentionally blank by default because it is optional.")
+                Text(developerMode ? "Blank optional model fields use fallbacks. UI Overhaul stays optional." : "The Coding Agent is all you need for normal generation. Enable Developer Mode in Settings for additional model roles.")
             }
 
+            if developerMode {
             Section {
                 Stepper(value: $requestDelay, in: 0...60, step: 0.1) {
                     HStack {
@@ -127,6 +131,7 @@ struct AIConfigurationSettingsView: View {
                 Text("The built-in Forge prompt already covers product anticipation, onboarding, portable app data, device/API truthfulness, generated assets, iOS-quality icons, accessibility, and release QA. Edit it only when you intentionally want different agent behavior.")
             }
 
+            }
             Section {
                 Button {
                     save()
