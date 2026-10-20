@@ -181,6 +181,7 @@ final class AIGenerationSession: ObservableObject {
 
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
             var full = ""
+            var recoveredFromStream: AIGenerationOutput?
             var receivedCharacters = 0
             var lastPreviewCharacters = 0
             var lastPreviewAt = Date.distantPast
@@ -225,7 +226,7 @@ final class AIGenerationSession: ObservableObject {
                 } else {
                     // Preserve useful streamed output. Continue from the cutoff instead
                     // of discarding it and paying for a full non-streaming restart.
-                    _ = try await recoverIncompleteGeneration(
+                    recoveredFromStream = try await recoverIncompleteGeneration(
                         fullResponse: &full,
                         brief: improved,
                         systemPrompt: systemPrompt,
@@ -234,7 +235,7 @@ final class AIGenerationSession: ObservableObject {
                 }
             }
 
-            var final = AIHTMLAgent.parse(full)
+            var final = recoveredFromStream ?? AIHTMLAgent.parse(full)
             if final.html.trimmed.isEmpty {
                 final = try await recoverIncompleteGeneration(
                     fullResponse: &full,
