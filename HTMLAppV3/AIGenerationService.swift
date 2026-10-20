@@ -1127,13 +1127,21 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
 
     static func needsWebResearch(for prompt: String) -> Bool {
         let lower = prompt.lowercased()
-        return webResearchSignals.contains(where: { lower.contains($0) })
+        return webResearchSignals.contains(where: { containsSignal($0, in: lower) })
     }
 
     static func needsCapabilityResearch(for prompt: String) -> Bool {
         let lower = prompt.lowercased()
         return needsWebResearch(for: prompt)
-            || deviceCapabilitySignals.contains(where: { lower.contains($0) })
+            || deviceCapabilitySignals.contains(where: { containsSignal($0, in: lower) })
+    }
+
+    private static func containsSignal(_ signal: String, in text: String) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: signal.lowercased())
+        let pattern = #"(?<![\p{L}\p{N}_])"# + escaped + #"(?![\p{L}\p{N}_])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.firstMatch(in: text, range: range) != nil
     }
 
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
@@ -1788,8 +1796,8 @@ Interrupted/malformed response:
     static func parse(_ text: String) -> AIGenerationOutput {
         let summary = value("build_summary", in: text).trimmed
         return AIGenerationOutput(
-            html: stripProgressMarkers(value("htmlapp_code", in: text)),
-            patch: value("htmlapp_patch", in: text),
+            html: sanitizeHTMLPayload(value("htmlapp_code", in: text)),
+            patch: sanitizePatchPayload(value("htmlapp_patch", in: text)),
             description: value("description", in: text).trimmed,
             iconScript: value("icon_script", in: text).trimmed,
             assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
@@ -1800,13 +1808,49 @@ Interrupted/malformed response:
     static func parsePartial(_ text: String) -> AIGenerationOutput {
         let summary = partial("build_summary", in: text).trimmed
         return AIGenerationOutput(
-            html: stripProgressMarkers(partial("htmlapp_code", in: text)),
-            patch: partial("htmlapp_patch", in: text),
+            html: sanitizeHTMLPayload(partial("htmlapp_code", in: text)),
+            patch: sanitizePatchPayload(partial("htmlapp_patch", in: text)),
             description: partial("description", in: text).trimmed,
             iconScript: partial("icon_script", in: text).trimmed,
             assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
             refinedBrief: summary.isEmpty ? partial("thinking", in: text).trimmed : summary
         )
+    }
+
+    private static func stripMarkdownFences(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            if let newline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: newline)...])
+            }
+        }
+        if text.hasSuffix("```") {
+            text = String(text.dropLast(3))
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sanitizeHTMLPayload(_ raw: String) -> String {
+        var html = stripMarkdownFences(raw)
+        if let start = html.range(of: "<!DOCTYPE html", options: [.caseInsensitive])?.lowerBound
+            ?? html.range(of: "<html", options: [.caseInsensitive])?.lowerBound {
+            html = String(html[start...])
+        }
+        if let end = html.range(of: "</html>", options: [.caseInsensitive])?.upperBound {
+            html = String(html[..<end])
+        }
+        return stripProgressMarkers(html).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sanitizePatchPayload(_ raw: String) -> String {
+        var patch = stripMarkdownFences(raw)
+        if let start = patch.range(of: "<<<<<<< SEARCH")?.lowerBound {
+            patch = String(patch[start...])
+        }
+        if let end = patch.range(of: ">>>>>>> REPLACE", options: [.backwards])?.upperBound {
+            patch = String(patch[..<end])
+        }
+        return patch.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func streamingProgress(in text: String) -> String? {
@@ -1923,27 +1967,69 @@ Interrupted/malformed response:
 }
 
 enum HTMLPatchApplier {
+    private struct Block {
+        let search: String
+        let replacement: String
+    }
+
     static func apply(_ patch: String, to source: String) -> String? {
+        guard let blocks = parseBlocks(patch), !blocks.isEmpty else { return nil }
+        var result = source
+
+        for block in blocks {
+            guard let range = uniqueRange(of: block.search, in: result) else { return nil }
+            result.replaceSubrange(range, with: block.replacement)
+        }
+        return result
+    }
+
+    private static func parseBlocks(_ patch: String) -> [Block]? {
         let searchMarker = "<<<<<<< SEARCH"
         let splitMarker = "======="
         let replaceMarker = ">>>>>>> REPLACE"
-        var result = source
         var cursor = patch[...]
-        var applied = 0
+        var blocks: [Block] = []
 
         while let searchStart = cursor.range(of: searchMarker) {
             let afterSearchMarker = cursor[searchStart.upperBound...]
             guard let divider = afterSearchMarker.range(of: splitMarker) else { return nil }
-            let rawSearch = String(afterSearchMarker[..<divider.lowerBound]).trimmingCharacters(in: .newlines)
+            let search = String(afterSearchMarker[..<divider.lowerBound]).trimmingCharacters(in: .newlines)
             let afterDivider = afterSearchMarker[divider.upperBound...]
             guard let replaceEnd = afterDivider.range(of: replaceMarker) else { return nil }
-            let rawReplacement = String(afterDivider[..<replaceEnd.lowerBound]).trimmingCharacters(in: .newlines)
-            guard !rawSearch.isEmpty, let range = result.range(of: rawSearch) else { return nil }
-            result.replaceSubrange(range, with: rawReplacement)
-            applied += 1
+            let replacement = String(afterDivider[..<replaceEnd.lowerBound]).trimmingCharacters(in: .newlines)
+            guard !search.isEmpty else { return nil }
+            blocks.append(Block(search: search, replacement: replacement))
             cursor = afterDivider[replaceEnd.upperBound...]
         }
-        return applied > 0 ? result : nil
+        return blocks
+    }
+
+    private static func uniqueRange(of search: String, in source: String) -> Range<String.Index>? {
+        let exact = allRanges(of: search, in: source, limit: 2)
+        if exact.count == 1 { return exact[0] }
+        if exact.count > 1 { return nil }
+
+        let tokens = search.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard !tokens.isEmpty else { return nil }
+        let pattern = tokens
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: #"\s+"#)
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let matches = regex.matches(in: source, range: NSRange(source.startIndex..., in: source))
+        guard matches.count == 1, let range = Range(matches[0].range, in: source) else { return nil }
+        return range
+    }
+
+    private static func allRanges(of needle: String, in haystack: String, limit: Int) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var cursor = haystack.startIndex
+        while cursor < haystack.endIndex,
+              let range = haystack.range(of: needle, range: cursor..<haystack.endIndex) {
+            ranges.append(range)
+            if ranges.count >= limit { break }
+            cursor = range.upperBound
+        }
+        return ranges
     }
 }
 
