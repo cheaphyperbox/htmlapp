@@ -40,6 +40,15 @@ enum AIGenerationError: LocalizedError {
     }
 }
 
+struct AIProviderRequestError: LocalizedError {
+    let statusCode: Int?
+    let message: String
+    let retryable: Bool
+    let retryAfter: TimeInterval?
+
+    var errorDescription: String? { message }
+}
+
 @MainActor
 final class AIGenerationSession: ObservableObject {
     @Published var activity: [String] = []
@@ -205,13 +214,24 @@ final class AIGenerationSession: ObservableObject {
                 }
             } catch {
                 try Task.checkCancellation()
-                phase = "Retrying generation without streaming"
-                full = try await AIProviderClient.complete(
-                    config: config,
-                    system: systemPrompt,
-                    messages: [("user", improved)]
-                )
-                apply(AIHTMLAgent.parsePartial(full), partial: true)
+                if full.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    phase = "Retrying generation without streaming"
+                    full = try await AIProviderClient.complete(
+                        config: config,
+                        system: systemPrompt,
+                        messages: [("user", improved)]
+                    )
+                    apply(AIHTMLAgent.parsePartial(full), partial: true)
+                } else {
+                    // Preserve useful streamed output. Continue from the cutoff instead
+                    // of discarding it and paying for a full non-streaming restart.
+                    _ = try await recoverIncompleteGeneration(
+                        fullResponse: &full,
+                        brief: improved,
+                        systemPrompt: systemPrompt,
+                        config: config
+                    )
+                }
             }
 
             var final = AIHTMLAgent.parse(full)
@@ -621,21 +641,25 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
 actor AIRequestGate {
     static let shared = AIRequestGate()
-    private var lastRequestAt = Date.distantPast
+    private var nextAllowedAt = Date.distantPast
 
     func waitIfNeeded() async {
         let minimum = AISettingsStore.requestDelaySeconds
+        let now = Date()
         guard minimum > 0 else {
-            lastRequestAt = Date()
+            nextAllowedAt = now
             return
         }
-        let elapsed = Date().timeIntervalSince(lastRequestAt)
-        let remaining = minimum - elapsed
+
+        // Reserve this caller's slot before sleeping. Actor methods are re-entrant
+        // across awaits, so updating after sleep lets concurrent callers pass together.
+        let allowedAt = max(now, nextAllowedAt)
+        nextAllowedAt = allowedAt.addingTimeInterval(minimum)
+        let remaining = allowedAt.timeIntervalSince(now)
         if remaining > 0 {
             let nanoseconds = UInt64((remaining * 1_000_000_000).rounded())
             try? await Task.sleep(nanoseconds: nanoseconds)
         }
-        lastRequestAt = Date()
     }
 }
 
@@ -669,13 +693,21 @@ enum AIProviderClient {
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
 
         var lastError: Error?
+        var tokenParameterOverride: String?
         let maximumAttempts = retryOnTransient ? 3 : 1
         for attempt in 1...maximumAttempts {
             await AIRequestGate.shared.waitIfNeeded()
             do {
                 var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
                 request.httpBody = try JSONSerialization.data(
-                    withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false, maxTokens: maxTokens)
+                    withJSONObject: requestBody(
+                        config: config,
+                        system: system,
+                        messages: messages,
+                        stream: false,
+                        maxTokens: maxTokens,
+                        tokenParameterOverride: tokenParameterOverride
+                    )
                 )
                 let (data, response) = try await URLSession.shared.data(for: request)
                 try validate(response, data: data)
@@ -693,18 +725,37 @@ enum AIProviderClient {
                 return text
             } catch {
                 lastError = error
-                let willRetry = attempt < maximumAttempts && isRetryable(error)
+
+                if config.compatibility == .openAI,
+                   maxTokens != nil,
+                   tokenParameterOverride == nil,
+                   let providerError = error as? AIProviderRequestError,
+                   providerError.statusCode == 400,
+                   shouldRetryWithMaxCompletionTokens(providerError.message) {
+                    tokenParameterOverride = "max_completion_tokens"
+                    await MainActor.run {
+                        AIDebugTraceStore.shared.append(
+                            "AI REQUEST PARAMETER FALLBACK",
+                            "Provider rejected max_tokens; retrying with max_completion_tokens."
+                        )
+                    }
+                    continue
+                }
+
+                let retry = retryInfo(for: error)
+                let willRetry = attempt < maximumAttempts && retry.retryable
+                let delay = willRetry ? retryDelay(forAttempt: attempt, retryAfter: retry.retryAfter) : 0
                 await MainActor.run {
                     AIDebugTraceStore.shared.append(
                         willRetry ? "AI REQUEST RETRY" : "AI REQUEST ERROR",
                         willRetry
-                            ? "Attempt \(attempt) failed: \(error.localizedDescription)\nRetrying once with the same request."
+                            ? "Attempt \(attempt) of \(maximumAttempts) failed: \(error.localizedDescription)\nRetrying in \(String(format: "%.1f", delay)) seconds."
                             : error.localizedDescription
                     )
                 }
                 if willRetry {
                     try Task.checkCancellation()
-                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     continue
                 }
                 throw error
@@ -726,9 +777,20 @@ enum AIProviderClient {
                 var rawResponse = ""
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
-                    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                        throw AIGenerationError.provider("The AI provider returned an HTTP error.")
+                    guard let http = response as? HTTPURLResponse else {
+                        throw AIProviderRequestError(statusCode: nil, message: "The AI provider returned an invalid HTTP response.", retryable: true, retryAfter: nil)
                     }
+                    guard (200..<300).contains(http.statusCode) else {
+                        var detail = ""
+                        for try await line in bytes.lines {
+                            detail += line + "\n"
+                            if detail.utf8.count >= 1500 { break }
+                        }
+                        let trimmed = String(detail.prefix(1500)).trimmingCharacters(in: .whitespacesAndNewlines)
+                        throw providerHTTPError(http, detail: trimmed)
+                    }
+
+                    var wasTruncated = false
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
                         guard line.hasPrefix("data:") else { continue }
@@ -737,6 +799,13 @@ enum AIProviderClient {
                         await activity.markContent()
                         guard let data = payload.data(using: .utf8),
                               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+                        if let streamError = streamError(from: object, type: config.compatibility) {
+                            throw streamError
+                        }
+                        if streamWasTruncated(object, type: config.compatibility) {
+                            wasTruncated = true
+                        }
                         if let text = streamedText(object, type: config.compatibility), !text.isEmpty {
                             await activity.markContent()
                             rawResponse += text
@@ -744,7 +813,10 @@ enum AIProviderClient {
                         }
                     }
                     guard !rawResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                        throw AIGenerationError.provider("The AI stream completed without text. Retrying without streaming.")
+                        throw AIProviderRequestError(statusCode: nil, message: "The AI stream completed without text.", retryable: true, retryAfter: nil)
+                    }
+                    if wasTruncated {
+                        throw AIProviderRequestError(statusCode: nil, message: "The AI stream reached the provider output-token limit.", retryable: false, retryAfter: nil)
                     }
                     await activity.markFinished()
                     let completedResponse = rawResponse
@@ -815,14 +887,17 @@ enum AIProviderClient {
         system: String,
         messages: [(String, String)],
         stream: Bool,
-        maxTokens: Int?
+        maxTokens: Int?,
+        tokenParameterOverride: String? = nil
     ) -> [String: Any] {
         switch config.compatibility {
         case .openAI:
             var list: [[String: String]] = [["role": "system", "content": system]]
             list.append(contentsOf: messages.map { ["role": $0.0, "content": $0.1] })
             var body: [String: Any] = ["model": config.model, "messages": list, "stream": stream]
-            if let maxTokens { body["max_tokens"] = max(64, maxTokens) }
+            if let maxTokens {
+                body[tokenParameterOverride ?? "max_tokens"] = max(64, maxTokens)
+            }
             return body
         case .anthropic:
             let list: [[String: String]] = messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] }
@@ -839,7 +914,16 @@ enum AIProviderClient {
     private static func validate(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) else { return }
         let detail = String(decoding: data.prefix(1500), as: UTF8.self)
-        throw AIGenerationError.provider("AI provider error \(http.statusCode): \(detail)")
+        throw providerHTTPError(http, detail: detail)
+    }
+
+    private static func providerHTTPError(_ http: HTTPURLResponse, detail: String) -> AIProviderRequestError {
+        let status = http.statusCode
+        let retryable = [408, 409, 425, 429].contains(status) || (500...599).contains(status)
+        let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+        let suffix = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = suffix.isEmpty ? "AI provider error \(status)." : "AI provider error \(status): \(suffix)"
+        return AIProviderRequestError(statusCode: status, message: message, retryable: retryable, retryAfter: retryAfter)
     }
 
     private static func responseText(_ object: [String: Any], type: AIProviderConfiguration.Compatibility) -> String {
@@ -914,20 +998,65 @@ enum AIProviderClient {
         return "keys=[\(topKeys)]"
     }
 
-    private static func isRetryable(_ error: Error) -> Bool {
-        if error is CancellationError { return false }
+    private static func streamError(from object: [String: Any], type: AIProviderConfiguration.Compatibility) -> AIProviderRequestError? {
+        if type == .anthropic, object["type"] as? String == "error",
+           let error = object["error"] as? [String: Any] {
+            let kind = (error["type"] as? String) ?? "provider_error"
+            let message = (error["message"] as? String) ?? "Anthropic returned a streaming error."
+            let retryable = kind == "overloaded_error" || kind == "rate_limit_error" || kind == "api_error"
+            return AIProviderRequestError(statusCode: nil, message: "AI provider stream error (\(kind)): \(message)", retryable: retryable, retryAfter: nil)
+        }
+        if let error = object["error"] as? [String: Any] {
+            let message = (error["message"] as? String) ?? "The AI provider returned a streaming error."
+            return AIProviderRequestError(statusCode: nil, message: "AI provider stream error: \(message)", retryable: false, retryAfter: nil)
+        }
+        return nil
+    }
+
+    private static func streamWasTruncated(_ object: [String: Any], type: AIProviderConfiguration.Compatibility) -> Bool {
+        switch type {
+        case .openAI:
+            guard let choices = object["choices"] as? [[String: Any]], let first = choices.first else { return false }
+            let reason = (first["finish_reason"] as? String)?.lowercased()
+            return reason == "length" || reason == "max_tokens"
+        case .anthropic:
+            guard object["type"] as? String == "message_delta",
+                  let delta = object["delta"] as? [String: Any],
+                  let reason = (delta["stop_reason"] as? String)?.lowercased() else { return false }
+            return reason == "max_tokens" || reason == "length"
+        }
+    }
+
+    private static func shouldRetryWithMaxCompletionTokens(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        guard lower.contains("max_tokens") else { return false }
+        return lower.contains("max_completion_tokens")
+            || lower.contains("unsupported")
+            || lower.contains("not supported")
+            || lower.contains("invalid parameter")
+            || lower.contains("unknown parameter")
+    }
+
+    private static func retryInfo(for error: Error) -> (retryable: Bool, retryAfter: TimeInterval?) {
+        if error is CancellationError { return (false, nil) }
+        if let providerError = error as? AIProviderRequestError {
+            return (providerError.retryable, providerError.retryAfter)
+        }
         if let urlError = error as? URLError {
-            return [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet].contains(urlError.code)
+            let retryable = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet].contains(urlError.code)
+            return (retryable, nil)
         }
         let message = error.localizedDescription.lowercased()
-        if message.contains("without usable text") || message.contains("did not contain text") || message.contains("invalid json") {
-            return true
-        }
-        if message.contains("provider error 408") || message.contains("provider error 409") || message.contains("provider error 425") || message.contains("provider error 429") {
-            return true
-        }
-        if let range = message.range(of: "provider error 5"), !range.isEmpty { return true }
-        return false
+        return (
+            message.contains("without usable text") || message.contains("did not contain text") || message.contains("invalid json"),
+            nil
+        )
+    }
+
+    private static func retryDelay(forAttempt attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
+        if let retryAfter, retryAfter > 0 { return min(retryAfter, 60) }
+        let base = min(1.2 * pow(2.0, Double(max(0, attempt - 1))), 12.0)
+        return base + Double.random(in: 0...(base * 0.25))
     }
 }
 
