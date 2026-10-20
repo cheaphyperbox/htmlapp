@@ -80,6 +80,7 @@ final class AIGenerationSession: ObservableObject {
     private var originalPrompt = ""
     private var lastResearch = ""
     private var editingExistingApp = false
+    private var checkpointExistingAppID: String?
 
     private static func defaultProgressNote(for phase: String) -> String {
         switch phase {
@@ -106,6 +107,7 @@ final class AIGenerationSession: ObservableObject {
         case "Reviewing source (not running device tests)": return "Combining runtime findings with source checks for a focused release review."
         case "Rechecking repaired app": return "Re-running local and offscreen runtime checks only where the first repair still needs verification."
         case "Polishing the interface": return "Refining the visual hierarchy without changing the app’s working product model."
+        case "Draft recovered": return "Recovered the latest local Forge draft. Nothing was sent or resumed automatically."
         case "Ready to review": return "The generated source is ready for you to try on-device and review."
         case "Generation stopped", "Edit stopped", "Verification stopped": return "The current operation stopped; completed source has been preserved where possible."
         default: return "Working on the current build stage."
@@ -128,6 +130,7 @@ final class AIGenerationSession: ObservableObject {
 
     func load(existing app: SavedHTMLApp) {
         editingExistingApp = true
+        checkpointExistingAppID = app.id
         originalPrompt = "Maintain and improve the existing HTML app named \(app.name). Preserve its current purpose and working behavior unless the user explicitly asks to change them."
         streamedHTML = app.html
         description = app.summary
@@ -141,6 +144,7 @@ final class AIGenerationSession: ObservableObject {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         editingExistingApp = false
+        checkpointExistingAppID = nil
         originalPrompt = originalUserPrompt ?? prompt
         isWorking = true
         errorMessage = nil
@@ -488,9 +492,51 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         return replacementOutput
     }
 
+    func persistCheckpoint() {
+        guard !originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !refinedBrief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        ForgeDraftCheckpointStore.save(
+            ForgeDraftCheckpoint(
+                savedAt: Date(),
+                originalPrompt: originalPrompt,
+                refinedBrief: refinedBrief,
+                research: lastResearch,
+                html: streamedHTML,
+                description: description,
+                iconScript: iconScript,
+                phase: phase,
+                existingAppID: checkpointExistingAppID,
+                streamedByteCount: streamedByteCount
+            )
+        )
+    }
+
+    func restore(checkpoint: ForgeDraftCheckpoint, existingIcon: Data? = nil) {
+        checkpointExistingAppID = checkpoint.existingAppID
+        editingExistingApp = checkpoint.existingAppID != nil
+        originalPrompt = checkpoint.originalPrompt
+        refinedBrief = checkpoint.refinedBrief
+        lastResearch = checkpoint.research
+        streamedHTML = checkpoint.html
+        description = checkpoint.description
+        iconScript = checkpoint.iconScript
+        renderedIconData = existingIcon
+        streamedByteCount = checkpoint.streamedByteCount
+        verificationReport = ""
+        errorMessage = nil
+        isWorking = false
+        phase = "Draft recovered"
+    }
+
+    func clearCheckpoint() {
+        ForgeDraftCheckpointStore.clear()
+    }
+
     func acceptExternalHTML(_ html: String) {
         streamedHTML = html
         verificationReport = ""
+        persistCheckpoint()
     }
 
     func verifyCurrent() async {
@@ -791,6 +837,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         if !output.description.isEmpty { description = output.description }
         if !output.iconScript.isEmpty { iconScript = output.iconScript }
         if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
+        persistCheckpoint()
     }
 }
 
