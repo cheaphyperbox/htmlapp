@@ -2444,13 +2444,56 @@ enum HTMLQualityChecks {
         if !lower.contains("safe-area-inset-bottom") { issues.append("Missing bottom safe-area handling for the Home Indicator.") }
         if count("<script", in: lower) != count("</script>", in: lower) { issues.append("Unbalanced <script> tags.") }
         if count("<style", in: lower) != count("</style>", in: lower) { issues.append("Unbalanced <style> tags.") }
+        if count("<body", in: lower) != count("</body>", in: lower) { issues.append("Unbalanced <body> tags.") }
+        if count("<html", in: lower) != count("</html>", in: lower) { issues.append("Unbalanced <html> tags.") }
         if lower.contains("alert(") { issues.append("Uses browser alert(); routine feedback should use in-app UI.") }
+        if lower.contains("confirm(") { issues.append("Uses browser confirm(); destructive confirmation should use in-app UI.") }
         if lower.contains("example.com") || lower.contains("your_api_key") || lower.contains("api-key-here") { issues.append("Contains a likely placeholder endpoint or key.") }
         if html.contains("{{HTMLAPP_ASSET:") { issues.append("Contains an unresolved generated-asset token.") }
+
+        let ids = captures(#"(?i)\bid\s*=\s*["']([^"']+)["']"#, in: html)
+        let duplicateIDs = Dictionary(grouping: ids, by: { $0 })
+            .filter { $0.value.count > 1 }
+            .keys
+            .sorted()
+        if !duplicateIDs.isEmpty {
+            issues.append("Duplicate DOM id values: " + duplicateIDs.prefix(8).joined(separator: ", ") + ".")
+        }
+
+        let referencedIDs =
+            captures(#"(?i)getElementById\(\s*["']([^"']+)["']\s*\)"#, in: html) +
+            captures(#"(?i)querySelector\(\s*["']#([^"']+)["']\s*\)"#, in: html)
+        let knownIDs = Set(ids)
+        let missingIDs = Set(referencedIDs.filter { !knownIDs.contains($0) }).sorted()
+        if !missingIDs.isEmpty {
+            issues.append("JavaScript references missing DOM id values: " + missingIDs.prefix(8).joined(separator: ", ") + ".")
+        }
+
+        if matches(#"(?is)<script\b[^>]*\bsrc\s*=\s*["']https?://"#, in: html)
+            || matches(#"(?is)<link\b[^>]*\brel\s*=\s*["']stylesheet["'][^>]*\bhref\s*=\s*["']https?://"#, in: html) {
+            issues.append("Contains remote script or stylesheet dependencies; generated HTMLApps should remain self-contained and offline-capable.")
+        }
         return issues
     }
 
-    private static func count(_ needle: String, in haystack: String) -> Int { haystack.components(separatedBy: needle).count - 1 }
+    private static func count(_ needle: String, in haystack: String) -> Int {
+        haystack.components(separatedBy: needle).count - 1
+    }
+
+    private static func captures(_ pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.matches(in: text, range: range).compactMap { match in
+            guard match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[range])
+        }
+    }
+
+    private static func matches(_ pattern: String, in text: String) -> Bool {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
 }
 
 enum SafePublicAPIResearch {
