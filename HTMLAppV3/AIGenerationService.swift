@@ -921,7 +921,7 @@ enum AIProviderClient {
     private static func providerHTTPError(_ http: HTTPURLResponse, detail: String) -> AIProviderRequestError {
         let status = http.statusCode
         let retryable = [408, 409, 425, 429].contains(status) || (500...599).contains(status)
-        let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+        let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0) }
         let suffix = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         let message = suffix.isEmpty ? "AI provider error \(status)." : "AI provider error \(status): \(suffix)"
         return AIProviderRequestError(statusCode: status, message: message, retryable: retryable, retryAfter: retryAfter)
@@ -2012,7 +2012,7 @@ enum HTMLPatchApplier {
         let tokens = search.split(whereSeparator: { $0.isWhitespace }).map(String.init)
         guard !tokens.isEmpty else { return nil }
         let pattern = tokens
-            .map(NSRegularExpression.escapedPattern(for:))
+            .map { NSRegularExpression.escapedPattern(for: $0) }
             .joined(separator: #"\s+"#)
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let matches = regex.matches(in: source, range: NSRange(source.startIndex..., in: source))
