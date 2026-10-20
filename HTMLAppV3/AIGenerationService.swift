@@ -661,7 +661,7 @@ enum AIProviderClient {
         config: AIProviderConfiguration,
         system: String,
         messages: [(String, String)],
-        timeout: TimeInterval = 180,
+        timeout: TimeInterval = 300,
         maxTokens: Int? = nil,
         retryOnTransient: Bool = true
     ) async throws -> String {
@@ -669,7 +669,7 @@ enum AIProviderClient {
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
 
         var lastError: Error?
-        let maximumAttempts = retryOnTransient ? 2 : 1
+        let maximumAttempts = retryOnTransient ? 3 : 1
         for attempt in 1...maximumAttempts {
             await AIRequestGate.shared.waitIfNeeded()
             do {
@@ -717,7 +717,7 @@ enum AIProviderClient {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "STREAM", config: config, endpoint: endpoint, system: system, messages: messages)
-        var request = makeRequest(config: config, endpoint: endpoint, timeout: 180)
+        var request = makeRequest(config: config, endpoint: endpoint, timeout: 300)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true, maxTokens: maxTokens))
         return AsyncThrowingStream { continuation in
             let activity = AIStreamActivity()
@@ -734,6 +734,7 @@ enum AIProviderClient {
                         guard line.hasPrefix("data:") else { continue }
                         let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                         if payload == "[DONE]" { break }
+                        await activity.markContent()
                         guard let data = payload.data(using: .utf8),
                               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
                         if let text = streamedText(object, type: config.compatibility), !text.isEmpty {
@@ -764,8 +765,8 @@ enum AIProviderClient {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                     if Task.isCancelled { break }
-                    if await activity.shouldTimeout(after: 60) {
-                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 60 seconds. Retrying without streaming."))
+                    if await activity.shouldTimeout(after: 120) {
+                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 120 seconds. Retrying without streaming."))
                         worker.cancel()
                         break
                     }
@@ -1035,7 +1036,7 @@ The brief must explicitly cover:
 Prefer the smallest complete product that already feels like a thoughtful first public release, not a mockup or shallow prototype. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
         do {
-            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 45, maxTokens: 2200, retryOnTransient: false)
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 90, maxTokens: 6000, retryOnTransient: true)
             return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
         } catch {
             await MainActor.run {
@@ -1054,7 +1055,7 @@ Preserve every behavior, storage key, API integration, navigation path, visual c
 Return only <brief>...</brief>.
 """
         do {
-            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 45, maxTokens: 2000, retryOnTransient: false)
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 90, maxTokens: 6000, retryOnTransient: true)
             return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
         } catch {
             await MainActor.run {
@@ -1079,7 +1080,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
         let text: String
         do {
-            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 900, retryOnTransient: false)
+            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 75, maxTokens: 3000, retryOnTransient: true)
         } catch {
             await MainActor.run {
                 AIDebugTraceStore.shared.append("RESEARCH PLANNER FALLBACK", "Capability research planning was unavailable; continuing without new research instead of stopping generation. \(error.localizedDescription)")
@@ -1199,9 +1200,9 @@ ASSET DRAFTS:
             config: config,
             system: system,
             messages: [("user", user)],
-            timeout: 55,
-            maxTokens: 5000,
-            retryOnTransient: false
+            timeout: 90,
+            maxTokens: 7000,
+            retryOnTransient: true
         )
         let parsed = parseAssetScripts(value("asset_scripts", in: response))
         guard !parsed.isEmpty else { return drafts }
@@ -1276,8 +1277,8 @@ REPAIR / QUALITY NOTE:
                     config: config,
                     system: system,
                     messages: [("user", user)],
-                    timeout: 45,
-                    maxTokens: 1600,
+                    timeout: 75,
+                    maxTokens: 3200,
                     retryOnTransient: false
                 )
                 let parsed = iconScriptFromProviderResponse(response)
@@ -1593,7 +1594,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 70, maxTokens: 4800, retryOnTransient: false)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 120, maxTokens: 8000, retryOnTransient: true)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
