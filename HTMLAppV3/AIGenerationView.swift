@@ -180,10 +180,17 @@ struct AIGenerationView: View {
                         }
                     }
                     if browserResearch.isBrowsing {
-                        Text("Research in progress • blocked or unavailable pages are reported")
+                        Text(browserResearch.progressNote)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentTransition(.opacity)
+                    } else if session.isWorking {
+                        Text(session.progressNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentTransition(.opacity)
                     } else if let uiPolishNotice {
                         Text(uiPolishNotice)
                             .font(.caption)
@@ -200,7 +207,7 @@ struct AIGenerationView: View {
                 .padding(.vertical, 10)
                 .background(.bar)
 
-                DisclosureGroup("Activity & research", isExpanded: $showActivity) {
+                DisclosureGroup("Build notes & research", isExpanded: $showActivity) {
                     ScrollView {
                         Text((browserResearch.activity + session.activity).suffix(30).joined(separator: "\n"))
                             .font(.caption.monospaced()).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
