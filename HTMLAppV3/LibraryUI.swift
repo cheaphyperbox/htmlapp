@@ -37,8 +37,8 @@ struct LibraryView: View {
     @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
     @State private var showWebsiteImporter = false
-    @State private var showReceiver = false
-    @State private var senderApp: SavedHTMLApp?
+    @State private var showNearbyTransfer = false
+    @State private var nearbyTransferAppIDs: Set<String> = []
     @State private var pendingImport: OpticalImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var profileApp: SavedHTMLApp?
@@ -92,10 +92,15 @@ struct LibraryView: View {
         }
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
-        .fullScreenCover(item: $senderApp) { OpticalSenderView(app: $0) }
-        .fullScreenCover(isPresented: $showReceiver) {
-            OpticalReceiverView { payload in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { pendingImport = payload }
+        .fullScreenCover(isPresented: $showNearbyTransfer) {
+            NavigationStack {
+                NearbyAppTransferView(appIDs: nearbyTransferAppIDs)
+                    .environmentObject(store)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showNearbyTransfer = false }
+                        }
+                    }
             }
         }
         .sheet(item: $tintFolder) { folder in
@@ -119,10 +124,13 @@ struct LibraryView: View {
             Button("Download Website") { showWebsiteImporter = true }
             Button("Enter Custom Code") { editor = .new }
             Button("Select an HTML File") { importingFile = true }
-            Button("Import from Another Device") { showReceiver = true }
+            Button("Import from Nearby Device") {
+                nearbyTransferAppIDs = []
+                showNearbyTransfer = true
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or scan a transfer.")
+            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or transfer directly from a nearby device.")
         }
         .alert("New Folder", isPresented: $showNewFolder) {
             TextField("Folder name", text: $newFolderName)
@@ -399,8 +407,11 @@ struct LibraryView: View {
         Button { store.exportPortablePackage(appIDs: [app.id]) } label: {
             Label("Share HTMLApp Package", systemImage: "square.and.arrow.up.on.square")
         }
-        Button { senderApp = app } label: {
-            Label("Nearby QR Transfer", systemImage: "qrcode.viewfinder")
+        Button {
+            nearbyTransferAppIDs = [app.id]
+            showNearbyTransfer = true
+        } label: {
+            Label("Send to Nearby Device", systemImage: "antenna.radiowaves.left.and.right")
         }
         Button { store.exportHTML(app) } label: {
             Label("Export Raw HTML", systemImage: "doc.text")
