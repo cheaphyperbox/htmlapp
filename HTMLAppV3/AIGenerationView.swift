@@ -364,13 +364,20 @@ Requested edit:
         session.isWorking = true
         session.phase = "Polishing the interface"
         do {
-            let polished = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
-            session.acceptExternalHTML(polished)
-            uiPolishNotice = "UI Overhaul refined the presentation. Running final AI QA…"
+            let result = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
+            session.acceptExternalHTML(result.html)
             session.isWorking = false
-            await session.verifyCurrent()
-            if session.errorMessage == nil {
-                uiPolishNotice = "UI Overhaul finished and the main AI completed a final source-level QA review."
+            if result.changedOnlyCSS {
+                session.phase = "Ready to review"
+                uiPolishNotice = result.html == functionalHTML
+                    ? "UI Overhaul found no safe visual change worth applying."
+                    : "UI Overhaul applied a CSS-only refinement without rewriting app behavior."
+            } else {
+                uiPolishNotice = "UI Overhaul refined presentation markup. Running a focused final QA check…"
+                await session.verifyCurrent()
+                if session.errorMessage == nil {
+                    uiPolishNotice = "UI Overhaul finished and the refined markup passed the final checks."
+                }
             }
         } catch {
             session.acceptExternalHTML(functionalHTML)
