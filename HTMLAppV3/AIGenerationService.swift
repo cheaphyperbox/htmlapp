@@ -75,6 +75,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var verificationReport = ""
     @Published var errorMessage: String?
     @Published var isWorking = false
+    @Published var streamedByteCount = 0
 
     private var originalPrompt = ""
     private var lastResearch = ""
@@ -193,9 +194,11 @@ final class AIGenerationSession: ObservableObject {
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
             var full = ""
             var recoveredFromStream: AIGenerationOutput?
-            var receivedCharacters = 0
-            var lastPreviewCharacters = 0
+            var receivedBytes = 0
+            var lastPreviewBytes = 0
             var lastPreviewAt = Date.distantPast
+            var lastProgressAt = Date.distantPast
+            var progressTail = ""
             do {
                 let stream = try await AIProviderClient.stream(
                     config: config,
@@ -205,21 +208,35 @@ final class AIGenerationSession: ObservableObject {
                 for try await piece in stream {
                     try Task.checkCancellation()
                     full += piece
-                    receivedCharacters += piece.count
-                    if let note = AIHTMLAgent.streamingProgress(in: full) {
-                        publishModelProgress(note)
+                    receivedBytes += piece.utf8.count
+                    progressTail += piece
+                    if progressTail.utf8.count > 12_000 {
+                        progressTail = String(progressTail.suffix(8_000))
                     }
+
                     let now = Date()
-                    if receivedCharacters - lastPreviewCharacters >= 8_000,
-                       now.timeIntervalSince(lastPreviewAt) >= 0.8 {
+                    if now.timeIntervalSince(lastProgressAt) >= 0.2 {
+                        streamedByteCount = receivedBytes
+                        if let note = AIHTMLAgent.streamingProgress(in: progressTail) {
+                            publishModelProgress(note)
+                        }
+                        lastProgressAt = now
+                    }
+
+                    // Parsing and reloading a WKWebView on every small chunk made
+                    // long generations increasingly expensive. Keep the last good
+                    // preview and refresh only at coarse, stable checkpoints.
+                    if receivedBytes - lastPreviewBytes >= 30_000,
+                       now.timeIntervalSince(lastPreviewAt) >= 2.5 {
                         let partial = AIHTMLAgent.parsePartial(full)
                         if HTMLStreamRepair.isSafeForLivePreview(partial.html) {
                             apply(partial, partial: true)
-                            lastPreviewCharacters = receivedCharacters
+                            lastPreviewBytes = receivedBytes
                             lastPreviewAt = now
                         }
                     }
                 }
+                streamedByteCount = receivedBytes
                 let partial = AIHTMLAgent.parsePartial(full)
                 if HTMLStreamRepair.isSafeForLivePreview(partial.html) {
                     apply(partial, partial: true)
