@@ -250,8 +250,8 @@ struct AIGenerationView: View {
                         if session.streamedByteCount > 0 {
                             Text(ByteCountFormatter.string(fromByteCount: Int64(session.streamedByteCount), countStyle: .file) + " generated")
                         }
-                        if !session.streamedHTML.isEmpty {
-                            Text("Draft saved locally")
+                        if session.streamedByteCount > 0 || !session.streamedHTML.isEmpty {
+                            Text("Recovery checkpoint active")
                         }
                         Spacer()
                         Text("Runtime QA is offscreen, not a device test")
@@ -333,7 +333,7 @@ struct AIGenerationView: View {
 
     private var loadingHTML: String {
         """
-        <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font-family:-apple-system;background:#f2f2f7;color:#111;display:grid;place-items:center;min-height:100vh}main{text-align:center;padding:32px}.dot{width:12px;height:12px;border-radius:50%;background:#007aff;margin:18px auto;animation:p 1s infinite alternate}@keyframes p{to{transform:scale(1.6);opacity:.35}}@media(prefers-color-scheme:dark){body{background:#000;color:#fff}}</style></head><body><main><h2>Building your app</h2><p>The live preview will appear as HTML is generated.</p><div class="dot"></div></main></body></html>
+        <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font-family:-apple-system;background:#f2f2f7;color:#111;display:grid;place-items:center;min-height:100vh}main{text-align:center;padding:32px}.dot{width:12px;height:12px;border-radius:50%;background:#007aff;margin:18px auto;animation:p 1s infinite alternate}@keyframes p{to{transform:scale(1.6);opacity:.35}}@media(prefers-color-scheme:dark){body{background:#000;color:#fff}}</style></head><body><main><h2>Building your app</h2><p>Your last good preview stays in place while Forge builds the next stable version.</p><div class="dot"></div></main></body></html>
         """
     }
 
@@ -343,6 +343,7 @@ struct AIGenerationView: View {
         let originalPrompt = prompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
+        session.beginDraft(prompt: originalPrompt)
         session.isWorking = true
         generationTask = Task {
             let webReport: String
