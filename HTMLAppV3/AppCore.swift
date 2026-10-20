@@ -616,7 +616,7 @@ final class AppStore: ObservableObject {
 
     func exportHTML(_ app: SavedHTMLApp) {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(OpticalTransferCodec.safeFileName(app.name))
+            .appendingPathComponent(HTMLFileName.safe(app.name))
         do {
             try Data(app.html.utf8).write(to: url, options: .atomic)
             SharePresenter.present(items: [url])

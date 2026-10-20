@@ -99,9 +99,14 @@ struct NearbyAppTransferView: View {
     @StateObject private var transfer = NearbyAppTransfer()
     @State private var browse = false
     @State private var confirmImport = false
-    let appIDs: Set<String>
+    @State private var chooseApps = false
+    @State private var selectedAppIDs: Set<String>
 
-    private var isReceiveOnly: Bool { appIDs.isEmpty }
+    init(appIDs: Set<String>) {
+        _selectedAppIDs = State(initialValue: appIDs)
+    }
+
+    private var isReceiveOnly: Bool { selectedAppIDs.isEmpty }
 
     var body: some View {
         List {
@@ -142,30 +147,23 @@ struct NearbyAppTransferView: View {
                 Text("Keep Nearby Transfer open on both devices while connecting and transferring.")
             }
 
-            if !isReceiveOnly {
-                Section("Send") {
-                    Label(
-                        "\(appIDs.count) app\(appIDs.count == 1 ? "" : "s") selected",
-                        systemImage: "square.stack.3d.up.fill"
-                    )
-
-                    Button {
-                        do {
-                            let url = try store.createNearbyPackage(appIDs: appIDs)
-                            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                            guard size <= 100_000_000 else {
-                                try? FileManager.default.removeItem(at: url)
-                                transfer.status = "This backup exceeds 100 MB. Use Export and AirDrop instead."
-                                return
-                            }
-                            transfer.send(url)
-                        } catch {
-                            transfer.status = error.localizedDescription
-                        }
-                    } label: {
-                        Label("Send Selected Apps with Data", systemImage: "paperplane.fill")
-                    }
-                    .disabled(!transfer.connected || transfer.busy)
+            Section("Send Apps") {
+                Button { chooseApps = true } label: {
+                    Label(selectedAppIDs.isEmpty ? "Choose Apps to Send" : "Change Selected Apps (\(selectedAppIDs.count))", systemImage: "square.stack.3d.up")
+                }
+                if selectedAppIDs.count == 1,
+                   let selected = store.apps.first(where: { selectedAppIDs.contains($0.id) }) {
+                    Label(selected.name, systemImage: "app.fill").foregroundStyle(.secondary)
+                }
+                Button { sendSelectedApps() } label: {
+                    Label(selectedAppIDs.count == 1 ? "Send App" : "Send \(selectedAppIDs.count) Apps", systemImage: "paperplane.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedAppIDs.isEmpty || !transfer.connected || transfer.busy)
+                if !transfer.connected {
+                    Text("Choose your apps, connect to a nearby device above, then tap Send App. The receiver confirms import.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
 
@@ -202,10 +200,33 @@ struct NearbyAppTransferView: View {
                 }
             }
         }
-        .navigationTitle(isReceiveOnly ? "Receive Nearby" : "Nearby Transfer")
+        .navigationTitle("Nearby Transfer")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $browse) {
             NearbyPeerBrowser(session: transfer.session)
+        }
+        .sheet(isPresented: $chooseApps) {
+            NavigationStack {
+                List {
+                    ForEach(store.orderedApps) { app in
+                        Button {
+                            if selectedAppIDs.contains(app.id) { selectedAppIDs.remove(app.id) }
+                            else { selectedAppIDs.insert(app.id) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                AppIconView(app: app, size: 40)
+                                Text(app.name).foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: selectedAppIDs.contains(app.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedAppIDs.contains(app.id) ? Color.accentColor : Color.secondary)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Apps to Send")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { chooseApps = false } } }
+            }
         }
         .alert(
             "Accept nearby connection?",
@@ -243,10 +264,10 @@ struct NearbyAppTransferView: View {
             transfer.start()
         }
         .onChange(of: scenePhase) {
-            if $0 != .active { transfer.stop() }
+            if $0 == .background { transfer.stop() }
         }
         .onDisappear {
-            if !browse {
+            if !browse && !chooseApps {
                 transfer.stop()
                 if let url = transfer.received {
                     try? FileManager.default.removeItem(at: url)
@@ -255,4 +276,20 @@ struct NearbyAppTransferView: View {
             }
         }
     }
+    private func sendSelectedApps() {
+        guard !selectedAppIDs.isEmpty, transfer.connected, !transfer.busy else { return }
+        do {
+            let url = try store.createNearbyPackage(appIDs: selectedAppIDs)
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= 100_000_000 else {
+                try? FileManager.default.removeItem(at: url)
+                transfer.status = "Backup exceeds 100 MB. Use Export and AirDrop instead."
+                return
+            }
+            transfer.send(url)
+        } catch {
+            transfer.status = "Could not prepare apps: \(error.localizedDescription)"
+        }
+    }
+
 }

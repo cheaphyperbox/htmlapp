@@ -16,6 +16,11 @@ private enum FolderDestinationOperation: Identifiable {
     }
 }
 
+private struct NearbyTransferRoute: Identifiable {
+    let id = UUID()
+    let appIDs: Set<String>
+}
+
 struct LibraryView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("libraryLayout") private var libraryLayout = "list"
@@ -37,9 +42,8 @@ struct LibraryView: View {
     @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
     @State private var showWebsiteImporter = false
-    @State private var showNearbyTransfer = false
-    @State private var nearbyTransferAppIDs: Set<String> = []
-    @State private var pendingImport: OpticalImportPayload?
+    @State private var nearbyTransferRoute: NearbyTransferRoute?
+    @State private var pendingImport: HTMLFileImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var profileApp: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
@@ -92,13 +96,13 @@ struct LibraryView: View {
         }
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
-        .fullScreenCover(isPresented: $showNearbyTransfer) {
+        .fullScreenCover(item: $nearbyTransferRoute) { route in
             NavigationStack {
-                NearbyAppTransferView(appIDs: nearbyTransferAppIDs)
+                NearbyAppTransferView(appIDs: route.appIDs)
                     .environmentObject(store)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { showNearbyTransfer = false }
+                            Button("Done") { nearbyTransferRoute = nil }
                         }
                     }
             }
@@ -125,8 +129,7 @@ struct LibraryView: View {
             Button("Enter Custom Code") { editor = .new }
             Button("Select an HTML File") { importingFile = true }
             Button("Receive from Nearby Device") {
-                nearbyTransferAppIDs = []
-                showNearbyTransfer = true
+                nearbyTransferRoute = NearbyTransferRoute(appIDs: [])
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -408,8 +411,7 @@ struct LibraryView: View {
             Label("Share Package (AirDrop / Files)", systemImage: "square.and.arrow.up.on.square")
         }
         Button {
-            nearbyTransferAppIDs = [app.id]
-            showNearbyTransfer = true
+            nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id])
         } label: {
             Label("Send with Nearby Transfer", systemImage: "antenna.radiowaves.left.and.right")
         }
@@ -509,7 +511,7 @@ struct LibraryView: View {
                 store.errorMessage = "The selected file was empty."
                 return
             }
-            pendingImport = OpticalImportPayload(fileName: url.lastPathComponent, html: html)
+            pendingImport = HTMLFileImportPayload(fileName: url.lastPathComponent, html: html)
         } catch {
             store.errorMessage = "The selected HTML file could not be opened."
         }
