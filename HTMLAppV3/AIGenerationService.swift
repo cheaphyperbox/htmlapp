@@ -118,30 +118,33 @@ final class AIGenerationSession: ObservableObject {
 
     private static func friendlyMessage(for error: Error) -> String {
         if let provider = error as? AIProviderRequestError {
-            switch provider.statusCode {
-            case 401, 403:
-                return "The AI provider rejected the API key or account access. Check your key in Settings, then retry."
-            case 404:
-                return "The configured AI endpoint or model was not found. Check the API URL and model name in Settings."
-            case 408:
-                return "The AI provider timed out. Your current draft was kept; retry when the connection is stable."
-            case 429:
-                if let retryAfter = provider.retryAfter, retryAfter > 0 {
-                    return "The AI provider is rate limiting requests. Try again in about \(Int(ceil(retryAfter))) seconds."
+            if let status = provider.statusCode {
+                switch status {
+                case 401, 403:
+                    return "The AI provider rejected the API key or account access. Check your key in Settings, then retry."
+                case 404:
+                    return "The configured AI endpoint or model was not found. Check the API URL and model name in Settings."
+                case 408:
+                    return "The AI provider timed out. Your current draft was kept; retry when the connection is stable."
+                case 429:
+                    if let retryAfter = provider.retryAfter, retryAfter > 0 {
+                        return "The AI provider is rate limiting requests. Try again in about \(Int(ceil(retryAfter))) seconds."
+                    }
+                    return "The AI provider is rate limiting requests. Your current draft was kept; wait a moment and retry."
+                case 500...599:
+                    return "The AI provider is temporarily unavailable. Your current draft was kept; retry shortly."
+                default:
+                    break
                 }
-                return "The AI provider is rate limiting requests. Your current draft was kept; wait a moment and retry."
-            case 500...599:
-                return "The AI provider is temporarily unavailable. Your current draft was kept; retry shortly."
-            default:
-                let lower = provider.message.lowercased()
-                if lower.contains("context") && (lower.contains("length") || lower.contains("token")) {
-                    return "This request exceeded the model's context limit. Shorten the request or use a model with a larger context window."
-                }
-                if lower.contains("max_tokens") || lower.contains("max_completion_tokens") {
-                    return "The model rejected the configured output-token setting. Forge tried its compatibility fallback; check the selected model if this continues."
-                }
-                return "The AI provider could not complete this step. Your current draft was kept. Open AI Debug for the technical details."
             }
+            let lower = provider.message.lowercased()
+            if lower.contains("context") && (lower.contains("length") || lower.contains("token")) {
+                return "This request exceeded the model's context limit. Shorten the request or use a model with a larger context window."
+            }
+            if lower.contains("max_tokens") || lower.contains("max_completion_tokens") {
+                return "The model rejected the configured output-token setting. Forge tried its compatibility fallback; check the selected model if this continues."
+            }
+            return "The AI provider could not complete this step. Your current draft was kept. Open AI Debug for the technical details."
         }
         if let urlError = error as? URLError {
             switch urlError.code {
