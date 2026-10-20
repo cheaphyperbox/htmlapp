@@ -102,8 +102,9 @@ final class AIGenerationSession: ObservableObject {
         case "Patching the app": return "Applying a focused code patch and preserving unrelated storage, navigation, and behavior."
         case "Generating app icon", "Designing final app icon": return "Designing a simple app-specific icon that stays readable at Home Screen size."
         case "Checking app icon", "Repairing app icon": return "Rendering the icon locally and fixing it if the script is invalid or too detailed."
-        case "Reviewing source (not running device tests)": return "Auditing controls, persistence, async failures, safe areas, accessibility, and unsupported assumptions."
-        case "Rechecking repaired app": return "Rechecking the repaired source for regressions before presenting it."
+        case "Running app checks": return "Loading the generated HTML in an isolated offscreen WebView and checking real runtime failures at phone and iPad widths."
+        case "Reviewing source (not running device tests)": return "Combining runtime findings with source checks for a focused release review."
+        case "Rechecking repaired app": return "Re-running local and offscreen runtime checks only where the first repair still needs verification."
         case "Polishing the interface": return "Refining the visual hierarchy without changing the app’s working product model."
         case "Ready to review": return "The generated source is ready for you to try on-device and review."
         case "Generation stopped", "Edit stopped", "Verification stopped": return "The current operation stopped; completed source has been preserved where possible."
@@ -651,8 +652,18 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
             for pass in 1...2 {
                 try Task.checkCancellation()
+                phase = "Running app checks"
+                let structuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
+                let runtimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                let localIssues = structuralIssues + runtimeIssues
+                AIDebugTraceStore.shared.append(
+                    "RUNTIME QA",
+                    runtimeIssues.isEmpty
+                        ? "Offscreen WebView checks passed without captured runtime errors or horizontal overflow."
+                        : runtimeIssues.joined(separator: "\n")
+                )
+
                 phase = pass == 1 ? "Reviewing source (not running device tests)" : "Rechecking repaired app"
-                let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
                 let response = try await AIHTMLAgent.reviewArtifact(
                     html: streamedHTML,
                     iconScript: iconScript,
@@ -696,20 +707,30 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 }
 
                 changedOnPreviousPass = changedThisPass
-                if !changedThisPass { break }
+                guard changedThisPass, pass == 1 else { break }
+
+                let postRepairStructural = HTMLQualityChecks.issues(in: streamedHTML)
+                let postRepairRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                if postRepairStructural.isEmpty && postRepairRuntime.isEmpty {
+                    verificationReport += "\nRepair passed local structural and offscreen runtime checks; a second AI review was not needed."
+                    break
+                }
             }
 
-            let remainingLocalIssues = HTMLQualityChecks.issues(in: streamedHTML)
-            if remainingLocalIssues.isEmpty {
+            phase = "Running app checks"
+            let remainingStructuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
+            let remainingRuntimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+            let remainingIssues = remainingStructuralIssues + remainingRuntimeIssues
+            if remainingIssues.isEmpty {
                 verificationReport += verificationReport.isEmpty
-                    ? "Local structural checks passed."
-                    : "\nLocal structural checks passed."
+                    ? "Local structural and offscreen runtime checks passed."
+                    : "\nLocal structural and offscreen runtime checks passed."
             } else {
-                verificationReport += "\nRemaining local checks: " + remainingLocalIssues.joined(separator: " ")
+                verificationReport += "\nRemaining checks: " + remainingIssues.joined(separator: " ")
             }
 
             if changedOnPreviousPass {
-                AIDebugTraceStore.shared.append("VERIFIER", "The second verifier pass made a repair; local structural checks were run again afterward.")
+                AIDebugTraceStore.shared.append("VERIFIER", "A verifier repair was applied and the repaired app was checked again locally and in the offscreen WebView.")
             }
         } catch {
             let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
