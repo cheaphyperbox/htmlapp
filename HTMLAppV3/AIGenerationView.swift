@@ -9,7 +9,6 @@ struct AIGenerationView: View {
     @State private var dictationPrefix = ""
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
-    @State private var showActivity = false
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
@@ -153,11 +152,13 @@ struct AIGenerationView: View {
                 }
                 .disabled(dictation.requestingPermission)
                 Text(dictation.status).font(.caption).foregroundStyle(.secondary)
-                Text("No speech API key required. On-device recognition is preferred; otherwise Apple may process audio with your permission.").font(.caption2).foregroundStyle(.secondary)
+                Text("Dictation uses iOS speech recognition and only starts when you tap the microphone.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("Forge plans a complete usable app—not a mockup—researches real data/APIs when useful, can add native widgets and iOS-supported background refresh when they improve the product, builds a live preview, and runs final repair/QA before you save.")
+                Text("Forge plans the app, verifies needed capabilities, builds a preview, runs isolated runtime checks, and keeps a local recovery draft while it works.")
             }
 
             Section {
@@ -181,7 +182,7 @@ struct AIGenerationView: View {
 
             if AISettingsStore.isUIOverhaulEnabled {
                 Section {
-                    Label("Your separate UI Overhaul model will make a conservative visual refinement, then the main AI will review the result again.", systemImage: "paintbrush")
+                    Label("UI Overhaul is enabled. It can apply a visual CSS/markup patch, but script changes are rejected.", systemImage: "paintbrush")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -191,75 +192,54 @@ struct AIGenerationView: View {
     private var studioView: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                VStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        if session.isWorking || browserResearch.isBrowsing { ProgressView() }
-                        if browserResearch.isBrowsing {
-                            Image(systemName: "globe")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tint)
+                        if session.isWorking || browserResearch.isBrowsing {
+                            ProgressView()
+                                .controlSize(.small)
                         }
-                        Text(browserResearch.isBrowsing ? browserResearch.status : session.phase)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(browserResearch.isBrowsing ? browserResearch.status : session.phase)
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                            Text(currentProgressNote)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .contentTransition(.opacity)
+                        }
+                        Spacer(minLength: 8)
+                        if session.isWorking || browserResearch.isBrowsing {
+                            Button("Stop", systemImage: "stop.fill") { stopKeepingDraft() }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                        Button {
+                            showDetails = true
+                        } label: {
+                            Image(systemName: "doc.text.magnifyingglass")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityLabel("Open Forge details")
+                    }
+
+                    HStack(spacing: 10) {
+                        if session.streamedByteCount > 0 {
+                            Text(ByteCountFormatter.string(fromByteCount: Int64(session.streamedByteCount), countStyle: .file) + " generated")
+                        }
+                        if !session.streamedHTML.isEmpty {
+                            Text("Draft saved locally")
+                        }
                         Spacer()
-                        if !session.refinedBrief.isEmpty {
-                            Menu {
-                                Text(session.refinedBrief)
-                            } label: {
-                                Image(systemName: "list.bullet.clipboard")
-                            }
-                            .accessibilityLabel("View AI plan")
-                        }
-                        if !session.verificationReport.isEmpty {
-                            Menu {
-                                Text(session.verificationReport)
-                            } label: {
-                                Image(systemName: "checkmark.shield")
-                            }
-                            .accessibilityLabel("View AI QA report")
-                        }
+                        Text("Runtime QA is offscreen, not a device test")
                     }
-                    if browserResearch.isBrowsing {
-                        Text(browserResearch.progressNote)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentTransition(.opacity)
-                    } else if session.isWorking {
-                        Text(session.progressNote)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentTransition(.opacity)
-                    } else if let uiPolishNotice {
-                        Text(uiPolishNotice)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if !session.verificationReport.isEmpty {
-                        Text("AI QA reviewed the generated source for mobile UI quality and likely functional issues.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(.bar)
-
-                DisclosureGroup("Build notes & research", isExpanded: $showActivity) {
-                    ScrollView {
-                        Text((browserResearch.activity + session.activity).suffix(30).joined(separator: "\n"))
-                            .font(.caption.monospaced()).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                    }.frame(maxHeight: 130)
-                    if !browserResearch.lastReport.isEmpty {
-                        DisclosureGroup("Research evidence") {
-                            ScrollView { Text(browserResearch.lastReport).font(.caption).textSelection(.enabled) }.frame(maxHeight: 150)
-                        }
-                    }
-                    Text("Source review is not a device test. Try your app before saving.").font(.caption2)
-                }.padding(.horizontal, 16).padding(.vertical, 6)
 
                 HTMLWebView(
                     html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
