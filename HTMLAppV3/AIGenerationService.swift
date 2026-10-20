@@ -640,54 +640,58 @@ enum AIProviderClient {
         timeout: TimeInterval = 180,
         maxTokens: Int? = nil
     ) async throws -> String {
-        await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
 
-        do {
-            var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
-            request.httpBody = try JSONSerialization.data(
-                withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false, maxTokens: maxTokens)
-            )
-            let (data, response) = try await URLSession.shared.data(for: request)
-            try validate(response, data: data)
-            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw AIGenerationError.provider("The AI provider returned invalid JSON.")
-            }
-
-            let text: String?
-            switch config.compatibility {
-            case .openAI:
-                if let choices = object["choices"] as? [[String: Any]],
-                   let message = choices.first?["message"] as? [String: Any] {
-                    text = message["content"] as? String
-                } else {
-                    text = nil
+        var lastError: Error?
+        for attempt in 1...2 {
+            await AIRequestGate.shared.waitIfNeeded()
+            do {
+                var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
+                request.httpBody = try JSONSerialization.data(
+                    withJSONObject: requestBody(config: config, system: system, messages: messages, stream: false, maxTokens: maxTokens)
+                )
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try validate(response, data: data)
+                guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    throw AIGenerationError.provider("The AI provider returned invalid JSON.")
                 }
-            case .anthropic:
-                if let blocks = object["content"] as? [[String: Any]] {
-                    text = blocks.compactMap { $0["text"] as? String }.joined()
-                } else {
-                    text = nil
-                }
-            }
 
-            guard let text, !text.isEmpty else {
-                throw AIGenerationError.provider("The AI provider response did not contain text.")
+                let text = responseText(object, type: config.compatibility)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else {
+                    let shape = responseShape(object)
+                    throw AIGenerationError.provider("The AI provider returned a successful response without usable text (\(shape)).")
+                }
+                await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
+                return text
+            } catch {
+                lastError = error
+                let willRetry = attempt < 2 && isRetryable(error)
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append(
+                        willRetry ? "AI REQUEST RETRY" : "AI REQUEST ERROR",
+                        willRetry
+                            ? "Attempt \(attempt) failed: \(error.localizedDescription)\nRetrying once with the same request."
+                            : error.localizedDescription
+                    )
+                }
+                if willRetry {
+                    try Task.checkCancellation()
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    continue
+                }
+                throw error
             }
-            await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
-            return text
-        } catch {
-            await MainActor.run { AIDebugTraceStore.shared.append("AI REQUEST ERROR", error.localizedDescription) }
-            throw error
         }
+        throw lastError ?? AIGenerationError.provider("The AI request failed.")
     }
 
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)], maxTokens: Int? = nil) async throws -> AsyncThrowingStream<String, Error> {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "STREAM", config: config, endpoint: endpoint, system: system, messages: messages)
-        var request = makeRequest(config: config, endpoint: endpoint, timeout: 90)
+        var request = makeRequest(config: config, endpoint: endpoint, timeout: 180)
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(config: config, system: system, messages: messages, stream: true, maxTokens: maxTokens))
         return AsyncThrowingStream { continuation in
             let activity = AIStreamActivity()
@@ -734,8 +738,8 @@ enum AIProviderClient {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                     if Task.isCancelled { break }
-                    if await activity.shouldTimeout(after: 25) {
-                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 25 seconds. Retrying without streaming."))
+                    if await activity.shouldTimeout(after: 60) {
+                        continuation.finish(throwing: AIGenerationError.provider("AI streaming stalled for 60 seconds. Retrying without streaming."))
                         worker.cancel()
                         break
                     }
@@ -811,15 +815,92 @@ enum AIProviderClient {
         throw AIGenerationError.provider("AI provider error \(http.statusCode): \(detail)")
     }
 
+    private static func responseText(_ object: [String: Any], type: AIProviderConfiguration.Compatibility) -> String {
+        switch type {
+        case .openAI:
+            if let choices = object["choices"] as? [[String: Any]], let first = choices.first {
+                if let message = first["message"] as? [String: Any] {
+                    let text = textContent(message["content"])
+                    if !text.isEmpty { return text }
+                }
+                if let text = first["text"] as? String, !text.isEmpty { return text }
+            }
+            if let text = object["output_text"] as? String, !text.isEmpty { return text }
+            if let output = object["output"] as? [[String: Any]] {
+                let text = output.compactMap { item -> String? in
+                    if let content = item["content"] { return textContent(content) }
+                    if let text = item["text"] as? String { return text }
+                    return nil
+                }.joined()
+                if !text.isEmpty { return text }
+            }
+            return ""
+        case .anthropic:
+            if let blocks = object["content"] as? [[String: Any]] {
+                return blocks.compactMap { $0["text"] as? String }.joined()
+            }
+            return ""
+        }
+    }
+
+    private static func textContent(_ value: Any?) -> String {
+        if let string = value as? String { return string }
+        if let blocks = value as? [[String: Any]] {
+            return blocks.compactMap { block in
+                if let text = block["text"] as? String { return text }
+                if let text = block["content"] as? String { return text }
+                return nil
+            }.joined()
+        }
+        if let block = value as? [String: Any] {
+            return (block["text"] as? String) ?? (block["content"] as? String) ?? ""
+        }
+        return ""
+    }
+
     private static func streamedText(_ object: [String: Any], type: AIProviderConfiguration.Compatibility) -> String? {
         switch type {
         case .openAI:
-            guard let choices = object["choices"] as? [[String: Any]], let delta = choices.first?["delta"] as? [String: Any] else { return nil }
-            return delta["content"] as? String
+            guard let choices = object["choices"] as? [[String: Any]], let first = choices.first else { return nil }
+            if let delta = first["delta"] as? [String: Any] {
+                let text = textContent(delta["content"])
+                if !text.isEmpty { return text }
+            }
+            if let text = first["text"] as? String, !text.isEmpty { return text }
+            return nil
         case .anthropic:
             guard object["type"] as? String == "content_block_delta", let delta = object["delta"] as? [String: Any] else { return nil }
             return delta["text"] as? String
         }
+    }
+
+    private static func responseShape(_ object: [String: Any]) -> String {
+        let topKeys = object.keys.sorted().prefix(8).joined(separator: ",")
+        if let choices = object["choices"] as? [[String: Any]], let first = choices.first {
+            let choiceKeys = first.keys.sorted().prefix(8).joined(separator: ",")
+            if let message = first["message"] as? [String: Any] {
+                let messageKeys = message.keys.sorted().prefix(8).joined(separator: ",")
+                return "keys=[\(topKeys)] choice=[\(choiceKeys)] message=[\(messageKeys)]"
+            }
+            return "keys=[\(topKeys)] choice=[\(choiceKeys)]"
+        }
+        return "keys=[\(topKeys)]"
+    }
+
+    private static func isRetryable(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        if let urlError = error as? URLError {
+            return [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet].contains(urlError.code)
+        }
+        let message = error.localizedDescription.lowercased()
+        if message.contains("without usable text") || message.contains("did not contain text") || message.contains("invalid json") {
+            return true
+        }
+        if message.contains("provider error 408") || message.contains("provider error 409") || message.contains("provider error 425") || message.contains("provider error 429") {
+            return true
+        }
+        if let range = message.range(of: "provider error 5"), !range.isEmpty { return true }
+        return false
     }
 }
 
@@ -921,8 +1002,15 @@ The brief must explicitly cover:
 
 Prefer the smallest complete product that already feels like a thoughtful first public release, not a mockup or shallow prototype. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 55, maxTokens: 2200)
-        return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
+        do {
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 70, maxTokens: 2200)
+            return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
+        } catch {
+            await MainActor.run {
+                AIDebugTraceStore.shared.append("PLANNER FALLBACK", "Prompt refinement was unavailable; continuing with the original request. \(error.localizedDescription)")
+            }
+            return prompt
+        }
     }
 
     static func refineRevision(_ change: String, appBrief: String, config: AIProviderConfiguration) async throws -> String {
@@ -933,8 +1021,15 @@ Preserve every behavior, storage key, API integration, navigation path, visual c
 
 Return only <brief>...</brief>.
 """
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 55, maxTokens: 2000)
-        return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
+        do {
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 70, maxTokens: 2000)
+            return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
+        } catch {
+            await MainActor.run {
+                AIDebugTraceStore.shared.append("CHANGE PLANNER FALLBACK", "Change planning was unavailable; applying the user's requested edit directly. \(error.localizedDescription)")
+            }
+            return change
+        }
     }
 
     static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> AIResearchPlan {
@@ -950,7 +1045,15 @@ Use <query> only when the app needs real-world/live/current remote data or a rem
 It is valid to return both kinds. If neither device capabilities nor external services are needed, return no tags. If unsure whether HTMLApp provides a device capability, emit a <device_query> instead of guessing. Never invent a native bridge. Never search age-restricted, dangerous, gambling, weapon, intoxicant, explicit, or malware-acquisition categories. Return at most six of each tag.
 """
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
-        let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 900)
+        let text: String
+        do {
+            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 55, maxTokens: 900)
+        } catch {
+            await MainActor.run {
+                AIDebugTraceStore.shared.append("RESEARCH PLANNER FALLBACK", "Capability research planning was unavailable; continuing without new research instead of stopping generation. \(error.localizedDescription)")
+            }
+            return AIResearchPlan()
+        }
 
         func plannedValues(_ tag: String) -> [String] {
             let complete = values(tag, in: text)
