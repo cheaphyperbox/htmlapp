@@ -76,6 +76,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var errorMessage: String?
     @Published var isWorking = false
     @Published var streamedByteCount = 0
+    @Published var failedPhase: String?
 
     private var originalPrompt = ""
     private var lastResearch = ""
@@ -191,6 +192,7 @@ final class AIGenerationSession: ObservableObject {
         originalPrompt = originalUserPrompt ?? prompt
         isWorking = true
         errorMessage = nil
+        failedPhase = nil
         verificationReport = ""
         do {
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -332,10 +334,12 @@ final class AIGenerationSession: ObservableObject {
             try Task.checkCancellation()
             phase = "Ready to review"
         } catch is CancellationError {
+            failedPhase = phase
             errorMessage = nil
             persistCheckpoint()
             phase = "Generation stopped"
         } catch {
+            failedPhase = phase
             AIDebugTraceStore.shared.append("GENERATION ERROR", error.localizedDescription)
             errorMessage = Self.friendlyMessage(for: error)
             persistCheckpoint()
@@ -350,6 +354,7 @@ final class AIGenerationSession: ObservableObject {
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         isWorking = true
         errorMessage = nil
+        failedPhase = nil
         verificationReport = ""
         do {
             let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -435,10 +440,12 @@ Requested change:
             try Task.checkCancellation()
             phase = "Ready to review"
         } catch is CancellationError {
+            failedPhase = phase
             errorMessage = nil
             persistCheckpoint()
             phase = "Edit stopped"
         } catch {
+            failedPhase = phase
             AIDebugTraceStore.shared.append("EDIT ERROR", error.localizedDescription)
             errorMessage = Self.friendlyMessage(for: error)
             persistCheckpoint()
@@ -580,6 +587,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         streamedByteCount = checkpoint.streamedByteCount
         verificationReport = ""
         errorMessage = nil
+        failedPhase = nil
         isWorking = false
         phase = "Draft recovered"
     }
@@ -599,6 +607,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         guard config.isConfigured, !streamedHTML.trimmed.isEmpty else { return }
         isWorking = true
         errorMessage = nil
+        failedPhase = nil
         do {
             if !editingExistingApp || !iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 try await ensureValidIcon(config: config)
@@ -607,10 +616,12 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
             try Task.checkCancellation()
             phase = "Ready to review"
         } catch is CancellationError {
+            failedPhase = phase
             errorMessage = nil
             persistCheckpoint()
             phase = "Verification stopped"
         } catch {
+            failedPhase = phase
             AIDebugTraceStore.shared.append("VERIFICATION ERROR", error.localizedDescription)
             errorMessage = Self.friendlyMessage(for: error)
             persistCheckpoint()
