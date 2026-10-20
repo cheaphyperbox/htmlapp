@@ -2036,7 +2036,7 @@ Audit in this order:
 9. SOURCE INTEGRITY — no obvious broken references, unbalanced structure, placeholder endpoints/keys, dead controls, or source-level syntax mistakes.
 10. ICON — icon script is valid, app-specific, and matches the product identity.
 
-Use the local static warnings as leads, not unquestionable facts. Use research evidence only to constrain factual/API claims; do not extrapolate beyond it. Do not claim you visually rendered, executed, or device-tested code you only inspected.
+Use supplied local static warnings and offscreen WebView runtime findings as evidence, not unquestionable facts. Runtime findings were executed by HTMLApp's isolated PREVIEW WebView; they are not a physical-device test. Use research evidence only to constrain factual/API claims; do not extrapolate beyond it. Do not claim any additional rendering, network success, or device testing you cannot actually observe.
 
 Do not rewrite functioning code for taste. Patch only concrete defects. SEARCH text must be copied exactly from the supplied HTML and be as small and unique as practical. If there is no concrete defect worth changing, leave <htmlapp_patch> empty. Replace the icon only if it is actually missing, invalid, or mismatched.
 
@@ -2051,8 +2051,8 @@ REVIEW PASS: \(pass)
 ORIGINAL PROMPT:
 \(originalPrompt)
 
-LOCAL STATIC WARNINGS:
-\(localIssues.isEmpty ? "None." : localIssues.joined(separator: "\n"))
+LOCAL STATIC / OFFSCREEN RUNTIME EVIDENCE:
+\(localIssues.isEmpty ? "No local or offscreen runtime warnings." : localIssues.joined(separator: "\n"))
 
 CAPABILITY / API EVIDENCE:
 \(research.isEmpty ? "No additional research evidence was supplied." : research)
