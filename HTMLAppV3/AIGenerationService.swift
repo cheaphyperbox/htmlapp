@@ -2054,6 +2054,14 @@ Interrupted/malformed response:
     }
 }
 
+struct HTMLPatchApplication {
+    let html: String?
+    let failureReason: String?
+    let contextSnippet: String
+
+    var succeeded: Bool { html != nil }
+}
+
 enum HTMLPatchApplier {
     private struct Block {
         let search: String
@@ -2061,14 +2069,39 @@ enum HTMLPatchApplier {
     }
 
     static func apply(_ patch: String, to source: String) -> String? {
-        guard let blocks = parseBlocks(patch), !blocks.isEmpty else { return nil }
-        var result = source
+        applyDetailed(patch, to: source).html
+    }
 
-        for block in blocks {
-            guard let range = uniqueRange(of: block.search, in: result) else { return nil }
-            result.replaceSubrange(range, with: block.replacement)
+    static func applyDetailed(_ patch: String, to source: String) -> HTMLPatchApplication {
+        guard let blocks = parseBlocks(patch), !blocks.isEmpty else {
+            return HTMLPatchApplication(
+                html: nil,
+                failureReason: "The patch did not contain a complete SEARCH/REPLACE block.",
+                contextSnippet: String(source.prefix(1800))
+            )
         }
-        return result
+
+        var result = source
+        for (offset, block) in blocks.enumerated() {
+            let match = uniqueRange(of: block.search, in: result)
+            switch match {
+            case .success(let range):
+                result.replaceSubrange(range, with: block.replacement)
+            case .failure(let reason, let hintRange):
+                return HTMLPatchApplication(
+                    html: nil,
+                    failureReason: "SEARCH block \(offset + 1) failed: \(reason)",
+                    contextSnippet: sourceSnippet(in: result, around: hintRange, fallbackSearch: block.search)
+                )
+            }
+        }
+
+        return HTMLPatchApplication(html: result, failureReason: nil, contextSnippet: "")
+    }
+
+    private enum MatchResult {
+        case success(Range<String.Index>)
+        case failure(String, Range<String.Index>?)
     }
 
     private static func parseBlocks(_ patch: String) -> [Block]? {
@@ -2092,20 +2125,31 @@ enum HTMLPatchApplier {
         return blocks
     }
 
-    private static func uniqueRange(of search: String, in source: String) -> Range<String.Index>? {
-        let exact = allRanges(of: search, in: source, limit: 2)
-        if exact.count == 1 { return exact[0] }
-        if exact.count > 1 { return nil }
+    private static func uniqueRange(of search: String, in source: String) -> MatchResult {
+        let exact = allRanges(of: search, in: source, limit: 3)
+        if exact.count == 1 { return .success(exact[0]) }
+        if exact.count > 1 {
+            return .failure("the exact SEARCH text matched more than once; the model must make the block more specific.", exact[0])
+        }
 
         let tokens = search.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard !tokens.isEmpty else { return nil }
+        guard !tokens.isEmpty else {
+            return .failure("the SEARCH text was empty after whitespace normalization.", nil)
+        }
         let pattern = tokens
             .map { NSRegularExpression.escapedPattern(for: $0) }
             .joined(separator: #"\s+"#)
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return .failure("the whitespace-normalized SEARCH pattern could not be compiled.", nil)
+        }
         let matches = regex.matches(in: source, range: NSRange(source.startIndex..., in: source))
-        guard matches.count == 1, let range = Range(matches[0].range, in: source) else { return nil }
-        return range
+        if matches.count == 1, let range = Range(matches[0].range, in: source) {
+            return .success(range)
+        }
+        if matches.count > 1, let range = Range(matches[0].range, in: source) {
+            return .failure("the whitespace-normalized SEARCH text matched more than once; the model must make the block more specific.", range)
+        }
+        return .failure("the SEARCH text matched zero times, even after whitespace normalization.", nil)
     }
 
     private static func allRanges(of needle: String, in haystack: String, limit: Int) -> [Range<String.Index>] {
@@ -2118,6 +2162,27 @@ enum HTMLPatchApplier {
             cursor = range.upperBound
         }
         return ranges
+    }
+
+    private static func sourceSnippet(
+        in source: String,
+        around range: Range<String.Index>?,
+        fallbackSearch: String
+    ) -> String {
+        var anchor = range
+        if anchor == nil {
+            let line = fallbackSearch
+                .split(separator: "\n")
+                .map(String.init)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first(where: { !$0.isEmpty && $0.count >= 8 })
+            if let line, let found = source.range(of: line) { anchor = found }
+        }
+
+        guard let anchor else { return String(source.prefix(2200)) }
+        let lower = source.index(anchor.lowerBound, offsetBy: -900, limitedBy: source.startIndex) ?? source.startIndex
+        let upper = source.index(anchor.upperBound, offsetBy: 900, limitedBy: source.endIndex) ?? source.endIndex
+        return String(source[lower..<upper])
     }
 }
 
