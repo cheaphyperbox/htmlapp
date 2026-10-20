@@ -304,7 +304,7 @@ struct AIGenerationView: View {
                                 Button(existingApp == nil ? "Looks good" : "Save Changes") { saveGeneratedApp() }
                                     .buttonStyle(.borderedProminent)
                                     .frame(maxWidth: .infinity)
-                                    .disabled(saving || (existingApp == nil && session.renderedIconData == nil))
+                                    .disabled(saving)
                             }
                         }
                     }
@@ -432,10 +432,6 @@ Requested edit:
     }
 
     private func saveGeneratedApp() {
-        if existingApp == nil && session.renderedIconData == nil {
-            session.errorMessage = "The generated app does not have a valid rendered icon yet."
-            return
-        }
         saving = true
         Task {
             var html = session.streamedHTML
