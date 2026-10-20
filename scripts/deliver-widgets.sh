@@ -19,18 +19,17 @@ for attempt in 1 2 3; do
   if [ "$attempt" -lt 3 ]; then sleep "$((attempt * 3))"; fi
 done
 # A proxy outage must not suppress the independently supported attachment route.
-test -s HTMLApp-TrollStore.ipa
-test -s HTMLApp-Feather-unsigned.ipa
-UPLOAD="$(curl --silent --show-error --connect-timeout 15 --max-time 120 --output discord-delivery-response.json --write-out '%{http_code}' --form-string 'payload_json={"content":"HTMLApp build: TrollStore and Feather unsigned IPAs attached separately. The Feather IPA must be signed with properly authorized App Groups for the app and widget. Device validation remains required.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp-TrollStore.ipa;filename=HTMLApp-TrollStore.ipa;type=application/octet-stream' -F 'files[1]=@HTMLApp-Feather-unsigned.ipa;filename=HTMLApp-Feather-unsigned.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
+test -s HTMLApp.ipa
+UPLOAD="$(curl --silent --show-error --connect-timeout 15 --max-time 120 --output discord-delivery-response.json --write-out '%{http_code}' --form-string 'payload_json={"content":"HTMLApp build: one HTMLApp.ipa attached. Install with TrollStore or re-sign with Feather; Feather requires compatible App Group authorizations for the app and widget. Device validation remains required.","username":"HTMLApp Build Bot","allowed_mentions":{"parse":[]}}' -F 'files[0]=@HTMLApp.ipa;filename=HTMLApp.ipa;type=application/octet-stream' "$DISCORD_WEBHOOK_URL?wait=true")"
 echo "Discord attachment HTTP $UPLOAD"
 if [ "$UPLOAD" != '200' ]; then
   jq '{code: .code, errorFields: ((.errors // {}) | keys)}' discord-delivery-response.json || true
   rm -f discord-delivery-response.json
   exit 1
 fi
-jq -e '[.attachments[] | select(.size > 0) | .filename] | (index("HTMLApp-TrollStore.ipa") != null and index("HTMLApp-Feather-unsigned.ipa") != null)' discord-delivery-response.json >/dev/null
+jq -e '[.attachments[] | select(.size > 0) | .filename] | (index("HTMLApp.ipa") != null)' discord-delivery-response.json >/dev/null
 rm discord-delivery-response.json
-echo 'Discord confirmed both nonempty IPA attachments.'
+echo 'Discord confirmed one nonempty HTMLApp.ipa attachment.'
 if [ "$STATUS" != '200' ] && [ "$STATUS" != '204' ]; then
-  echo '::warning::HOSTISH proxy notification failed after retries; both IPA attachments were delivered directly to Discord.'
+  echo '::warning::HOSTISH proxy notification failed after retries; the single HTMLApp.ipa was delivered directly to Discord.'
 fi

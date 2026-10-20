@@ -14,7 +14,7 @@ for archive in sys.argv[1:]:
             binary=bundle/info['CFBundleExecutable']
             assert binary.is_file()
             if bundle.suffix=='.appex': assert info['NSExtension']['NSExtensionPointIdentifier']=='com.apple.widgetkit-extension'
-            if 'TrollStore' in archive:
+            if archive.endswith('HTMLApp.ipa') or 'TrollStore' in archive:
                 ent=plistlib.loads(subprocess.check_output(['ldid','-e',str(binary)]))
                 assert ent['com.apple.security.application-groups']==['group.com.mekabrine.htmlapp']
                 print(archive,bundle.name,'embedded App Group verified')
