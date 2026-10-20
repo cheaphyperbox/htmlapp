@@ -31,10 +31,10 @@ struct HTMLAppDataTransferView: View {
             }
 
             Section("Nearby Sharing") {
-                NavigationLink("Experimental Nearby Transfer") {
+                NavigationLink("Nearby Transfer") {
                     NearbyAppTransferView(appIDs: selectedIDs)
                 }
-                Text("Select apps below to send, or open Nearby Transfer on the receiving device. Uses encrypted Wi-Fi/Bluetooth discovery and transfer.").font(.footnote)
+                Text("Select apps below to send, or open Nearby Transfer on the receiving device. Uses encrypted nearby discovery and transfer; iOS chooses Bluetooth and/or Wi-Fi as available.").font(.footnote)
             }
 
             if !store.apps.isEmpty {
