@@ -24,6 +24,11 @@ struct AIResearchPlan {
     }
 }
 
+struct AIPlanningResult {
+    var brief: String
+    var research: AIResearchPlan
+}
+
 enum AIGenerationError: LocalizedError {
     case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon
     case provider(String)
@@ -147,12 +152,14 @@ final class AIGenerationSession: ObservableObject {
                 lastResearch = suppliedResearch
                 phase = "Generating live preview"
             } else {
-                phase = "Improving your prompt"
-                improved = try await AIHTMLAgent.refinePrompt(prompt, config: AISettingsStore.configuration(for: .planner))
+                phase = "Designing the app"
+                let planning = try await AIHTMLAgent.planPrompt(
+                    prompt,
+                    config: AISettingsStore.configuration(for: .planner)
+                )
+                improved = planning.brief
                 refinedBrief = improved
-
-                phase = "Planning APIs and capabilities"
-                let plan = try await AIHTMLAgent.planResearch(original: improved, revision: nil, config: AISettingsStore.configuration(for: .planner))
+                let plan = planning.research
 
                 let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
                 AIDebugTraceStore.shared.append(
@@ -1128,9 +1135,67 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
     ]
 
     static func canSkipPreflight(for prompt: String) -> Bool {
-        // Deliberately keep the product-planning pass enabled even for terse prompts.
-        // Short requests are where requirement inference and sensible defaults help most.
-        false
+        let clean = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !clean.isEmpty, clean.count <= 180,
+              !needsCapabilityResearch(for: clean),
+              !needsWebResearch(for: clean) else { return false }
+        let selfContainedSignals = [
+            "calculator", "counter", "timer", "stopwatch", "converter", "checklist",
+            "notepad", "notes app", "flashcards", "pomodoro", "random picker", "dice roller"
+        ]
+        return selfContainedSignals.contains(where: { containsSignal($0, in: clean) })
+    }
+
+    static func planPrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> AIPlanningResult {
+        let system = """
+You are HTMLApp Forge's combined product-planning and capability-research planner. Turn the user's raw app idea into a compact implementation-ready brief AND decide what device/public API research is actually required.
+
+(ForgeProductContract.rules)
+
+Return exactly one <brief>...</brief>, followed by zero or more:
+<device_query>concise capability query</device_query>
+<query>concise public/web API discovery query</query>
+
+BRIEF REQUIREMENTS:
+- Preserve the user's actual intent and define the smallest complete useful product.
+- Cover outcome, core loop, must features, 0-3 strongly implied adjacent conveniences, structure, data model/persistence, capabilities, widgets/background only when useful, onboarding only when needed, real states, phone/iPad/accessibility experience, completeness, and observable acceptance criteria.
+- Never add accounts, subscriptions, social features, analytics, tracking, or fabricated backend infrastructure by default.
+
+RESEARCH RULES:
+- Use <device_query> for iPhone/iPad hardware, sensors, camera/microphone, files, downloads, sharing, contacts, photos, calendar, reminders, notifications, biometrics, secure storage, speech, authentication, widgets, WidgetKit, background refresh, or other HTMLApp-native capabilities.
+- Use <query> only for real-world/live/current remote data or external services that cannot be satisfied locally.
+- Prefer documented no-auth APIs and browser-safe free tiers. Never invent a native bridge.
+- If no research is needed, return no query tags.
+- At most six device queries and six public queries.
+
+Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reasoning.
+"""
+        do {
+            let text = try await AIProviderClient.complete(
+                config: config,
+                system: system,
+                messages: [("user", prompt)],
+                timeout: 100,
+                maxTokens: 7000,
+                retryOnTransient: true
+            )
+            let brief = value("brief", in: text).trimmed
+            return AIPlanningResult(
+                brief: brief.isEmpty ? prompt : brief,
+                research: AIResearchPlan(
+                    publicQueries: plannedValues("query", in: text),
+                    deviceQueries: plannedValues("device_query", in: text)
+                )
+            )
+        } catch {
+            await MainActor.run {
+                AIDebugTraceStore.shared.append(
+                    "PLANNER FALLBACK",
+                    "Combined planning was unavailable; continuing with the original request and no new research instead of stopping. \(error.localizedDescription)"
+                )
+            }
+            return AIPlanningResult(brief: prompt, research: AIResearchPlan())
+        }
     }
 
     static func needsWebResearch(for prompt: String) -> Bool {
@@ -1211,6 +1276,17 @@ Return only <brief>...</brief>.
         }
     }
 
+    private static func plannedValues(_ tag: String, in text: String) -> [String] {
+        let complete = values(tag, in: text)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !complete.isEmpty { return Array(complete.prefix(6)) }
+        let partialValue = partial(tag, in: text)
+            .replacingOccurrences(of: "</", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return partialValue.isEmpty ? [] : [partialValue]
+    }
+
     static func planResearch(original: String, revision: String?, config: AIProviderConfiguration) async throws -> AIResearchPlan {
         let system = """
 Plan capability research for an HTMLApp. Return only zero or more tags in these two forms:
@@ -1234,22 +1310,9 @@ It is valid to return both kinds. If neither device capabilities nor external se
             return AIResearchPlan()
         }
 
-        func plannedValues(_ tag: String) -> [String] {
-            let complete = values(tag, in: text)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if !complete.isEmpty {
-                return Array(complete.prefix(upTo: min(6, complete.count)))
-            }
-            let partialValue = partial(tag, in: text)
-                .replacingOccurrences(of: "</", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return partialValue.isEmpty ? [] : [partialValue]
-        }
-
         return AIResearchPlan(
-            publicQueries: plannedValues("query"),
-            deviceQueries: plannedValues("device_query")
+            publicQueries: plannedValues("query", in: text),
+            deviceQueries: plannedValues("device_query", in: text)
         )
     }
 
