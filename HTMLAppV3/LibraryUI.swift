@@ -124,13 +124,13 @@ struct LibraryView: View {
             Button("Download Website") { showWebsiteImporter = true }
             Button("Enter Custom Code") { editor = .new }
             Button("Select an HTML File") { importingFile = true }
-            Button("Import from Nearby Device") {
+            Button("Receive from Nearby Device") {
                 nearbyTransferAppIDs = []
                 showNearbyTransfer = true
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or transfer directly from a nearby device.")
+            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or transfer directly over Nearby Transfer (Bluetooth/Wi-Fi).")
         }
         .alert("New Folder", isPresented: $showNewFolder) {
             TextField("Folder name", text: $newFolderName)
@@ -405,13 +405,13 @@ struct LibraryView: View {
         }
         Divider()
         Button { store.exportPortablePackage(appIDs: [app.id]) } label: {
-            Label("Share HTMLApp Package", systemImage: "square.and.arrow.up.on.square")
+            Label("Share Package (AirDrop / Files)", systemImage: "square.and.arrow.up.on.square")
         }
         Button {
             nearbyTransferAppIDs = [app.id]
             showNearbyTransfer = true
         } label: {
-            Label("Send to Nearby Device", systemImage: "antenna.radiowaves.left.and.right")
+            Label("Send with Nearby Transfer", systemImage: "antenna.radiowaves.left.and.right")
         }
         Button { store.exportHTML(app) } label: {
             Label("Export Raw HTML", systemImage: "doc.text")
