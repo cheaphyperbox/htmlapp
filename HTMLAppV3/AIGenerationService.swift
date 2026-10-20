@@ -673,12 +673,16 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 var changedThisPass = false
                 let patch = AIHTMLAgent.patch(from: response)
                 if !patch.trimmed.isEmpty {
-                    if let repaired = HTMLPatchApplier.apply(patch, to: streamedHTML) {
-                        streamedHTML = repaired
+                    let beforeRepair = streamedHTML
+                    let verifierOutput = AIHTMLAgent.parse(response)
+                    _ = try await applyEditOutputWithRecovery(
+                        verifierOutput,
+                        requestedChange: "Repair only the concrete verifier findings from pass \(pass): \(summary)",
+                        config: AISettingsStore.configuration(for: .verifier)
+                    )
+                    if streamedHTML != beforeRepair {
                         changedThisPass = true
                         verificationReport += "\nPass \(pass) repaired the HTML."
-                    } else {
-                        AIDebugTraceStore.shared.append("VERIFIER PATCH", "Pass \(pass) proposed a patch that did not apply exactly; the existing app was preserved.")
                     }
                 }
 
