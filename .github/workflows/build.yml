@@ -55,7 +55,12 @@ jobs:
           if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then exit 0; fi
           echo "::add-mask::$DISCORD_WEBHOOK_URL"
           BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "HTMLApp build started: AI Save fix, Nearby Send fix, QR removal, and simpler interface. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
-          curl --silent --show-error --fail --connect-timeout 10 --max-time 25 --header 'Content-Type: application/json' --data-binary "$BODY" 'https://mekapc.hostish.site/api/webhook' >/dev/null
+          STATUS="$(curl --silent --show-error --connect-timeout 10 --max-time 25 --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data-binary "$BODY" 'https://mekapc.hostish.site/api/webhook' || true)"
+          echo "HOSTISH build-start HTTP $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "204" ]; then
+            echo '::warning::HOSTISH proxy unavailable; trying direct Discord update without exposing credentials.'
+            curl --silent --show-error --fail --connect-timeout 10 --max-time 25 --output /dev/null --header 'Content-Type: application/json' --data-binary "$(jq -nc --arg content "HTMLApp build started: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}')" "$DISCORD_WEBHOOK_URL" || true
+          fi
 
       - name: Test JavaScript widget rejection diagnostics
         run: node scripts/test-widget-bridge.js

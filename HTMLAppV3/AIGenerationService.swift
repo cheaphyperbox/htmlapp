@@ -1488,7 +1488,7 @@ Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reason
                 messages: [("user", prompt)],
                 timeout: 100,
                 maxTokens: 7000,
-                retryOnTransient: true
+                retryOnTransient: false
             )
             let brief = value("brief", in: text).trimmed
             return AIPlanningResult(
@@ -1613,7 +1613,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
         let text: String
         do {
-            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 75, maxTokens: 3000, retryOnTransient: true)
+            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 75, maxTokens: 3000, retryOnTransient: false)
         } catch {
             await MainActor.run {
                 AIDebugTraceStore.shared.append("RESEARCH PLANNER FALLBACK", "Capability research planning was unavailable; continuing without new research instead of stopping generation. \(error.localizedDescription)")
