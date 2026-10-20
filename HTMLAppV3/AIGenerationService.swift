@@ -83,6 +83,7 @@ final class AIGenerationSession: ObservableObject {
     private var editingExistingApp = false
     private var checkpointExistingAppID: String?
     private var latestPartialHTML = ""
+    private var iconRefreshAllowed = true
 
     private static func defaultProgressNote(for phase: String) -> String {
         switch phase {
@@ -162,6 +163,20 @@ final class AIGenerationSession: ObservableObject {
         return "Forge could not complete this step. Your current draft was kept. Open AI Debug for technical details, then retry."
     }
 
+    private static func changeMayNeedIconRefresh(_ change: String) -> Bool {
+        let lower = change.lowercased()
+        let signals = [
+            "app icon", "icon", "logo", "branding", "brand identity",
+            "rebrand", "rename the app", "rename app", "app name"
+        ]
+        return signals.contains { signal in
+            let escaped = NSRegularExpression.escapedPattern(for: signal)
+            let pattern = #"(?<![\p{L}\p{N}_])"# + escaped + #"(?![\p{L}\p{N}_])"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+            return regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) != nil
+        }
+    }
+
     private func publishModelProgress(_ raw: String) {
         let clean = raw.replacingOccurrences(of: "\n", with: " ")
             .split(whereSeparator: { $0.isWhitespace })
@@ -178,6 +193,7 @@ final class AIGenerationSession: ObservableObject {
 
     func load(existing app: SavedHTMLApp) {
         editingExistingApp = true
+        iconRefreshAllowed = false
         checkpointExistingAppID = app.id
         originalPrompt = "Maintain and improve the existing HTML app named \(app.name). Preserve its current purpose and working behavior unless the user explicitly asks to change them."
         streamedHTML = app.html
@@ -192,6 +208,7 @@ final class AIGenerationSession: ObservableObject {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         editingExistingApp = false
+        iconRefreshAllowed = true
         checkpointExistingAppID = nil
         originalPrompt = originalUserPrompt ?? prompt
         isWorking = true
@@ -362,6 +379,7 @@ final class AIGenerationSession: ObservableObject {
         verificationReport = ""
         do {
             let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
+            iconRefreshAllowed = Self.changeMayNeedIconRefresh(cleanChange) || renderedIconData == nil
             let canApplyDirectly = cleanChange.count <= 280 && !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
             let improvedChange: String
             if canApplyDirectly {
@@ -429,16 +447,18 @@ Requested change:
                 config: config
             )
             if !output.description.isEmpty { description = output.description }
-            if !output.iconScript.isEmpty { iconScript = output.iconScript }
+            if iconRefreshAllowed, !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
             let revisedAssets = await refineGeneratedAssets(output.assetScripts)
             await installGeneratedAssets(revisedAssets)
 
-            if !output.iconScript.isEmpty || !editingExistingApp {
+            if iconRefreshAllowed && (!output.iconScript.isEmpty || renderedIconData == nil) {
                 try await ensureValidIcon(
                     config: AISettingsStore.configuration(for: .icon),
                     forceRegenerate: false
                 )
+            } else if editingExistingApp {
+                AIDebugTraceStore.shared.append("ICON", "Preserved the existing app icon because this edit did not request an icon or identity change.")
             }
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
@@ -841,7 +861,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 }
 
                 let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !correctedIcon.isEmpty, correctedIcon != iconScript {
+                if iconRefreshAllowed, !correctedIcon.isEmpty, correctedIcon != iconScript {
                     iconScript = correctedIcon
                     renderedIconData = nil
                     try await ensureValidIcon(config: config)
