@@ -249,8 +249,20 @@ final class AIGenerationSession: ObservableObject {
         errorMessage = nil
         verificationReport = ""
         do {
-            phase = "Improving the requested change"
-            let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
+            let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
+            let canApplyDirectly = cleanChange.count <= 280 && !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
+            let improvedChange: String
+            if canApplyDirectly {
+                phase = "Preparing focused patch"
+                improvedChange = cleanChange
+                AIDebugTraceStore.shared.append(
+                    "CHANGE PLANNER",
+                    "Skipped because this is a concise local edit; the patching model can apply it directly without another AI planning round trip."
+                )
+            } else {
+                phase = "Improving the requested change"
+                improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
+            }
 
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             let shouldPlanResearch = !suppliedResearch.isEmpty || AIHTMLAgent.needsCapabilityResearch(for: change)
