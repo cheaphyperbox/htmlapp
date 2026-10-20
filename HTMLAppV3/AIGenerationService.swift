@@ -82,6 +82,7 @@ final class AIGenerationSession: ObservableObject {
         case "Repairing AI output", "Repairing incomplete output": return "Recovering the incomplete response while preserving the finished parts."
         case "Improving the requested change": return "Reducing the edit request to the smallest coherent change that preserves existing behavior."
         case "Checking APIs for this change": return "Verifying whether this edit needs new runtime capabilities or external data."
+        case "Preparing focused patch": return "Skipping unnecessary capability research and going straight to the local code change."
         case "Patching the app": return "Applying a focused code patch and preserving unrelated storage, navigation, and behavior."
         case "Generating app icon", "Designing final app icon": return "Designing a simple app-specific icon that stays readable at Home Screen size."
         case "Checking app icon", "Repairing app icon": return "Rendering the icon locally and fixing it if the script is invalid or too detailed."
@@ -252,15 +253,26 @@ final class AIGenerationSession: ObservableObject {
             let improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
 
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
-            phase = "Checking APIs for this change"
-            let plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: AISettingsStore.configuration(for: .planner))
+            let shouldPlanResearch = !suppliedResearch.isEmpty || AIHTMLAgent.needsCapabilityResearch(for: change)
+            let plan: AIResearchPlan
+            if shouldPlanResearch {
+                phase = "Checking APIs for this change"
+                plan = try await AIHTMLAgent.planResearch(original: originalPrompt, revision: improvedChange, config: AISettingsStore.configuration(for: .planner))
+            } else {
+                phase = "Preparing focused patch"
+                plan = AIResearchPlan()
+                AIDebugTraceStore.shared.append(
+                    "RESEARCH PLANNER",
+                    "Skipped because this edit is local UI/behavior work and does not introduce a new device or web capability."
+                )
+            }
             let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
             AIDebugTraceStore.shared.append(
                 "DEVICE API RESEARCH",
-                deviceResearch.isEmpty ? "No internal device capability research was needed for this edit." : deviceResearch
+                deviceResearch.isEmpty ? "No new internal device capability research was needed for this edit." : deviceResearch
             )
             let publicResearch: String
-            if suppliedResearch.isEmpty {
+            if suppliedResearch.isEmpty, !plan.publicQueries.isEmpty {
                 publicResearch = await SafePublicAPIResearch.research(queries: plan.publicQueries)
             } else {
                 publicResearch = ""
@@ -638,13 +650,15 @@ enum AIProviderClient {
         system: String,
         messages: [(String, String)],
         timeout: TimeInterval = 180,
-        maxTokens: Int? = nil
+        maxTokens: Int? = nil,
+        retryOnTransient: Bool = true
     ) async throws -> String {
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
 
         var lastError: Error?
-        for attempt in 1...2 {
+        let maximumAttempts = retryOnTransient ? 2 : 1
+        for attempt in 1...maximumAttempts {
             await AIRequestGate.shared.waitIfNeeded()
             do {
                 var request = makeRequest(config: config, endpoint: endpoint, timeout: timeout)
@@ -667,7 +681,7 @@ enum AIProviderClient {
                 return text
             } catch {
                 lastError = error
-                let willRetry = attempt < 2 && isRetryable(error)
+                let willRetry = attempt < maximumAttempts && isRetryable(error)
                 await MainActor.run {
                     AIDebugTraceStore.shared.append(
                         willRetry ? "AI REQUEST RETRY" : "AI REQUEST ERROR",
@@ -973,6 +987,12 @@ Inside <icon_script>, output only a static drawing script. Commands: SIZE width 
         return webResearchSignals.contains(where: { lower.contains($0) })
     }
 
+    static func needsCapabilityResearch(for prompt: String) -> Bool {
+        let lower = prompt.lowercased()
+        return needsWebResearch(for: prompt)
+            || deviceCapabilitySignals.contains(where: { lower.contains($0) })
+    }
+
     static func refinePrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> String {
         let system = """
 You are HTMLApp Forge's product-specification agent. Convert the user's raw app idea into a compact but implementation-ready product brief for another coding agent.
@@ -1003,7 +1023,7 @@ The brief must explicitly cover:
 Prefer the smallest complete product that already feels like a thoughtful first public release, not a mockup or shallow prototype. Resolve ambiguity in favor of ordinary user expectations and reversible choices. Return only <brief>...</brief>.
 """
         do {
-            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 70, maxTokens: 2200)
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", prompt)], timeout: 45, maxTokens: 2200, retryOnTransient: false)
             return value("brief", in: text).trimmed.isEmpty ? prompt : value("brief", in: text).trimmed
         } catch {
             await MainActor.run {
@@ -1022,7 +1042,7 @@ Preserve every behavior, storage key, API integration, navigation path, visual c
 Return only <brief>...</brief>.
 """
         do {
-            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 70, maxTokens: 2000)
+            let text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", "Current brief: \(appBrief)\nRequested change: \(change)")], timeout: 45, maxTokens: 2000, retryOnTransient: false)
             return value("brief", in: text).trimmed.isEmpty ? change : value("brief", in: text).trimmed
         } catch {
             await MainActor.run {
@@ -1047,7 +1067,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let user = revision.map { "App: \(original)\nRevision: \($0)" } ?? original
         let text: String
         do {
-            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 55, maxTokens: 900)
+            text = try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 35, maxTokens: 900, retryOnTransient: false)
         } catch {
             await MainActor.run {
                 AIDebugTraceStore.shared.append("RESEARCH PLANNER FALLBACK", "Capability research planning was unavailable; continuing without new research instead of stopping generation. \(error.localizedDescription)")
@@ -1168,7 +1188,8 @@ ASSET DRAFTS:
             system: system,
             messages: [("user", user)],
             timeout: 55,
-            maxTokens: 5000
+            maxTokens: 5000,
+            retryOnTransient: false
         )
         let parsed = parseAssetScripts(value("asset_scripts", in: response))
         guard !parsed.isEmpty else { return drafts }
@@ -1244,7 +1265,8 @@ REPAIR / QUALITY NOTE:
                     system: system,
                     messages: [("user", user)],
                     timeout: 45,
-                    maxTokens: 1600
+                    maxTokens: 1600,
+                    retryOnTransient: false
                 )
                 let parsed = iconScriptFromProviderResponse(response)
                 if !parsed.isEmpty { return parsed }
@@ -1559,7 +1581,7 @@ ICON:
 \(iconScript)
 </icon_script_existing>
 """
-        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 70, maxTokens: 4800)
+        return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)], timeout: 70, maxTokens: 4800, retryOnTransient: false)
     }
 
     static func review(html: String, originalPrompt: String, research: String, localIssues: [String], config: AIProviderConfiguration) async throws -> String {
