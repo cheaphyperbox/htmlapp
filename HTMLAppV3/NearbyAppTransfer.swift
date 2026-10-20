@@ -81,7 +81,7 @@ struct NearbyPeerBrowser: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator { dismiss() } }
     func makeUIViewController(context: Context) -> MCBrowserViewController {
         let browser = MCBrowserViewController(serviceType: "htmlapp-share", session: session)
-        browser.maximumNumberOfPeers = 2; browser.delegate = context.coordinator
+        browser.maximumNumberOfPeers = 1; browser.delegate = context.coordinator
         return browser
     }
     func updateUIViewController(_ uiViewController: MCBrowserViewController, context: Context) {}
@@ -100,63 +100,159 @@ struct NearbyAppTransferView: View {
     @State private var browse = false
     @State private var confirmImport = false
     let appIDs: Set<String>
+
+    private var isReceiveOnly: Bool { appIDs.isEmpty }
+
     var body: some View {
         List {
-            Section("Nearby Transfer") {
+            Section {
                 Label {
-                    Text("Encrypted device-to-device transfer. iOS chooses Bluetooth, peer-to-peer Wi-Fi, or local Wi-Fi as available; no cloud upload is used.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Nearby device transfer")
+                            .font(.headline)
+                        Text("Encrypted and direct. iOS uses Bluetooth, peer-to-peer Wi-Fi, or local Wi-Fi depending on availability.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 } icon: {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .foregroundStyle(.tint)
                 }
-                Text(transfer.status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: transfer.connected ? "checkmark.circle.fill" : "info.circle")
+                        .foregroundStyle(transfer.connected ? .green : .secondary)
+                    Text(transfer.status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 Button {
                     browse = true
                 } label: {
-                    Label(transfer.connected ? "Connected" : "Find Nearby Device", systemImage: transfer.connected ? "checkmark.circle.fill" : "dot.radiowaves.left.and.right")
+                    Label(
+                        transfer.connected ? "Connected to Nearby Device" : "Find Nearby Device",
+                        systemImage: transfer.connected ? "checkmark.circle.fill" : "dot.radiowaves.left.and.right"
+                    )
                 }
-                .disabled(!transfer.active || transfer.connected)
+                .disabled(!transfer.active || transfer.connected || transfer.busy)
+            } header: {
+                Text("Connection")
+            } footer: {
+                Text("Keep Nearby Transfer open on both devices while connecting and transferring.")
+            }
 
-                Button("Send \(appIDs.count) Selected Apps with Data") {
-                    do {
-                        let url = try store.createNearbyPackage(appIDs: appIDs)
-                        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-                        guard size <= 100_000_000 else { try? FileManager.default.removeItem(at: url); transfer.status = "This backup exceeds 100 MB. Use Export and AirDrop instead."; return }
-                        transfer.send(url)
-                    } catch { transfer.status = error.localizedDescription }
-                }.disabled(!transfer.connected || transfer.busy || appIDs.isEmpty)
-                if transfer.received != nil {
-                    Button("Import Received Backup as New Copies") { confirmImport = true }
-                }
-                if transfer.active {
-                    Button("Disconnect", role: .destructive) { transfer.stop() }
+            if !isReceiveOnly {
+                Section("Send") {
+                    Label(
+                        "\(appIDs.count) app\(appIDs.count == 1 ? "" : "s") selected",
+                        systemImage: "square.stack.3d.up.fill"
+                    )
+
+                    Button {
+                        do {
+                            let url = try store.createNearbyPackage(appIDs: appIDs)
+                            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                            guard size <= 100_000_000 else {
+                                try? FileManager.default.removeItem(at: url)
+                                transfer.status = "This backup exceeds 100 MB. Use Export and AirDrop instead."
+                                return
+                            }
+                            transfer.send(url)
+                        } catch {
+                            transfer.status = error.localizedDescription
+                        }
+                    } label: {
+                        Label("Send Selected Apps with Data", systemImage: "paperplane.fill")
+                    }
+                    .disabled(!transfer.connected || transfer.busy)
                 }
             }
+
+            Section("Receive") {
+                if transfer.received == nil {
+                    Label(
+                        isReceiveOnly
+                            ? "Connect to the sending device, then wait here for its backup."
+                            : "You can also receive a backup from the connected device.",
+                        systemImage: "square.and.arrow.down"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Button("Review and Import Received Backup") {
+                        confirmImport = true
+                    }
+                }
+            }
+
             Section {
-                Text("Includes selected apps, portable app data, icons, folder links and cached resources supported by the backup format. Provider credentials and permission grants are not transferred. This is not a clone of all Safari cookies or device-private Keychain data.")
+                Text("Transfers include selected apps, portable app data, icons, folder links, and supported cached resources. Provider credentials, permission grants, and device-private Keychain data are not transferred.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("What Moves")
+            }
+
+            if transfer.active {
+                Section {
+                    Button("Disconnect", role: .destructive) {
+                        transfer.stop()
+                    }
+                }
             }
         }
-        .navigationTitle("Nearby Transfer")
+        .navigationTitle(isReceiveOnly ? "Receive Nearby" : "Nearby Transfer")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $browse) { NearbyPeerBrowser(session: transfer.session) }
-        .alert("Accept nearby connection?", isPresented: Binding(get: { transfer.invitationName != nil }, set: { if !$0 { transfer.answer(false) } })) {
+        .sheet(isPresented: $browse) {
+            NearbyPeerBrowser(session: transfer.session)
+        }
+        .alert(
+            "Accept nearby connection?",
+            isPresented: Binding(
+                get: { transfer.invitationName != nil },
+                set: { if !$0 { transfer.answer(false) } }
+            )
+        ) {
             Button("Accept") { transfer.answer(true) }
             Button("Decline", role: .cancel) { transfer.answer(false) }
-        } message: { Text(transfer.invitationName ?? "Unknown device") }
-        .confirmationDialog("Import this backup from the connected device?", isPresented: $confirmImport, titleVisibility: .visible) {
+        } message: {
+            Text(transfer.invitationName ?? "Unknown device")
+        }
+        .confirmationDialog(
+            "Import this backup from the connected device?",
+            isPresented: $confirmImport,
+            titleVisibility: .visible
+        ) {
             Button("Merge as New Copies") {
                 guard let url = transfer.received else { return }
-                do { try store.importPortablePackage(from: url, replaceExisting: false); transfer.status = "Imported as new copies. Existing apps were kept." }
-                catch { transfer.status = "Import failed: \(error.localizedDescription)" }
-                try? FileManager.default.removeItem(at: url); transfer.received = nil
+                do {
+                    try store.importPortablePackage(from: url, replaceExisting: false)
+                    transfer.status = "Imported as new copies. Existing apps were kept."
+                } catch {
+                    transfer.status = "Import failed: \(error.localizedDescription)"
+                }
+                try? FileManager.default.removeItem(at: url)
+                transfer.received = nil
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Existing apps are kept. Imported apps are added as new copies.")
         }
-        .onAppear { transfer.start() }
-        .onChange(of: scenePhase) { if $0 != .active { transfer.stop() } }
+        .onAppear {
+            transfer.start()
+        }
+        .onChange(of: scenePhase) {
+            if $0 != .active { transfer.stop() }
+        }
         .onDisappear {
-            if !browse { transfer.stop(); if let url = transfer.received { try? FileManager.default.removeItem(at: url); transfer.received = nil } }
+            if !browse {
+                transfer.stop()
+                if let url = transfer.received {
+                    try? FileManager.default.removeItem(at: url)
+                    transfer.received = nil
+                }
+            }
         }
     }
 }
