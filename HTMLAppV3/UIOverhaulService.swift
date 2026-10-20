@@ -1,34 +1,39 @@
 import Foundation
 
+struct UIOverhaulResult {
+    let html: String
+    let changedOnlyCSS: Bool
+}
+
 enum UIOverhaulService {
-    static func polish(html: String, originalPrompt: String) async throws -> String {
+    static func polish(html: String, originalPrompt: String) async throws -> UIOverhaulResult {
         let config = AISettingsStore.uiConfiguration
-        guard AISettingsStore.isUIOverhaulEnabled else { return html }
+        guard AISettingsStore.isUIOverhaulEnabled else {
+            return UIOverhaulResult(html: html, changedOnlyCSS: true)
+        }
 
         let system = """
-You are HTMLApp's optional UI refinement model. You receive a finished, functioning, fragile single-file HTML app created by another model. Improve only its presentation so it feels like a polished animated mobile iOS application.
+You are HTMLApp's optional UI refinement model. You receive a finished, functioning, fragile single-file HTML app. Improve only its presentation with the smallest exact patch.
 
 NON-NEGOTIABLE RULES:
-- Preserve every existing feature, behavior, API call, event listener, storage key, data flow, permission flow, form field, button action, navigation destination, external endpoint, widget definition, background job, and user-visible capability.
-- Do not invent facts, live values, fake API results, fake users, fake reviews, fake availability, or unsupported capabilities. Preserve honest loading/error/unavailable states.
-- Do not add features. Do not remove features. Do not rename or repurpose controls.
-- Do not rewrite working JavaScript unless a tiny change is absolutely required for presentation or animation.
-- Treat the HTML as fragile. Make the smallest practical changes.
-- Prefer CSS improvements, spacing, typography, hierarchy, safe areas, touch sizing, materials, responsive layout, visual states, and motion.
-- SAFE AREA IS MANDATORY: preserve/add viewport-fit=cover and env(safe-area-inset-top/right/bottom/left). The app runs edge-to-edge; interactive content and top chrome must not sit under the notch/Dynamic Island/status bar, bottom controls must clear the Home Indicator, and landscape must respect side cutouts. Do not double-apply an inset.
-- Make interactions feel alive like a native mobile app: pressed states, smooth screen transitions, sheets/overlays, tasteful spring-like movement, subtle loading transitions, and feedback that communicates state. Respect prefers-reduced-motion and never animate just for decoration.
-- Preserve element IDs, classes used by JavaScript, data attributes, function names, script order, and DOM relationships that behavior may depend on.
-- Do not replace real content with placeholders or demo data.
-- Do not introduce frameworks, build tools, new remote dependencies, analytics, tracking, private keys, or undocumented endpoints.
-- Keep it one self-contained HTML file.
-- Do not remove or rewrite HTMLAppNative.widgets/background/appStorage integrations merely because they do not affect foreground visuals.
-- Make it feel native on iPhone and iPad: Apple system typography, restrained iOS-style materials, grouped surfaces where appropriate, 44px minimum touch targets, safe-area padding, clear hierarchy, polished light/dark appearance, and strong mobile ergonomics.
-- Avoid generic SaaS styling, desktop dashboards, excessive gradients, neon glow, excessive blur, emoji-as-icons, and decorative changes that reduce usability.
-- If the UI is already strong, make only conservative refinements.
+- Preserve every feature, API call, event listener, storage key, form field, control action, navigation path, endpoint, widget/background definition, and user-visible capability.
+- Do not rewrite or modify any <script> block.
+- Prefer CSS-only changes. Markup changes are allowed only when required for presentation and must preserve IDs, classes used by JavaScript, data attributes, form semantics, and DOM relationships.
+- Keep safe-area handling, viewport-fit=cover, dark mode, reduced motion, accessibility, 44px touch targets, and iPhone/iPad responsiveness intact or improve them.
+- Do not add frameworks, remote dependencies, fake data, unsupported capabilities, analytics, tracking, or new features.
+- Avoid generic SaaS styling, excessive gradients/glow/blur, emoji icons, or decorative clutter.
+- If the UI is already strong, return an empty patch rather than rewriting it.
 
 Return only:
-<htmlapp_code>the complete revised HTML document</htmlapp_code>
-Do not include Markdown fences or commentary.
+<htmlapp_patch>
+<<<<<<< SEARCH
+exact unique source copied from the existing HTML
+=======
+replacement source
+>>>>>>> REPLACE
+</htmlapp_patch>
+
+You may include multiple blocks. A full HTML replacement is not allowed.
 """
 
         let user = """
@@ -37,7 +42,7 @@ Original user request:
 \(originalPrompt)
 </original_prompt>
 
-Finished functioning HTML app to visually refine without changing functionality:
+Finished functioning HTML app:
 <htmlapp_existing>
 \(html)
 </htmlapp_existing>
@@ -46,23 +51,48 @@ Finished functioning HTML app to visually refine without changing functionality:
         let response = try await AIProviderClient.complete(
             config: config,
             system: system,
-            messages: [("user", user)]
+            messages: [("user", user)],
+            timeout: 90,
+            maxTokens: 6000,
+            retryOnTransient: true
         )
 
-        guard let polished = extractHTML(from: response),
-              !polished.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw AIGenerationError.missingHTML
+        let patch = AIHTMLAgent.patch(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !patch.isEmpty else {
+            return UIOverhaulResult(html: html, changedOnlyCSS: true)
         }
-        return polished
+        guard let polished = HTMLPatchApplier.apply(patch, to: html) else {
+            throw AIGenerationError.invalidPatch
+        }
+        guard scriptBlocks(in: polished) == scriptBlocks(in: html) else {
+            throw AIGenerationError.provider("UI Overhaul attempted to modify app behavior, so the visual change was rejected.")
+        }
+
+        return UIOverhaulResult(
+            html: polished,
+            changedOnlyCSS: nonStyleContent(in: polished) == nonStyleContent(in: html)
+        )
     }
 
-    private static func extractHTML(from text: String) -> String? {
-        let open = "<htmlapp_code>"
-        let close = "</htmlapp_code>"
-        guard let start = text.range(of: open),
-              let end = text.range(of: close, range: start.upperBound..<text.endIndex) else {
-            return nil
+    private static func scriptBlocks(in html: String) -> [String] {
+        matches(#"(?is)<script\b[^>]*>.*?</script>"#, in: html)
+    }
+
+    private static func nonStyleContent(in html: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"(?is)<style\b[^>]*>.*?</style>"#) else { return html }
+        return regex.stringByReplacingMatches(
+            in: html,
+            range: NSRange(html.startIndex..., in: html),
+            withTemplate: "<style></style>"
+        )
+    }
+
+    private static func matches(_ pattern: String, in text: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.matches(in: text, range: range).compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            return String(text[range])
         }
-        return String(text[start.upperBound..<end.lowerBound])
     }
 }
