@@ -558,11 +558,16 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         return replacementOutput
     }
 
+    func beginDraft(prompt: String) {
+        editingExistingApp = false
+        checkpointExistingAppID = nil
+        originalPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        persistCheckpoint()
+    }
+
     func persistCheckpoint() {
         let checkpointHTML = latestPartialHTML.isEmpty ? streamedHTML : latestPartialHTML
-        guard !originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !checkpointHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !refinedBrief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ForgeDraftCheckpointStore.save(
             ForgeDraftCheckpoint(
                 savedAt: Date(),
