@@ -2,7 +2,7 @@ import SwiftUI
 import MultipeerConnectivity
 
 final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MCNearbyServiceAdvertiserDelegate {
-    @Published var status = "Start on both devices, then find the other device. Keep both screens open."
+    @Published var status = "Keep Nearby Transfer open on both devices, then connect to the device you recognize."
     @Published var connected = false
     @Published var active = false
     @Published var busy = false
@@ -102,11 +102,23 @@ struct NearbyAppTransferView: View {
     let appIDs: Set<String>
     var body: some View {
         List {
-            Section("Experimental nearby sharing") {
-                Text("Encrypted device-to-device transfer using Wi-Fi or Bluetooth as selected by iOS. No cloud upload. Bluetooth-only mode and faster transfer are not guaranteed.")
-                Text(transfer.status).font(.footnote)
-                Button("Start Nearby Sharing") { transfer.start() }.disabled(transfer.active)
-                Button("Find Device") { browse = true }.disabled(!transfer.active || transfer.connected)
+            Section("Nearby Transfer") {
+                Label {
+                    Text("Encrypted device-to-device transfer. iOS chooses Bluetooth, peer-to-peer Wi-Fi, or local Wi-Fi as available; no cloud upload is used.")
+                } icon: {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .foregroundStyle(.tint)
+                }
+                Text(transfer.status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button {
+                    browse = true
+                } label: {
+                    Label(transfer.connected ? "Connected" : "Find Nearby Device", systemImage: transfer.connected ? "checkmark.circle.fill" : "dot.radiowaves.left.and.right")
+                }
+                .disabled(!transfer.active || transfer.connected)
+
                 Button("Send \(appIDs.count) Selected Apps with Data") {
                     do {
                         let url = try store.createNearbyPackage(appIDs: appIDs)
@@ -118,13 +130,16 @@ struct NearbyAppTransferView: View {
                 if transfer.received != nil {
                     Button("Import Received Backup as New Copies") { confirmImport = true }
                 }
-                Button("Disconnect") { transfer.stop() }.disabled(!transfer.active)
+                if transfer.active {
+                    Button("Disconnect", role: .destructive) { transfer.stop() }
+                }
             }
             Section {
                 Text("Includes selected apps, portable app data, icons, folder links and cached resources supported by the backup format. Provider credentials and permission grants are not transferred. This is not a clone of all Safari cookies or device-private Keychain data.")
             }
         }
         .navigationTitle("Nearby Transfer")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $browse) { NearbyPeerBrowser(session: transfer.session) }
         .alert("Accept nearby connection?", isPresented: Binding(get: { transfer.invitationName != nil }, set: { if !$0 { transfer.answer(false) } })) {
             Button("Accept") { transfer.answer(true) }
@@ -138,6 +153,7 @@ struct NearbyAppTransferView: View {
                 try? FileManager.default.removeItem(at: url); transfer.received = nil
             }
         }
+        .onAppear { transfer.start() }
         .onChange(of: scenePhase) { if $0 != .active { transfer.stop() } }
         .onDisappear {
             if !browse { transfer.stop(); if let url = transfer.received { try? FileManager.default.removeItem(at: url); transfer.received = nil } }
