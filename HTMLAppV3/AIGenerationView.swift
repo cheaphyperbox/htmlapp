@@ -25,6 +25,13 @@ struct AIGenerationView: View {
     @State private var showDraftRecovery = false
     @State private var lastFailedChange: String?
 
+    private let starterPrompts = [
+        "A simple homework planner that works offline",
+        "A clean habit tracker with reminders",
+        "Flashcards for studying any subject",
+        "A useful daily checklist with a widget"
+    ]
+
     let existingApp: SavedHTMLApp?
 
     init(existingApp: SavedHTMLApp? = nil) {
@@ -159,8 +166,23 @@ struct AIGenerationView: View {
     private var promptView: some View {
         Form {
             Section {
+                if existingApp == nil && prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(starterPrompts, id: \.self) { starter in
+                                Button(starter) {
+                                    prompt = starter
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
                 TextEditor(text: $prompt)
-                    .frame(minHeight: 170)
+                    .frame(minHeight: 150)
                     .font(.body)
                 Button {
                     if dictation.recording { dictation.stop() }
@@ -176,10 +198,19 @@ struct AIGenerationView: View {
             } header: {
                 Text("What do you want to make?")
             } footer: {
-                Text("Forge plans the app, verifies needed capabilities, builds a preview, runs isolated runtime checks, and keeps a local recovery draft while it works.")
+                Text("Describe the result you want. Forge keeps a local recovery draft and runs isolated runtime checks before save.")
             }
 
             Section {
+                HStack {
+                    Label(AISettingsStore.configuration.model, systemImage: "cpu")
+                        .lineLimit(1)
+                    Spacer()
+                    Text(AISettingsStore.isUIOverhaulEnabled ? "UI polish on" : "UI polish off")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+
                 Button {
                     generateApp()
                 } label: {
@@ -374,8 +405,6 @@ struct AIGenerationView: View {
 
     private func applyAIChange() {
         let change = changePrompt
-        changePrompt = ""
-        showingChange = false
         uiPolishNotice = nil
         session.isWorking = true
         generationTask = Task {
@@ -403,6 +432,8 @@ Requested edit:
                 return
             }
             lastFailedChange = nil
+            changePrompt = ""
+            showingChange = true
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
         }
     }
