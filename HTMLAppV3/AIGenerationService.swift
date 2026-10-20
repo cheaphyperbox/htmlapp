@@ -359,15 +359,12 @@ Requested change:
                 system: AIHTMLAgent.patchSystemPrompt(research: lastResearch),
                 messages: [("user", user)]
             )
-            let output = AIHTMLAgent.parse(response)
-            if !output.patch.trimmed.isEmpty {
-                guard let patched = HTMLPatchApplier.apply(output.patch, to: streamedHTML) else { throw AIGenerationError.invalidPatch }
-                streamedHTML = patched
-            } else if !output.html.trimmed.isEmpty {
-                streamedHTML = output.html
-            } else {
-                throw AIGenerationError.invalidPatch
-            }
+            let initialOutput = AIHTMLAgent.parse(response)
+            let output = try await applyEditOutputWithRecovery(
+                initialOutput,
+                requestedChange: improvedChange,
+                config: config
+            )
             if !output.description.isEmpty { description = output.description }
             if !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }
@@ -388,6 +385,106 @@ Requested change:
             phase = "Edit stopped"
         }
         isWorking = false
+    }
+
+    private func applyEditOutputWithRecovery(
+        _ initialOutput: AIGenerationOutput,
+        requestedChange: String,
+        config: AIProviderConfiguration
+    ) async throws -> AIGenerationOutput {
+        func apply(_ output: AIGenerationOutput) -> HTMLPatchApplication {
+            if !output.patch.trimmed.isEmpty {
+                return HTMLPatchApplier.applyDetailed(output.patch, to: streamedHTML)
+            }
+            if !output.html.trimmed.isEmpty {
+                return HTMLPatchApplication(html: output.html, failureReason: nil, contextSnippet: "")
+            }
+            return HTMLPatchApplication(
+                html: nil,
+                failureReason: "The model returned neither a patch nor a replacement HTML document.",
+                contextSnippet: String(streamedHTML.prefix(2200))
+            )
+        }
+
+        var output = initialOutput
+        var application = apply(output)
+        if let html = application.html {
+            streamedHTML = html
+            return output
+        }
+
+        let firstFailure = application.failureReason ?? "The patch could not be applied safely."
+        AIDebugTraceStore.shared.append("PATCH RECOVERY", firstFailure)
+
+        phase = "Repairing AI output"
+        let retryUser = """
+The patch below could not be applied safely.
+
+FAILURE:
+\(firstFailure)
+
+RELEVANT CURRENT SOURCE:
+<source_snippet>
+\(application.contextSnippet)
+</source_snippet>
+
+FAILED PATCH:
+<htmlapp_patch>
+\(output.patch)
+</htmlapp_patch>
+
+REQUESTED CHANGE:
+\(requestedChange)
+
+Return a corrected, minimal <htmlapp_patch> whose SEARCH blocks each match exactly once in the current source. Do not use Markdown fences. Do not change unrelated behavior.
+"""
+        let retryResponse = try await AIProviderClient.complete(
+            config: config,
+            system: AIHTMLAgent.patchSystemPrompt(research: lastResearch),
+            messages: [("user", retryUser)],
+            timeout: 120,
+            maxTokens: 8000,
+            retryOnTransient: true
+        )
+        output = AIHTMLAgent.parse(retryResponse)
+        application = apply(output)
+        if let html = application.html {
+            streamedHTML = html
+            return output
+        }
+
+        let secondFailure = application.failureReason ?? "The corrected patch still could not be applied safely."
+        AIDebugTraceStore.shared.append("PATCH FULL REPLACEMENT", secondFailure)
+
+        phase = "Repairing incomplete output"
+        let replacementUser = """
+Two focused patch attempts failed, so return a complete replacement document for this existing app.
+
+CURRENT APP:
+<htmlapp_existing>
+\(streamedHTML)
+</htmlapp_existing>
+
+REQUESTED CHANGE:
+\(requestedChange)
+
+LAST PATCH FAILURE:
+\(secondFailure)
+
+Preserve all unrelated features, storage keys, APIs, navigation, data schemas, permissions, widgets/background definitions, and working behavior. Apply only the requested change. Return the normal HTMLApp response format with one complete <htmlapp_code> document and no Markdown fences.
+"""
+        let replacementResponse = try await AIProviderClient.complete(
+            config: config,
+            system: AIHTMLAgent.systemPrompt(research: lastResearch),
+            messages: [("user", replacementUser)],
+            timeout: 180,
+            maxTokens: 16000,
+            retryOnTransient: true
+        )
+        let replacementOutput = AIHTMLAgent.parse(replacementResponse)
+        guard !replacementOutput.html.trimmed.isEmpty else { throw AIGenerationError.invalidPatch }
+        streamedHTML = replacementOutput.html
+        return replacementOutput
     }
 
     func acceptExternalHTML(_ html: String) {
