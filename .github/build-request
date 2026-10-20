@@ -1,3 +1,3 @@
-HTMLApp usability and reliability build
-source=7d1c250a3e883fb12f5ceb6ee5b4021fc65974af
-requested=2026-10-20
+Verify user workflow repairs, distinct IPAs, and proxy failure handling
+source=7f7d78154d2c63e3cc5dddba3f23b80c080da4dd
+requested=2026-10-20-final
