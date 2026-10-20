@@ -459,7 +459,7 @@ Requested edit:
     }
 
     private func stopKeepingDraft() {
-        session.persistCheckpoint()
+        session.keepCurrentPartialDraft()
         generationTask?.cancel()
         dictation.stop()
         session.isWorking = false
