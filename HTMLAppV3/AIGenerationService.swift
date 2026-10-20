@@ -73,6 +73,7 @@ final class AIGenerationSession: ObservableObject {
 
     private var originalPrompt = ""
     private var lastResearch = ""
+    private var editingExistingApp = false
 
     private static func defaultProgressNote(for phase: String) -> String {
         switch phase {
@@ -119,9 +120,11 @@ final class AIGenerationSession: ObservableObject {
     }
 
     func load(existing app: SavedHTMLApp) {
+        editingExistingApp = true
         originalPrompt = "Maintain and improve the existing HTML app named \(app.name). Preserve its current purpose and working behavior unless the user explicitly asks to change them."
         streamedHTML = app.html
         description = app.summary
+        renderedIconData = app.favicon
         refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches."
         verificationReport = ""
         phase = "Ready for AI edits"
@@ -130,6 +133,7 @@ final class AIGenerationSession: ObservableObject {
     func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "") async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
+        editingExistingApp = false
         originalPrompt = originalUserPrompt ?? prompt
         isWorking = true
         errorMessage = nil
@@ -250,7 +254,7 @@ final class AIGenerationSession: ObservableObject {
             await installGeneratedAssets(finalAssets)
             try await ensureValidIcon(
                 config: AISettingsStore.configuration(for: .icon),
-                forceRegenerate: true
+                forceRegenerate: false
             )
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
@@ -346,10 +350,12 @@ Requested change:
             let revisedAssets = await refineGeneratedAssets(output.assetScripts)
             await installGeneratedAssets(revisedAssets)
 
-            try await ensureValidIcon(
-                config: AISettingsStore.configuration(for: .icon),
-                forceRegenerate: !output.iconScript.isEmpty
-            )
+            if !output.iconScript.isEmpty || !editingExistingApp {
+                try await ensureValidIcon(
+                    config: AISettingsStore.configuration(for: .icon),
+                    forceRegenerate: false
+                )
+            }
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"
@@ -371,7 +377,9 @@ Requested change:
         isWorking = true
         errorMessage = nil
         do {
-            try await ensureValidIcon(config: config)
+            if !editingExistingApp || !iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try await ensureValidIcon(config: config)
+            }
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"
