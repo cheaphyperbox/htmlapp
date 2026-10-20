@@ -43,8 +43,15 @@ enum AIGenerationError: LocalizedError {
 @MainActor
 final class AIGenerationSession: ObservableObject {
     @Published var activity: [String] = []
+    @Published var progressNote = "Getting the workspace ready."
     @Published var phase = "Preparing" {
-        didSet { if oldValue != phase { activity.append(phase); if activity.count > 40 { activity.removeFirst() } } }
+        didSet {
+            if oldValue != phase {
+                activity.append(phase)
+                if activity.count > 40 { activity.removeFirst() }
+                progressNote = Self.defaultProgressNote(for: phase)
+            }
+        }
     }
     @Published var streamedHTML = ""
     @Published var refinedBrief = ""
@@ -57,6 +64,49 @@ final class AIGenerationSession: ObservableObject {
 
     private var originalPrompt = ""
     private var lastResearch = ""
+
+    private static func defaultProgressNote(for phase: String) -> String {
+        switch phase {
+        case "Preparing": return "Getting the workspace ready."
+        case "Improving your prompt": return "Turning your request into a concrete product brief without adding unrelated scope."
+        case "Planning APIs and capabilities": return "Checking which parts should stay local and which need verified device or web capabilities."
+        case "Designing the app": return "Choosing the core workflow, data model, and responsive navigation before coding."
+        case "Checking device and web APIs": return "Verifying HTMLApp capabilities and external data sources before depending on them."
+        case "Checking device capabilities": return "Matching the requested features to HTMLApp's documented native and browser capabilities."
+        case "Finding useful public APIs": return "Looking for no-key data sources, then verifying documentation before integration."
+        case "Using web research": return "Applying the research evidence to the implementation without extrapolating beyond it."
+        case "Planning web research": return "Deciding what current facts or API documentation actually need to be checked."
+        case "Generating live preview": return "Writing the real HTML, CSS, state, persistence, and interactions now."
+        case "Retrying generation without streaming": return "The live stream stopped, so I’m finishing the same build with a non-streaming request."
+        case "Continuing unfinished generation": return "Continuing exactly where the generated app was cut off instead of restarting it."
+        case "Repairing AI output", "Repairing incomplete output": return "Recovering the incomplete response while preserving the finished parts."
+        case "Improving the requested change": return "Reducing the edit request to the smallest coherent change that preserves existing behavior."
+        case "Checking APIs for this change": return "Verifying whether this edit needs new runtime capabilities or external data."
+        case "Patching the app": return "Applying a focused code patch and preserving unrelated storage, navigation, and behavior."
+        case "Generating app icon", "Designing final app icon": return "Designing a simple app-specific icon that stays readable at Home Screen size."
+        case "Checking app icon", "Repairing app icon": return "Rendering the icon locally and fixing it if the script is invalid or too detailed."
+        case "Reviewing source (not running device tests)": return "Auditing controls, persistence, async failures, safe areas, accessibility, and unsupported assumptions."
+        case "Rechecking repaired app": return "Rechecking the repaired source for regressions before presenting it."
+        case "Polishing the interface": return "Refining the visual hierarchy without changing the app’s working product model."
+        case "Ready to review": return "The generated source is ready for you to try on-device and review."
+        case "Generation stopped", "Edit stopped", "Verification stopped": return "The current operation stopped; completed source has been preserved where possible."
+        default: return "Working on the current build stage."
+        }
+    }
+
+    private func publishModelProgress(_ raw: String) {
+        let clean = raw.replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean != progressNote else { return }
+        progressNote = String(clean.prefix(160))
+        let event = "AI: \(progressNote)"
+        if activity.last != event {
+            activity.append(event)
+            if activity.count > 40 { activity.removeFirst() }
+        }
+    }
 
     func load(existing app: SavedHTMLApp) {
         originalPrompt = "Maintain and improve the existing HTML app named \(app.name). Preserve its current purpose and working behavior unless the user explicitly asks to change them."
@@ -134,6 +184,9 @@ final class AIGenerationSession: ObservableObject {
                     try Task.checkCancellation()
                     full += piece
                     receivedCharacters += piece.count
+                    if let note = AIHTMLAgent.streamingProgress(in: full) {
+                        publishModelProgress(note)
+                    }
                     let now = Date()
                     if receivedCharacters - lastPreviewCharacters >= 8_000,
                        now.timeIntervalSince(lastPreviewAt) >= 0.8 {
@@ -919,7 +972,9 @@ It is valid to return both kinds. If neither device capabilities nor external se
     }
 
     static func systemPrompt(research: String) -> String {
-        AISettingsStore.resolvedSystemPrompt(research: research) + "\n" + ForgeProductContract.rules + """
+        let base = AISettingsStore.resolvedSystemPrompt(research: research)
+        let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
+        return base + contract + """
 
 HTMLAPP FACT-CHECK OVERRIDES:
 - Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or the documented HTMLApp/browser runtime.
@@ -935,7 +990,7 @@ HTMLAPP FACT-CHECK OVERRIDES:
 You are HTMLApp's code-editing agent. Edit the existing single-file HTML app with the smallest safe patch that satisfies the requested change. Preserve all unrelated behavior, IDs, storage keys, API integrations, permissions, navigation and working code. Prefer patching over rewriting.
 
 Return these sections with no Markdown fences:
-<thinking>short updated implementation plan</thinking>
+<build_summary>short updated implementation plan; conclusions only, not hidden reasoning</build_summary>
 <description>updated one-sentence description if materially changed, otherwise repeat the current purpose</description>
 <icon_script>updated icon script only if the app identity changed; otherwise leave empty</icon_script>
 <asset_scripts>optional new portable IconScript assets using ASSET filename / END_ASSET blocks; leave empty unless the edit genuinely needs generated artwork</asset_scripts>
@@ -1463,25 +1518,73 @@ Interrupted/malformed response:
     }
 
     static func parse(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(
-            html: value("htmlapp_code", in: text),
+        let summary = value("build_summary", in: text).trimmed
+        return AIGenerationOutput(
+            html: stripProgressMarkers(value("htmlapp_code", in: text)),
             patch: value("htmlapp_patch", in: text),
             description: value("description", in: text).trimmed,
             iconScript: value("icon_script", in: text).trimmed,
             assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
-            refinedBrief: value("thinking", in: text).trimmed
+            refinedBrief: summary.isEmpty ? value("thinking", in: text).trimmed : summary
         )
     }
 
     static func parsePartial(_ text: String) -> AIGenerationOutput {
-        AIGenerationOutput(
-            html: partial("htmlapp_code", in: text),
+        let summary = partial("build_summary", in: text).trimmed
+        return AIGenerationOutput(
+            html: stripProgressMarkers(partial("htmlapp_code", in: text)),
             patch: partial("htmlapp_patch", in: text),
             description: partial("description", in: text).trimmed,
             iconScript: partial("icon_script", in: text).trimmed,
             assetScripts: parseAssetScripts(value("asset_scripts", in: text)),
-            refinedBrief: partial("thinking", in: text).trimmed
+            refinedBrief: summary.isEmpty ? partial("thinking", in: text).trimmed : summary
         )
+    }
+
+    static func streamingProgress(in text: String) -> String? {
+        if let marker = latestProgressNote(in: text) { return marker }
+        if text.contains("<htmlapp_code>") {
+            return "Building the responsive interface and wiring the app’s real behavior."
+        }
+        if text.contains("<asset_scripts>") {
+            return "Preparing only the portable visual assets this app actually needs."
+        }
+        if text.contains("<icon_script>") {
+            return "Sketching an app-specific icon before the dedicated icon pass validates it."
+        }
+        if text.contains("<description>") {
+            return "Locking the finished product scope before writing the app."
+        }
+        if text.contains("<build_summary>") || text.contains("<thinking>") {
+            return "Turning the product plan into concrete build decisions."
+        }
+        return nil
+    }
+
+    static func latestProgressNote(in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?is)<!--\s*HTMLAPP_PROGRESS:\s*(.*?)\s*-->"#,
+            options: []
+        ) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.matches(in: text, range: range).last,
+              match.numberOfRanges > 1,
+              let noteRange = Range(match.range(at: 1), in: text) else { return nil }
+        let clean = String(text[noteRange])
+            .replacingOccurrences(of: "\n", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? nil : String(clean.prefix(160))
+    }
+
+    static func stripProgressMarkers(_ html: String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?is)<!--\s*HTMLAPP_PROGRESS:\s*.*?-->"#,
+            options: []
+        ) else { return html }
+        let range = NSRange(html.startIndex..., in: html)
+        return regex.stringByReplacingMatches(in: html, range: range, withTemplate: "")
     }
 
     static func safeAssetName(_ raw: String) -> String {
