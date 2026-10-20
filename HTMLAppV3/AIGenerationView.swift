@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AIGenerationView: View {
     @EnvironmentObject private var store: AppStore
@@ -20,6 +21,10 @@ struct AIGenerationView: View {
     @State private var uiPolishNotice: String?
     @State private var didLoadExisting = false
     @State private var showDebug = false
+    @State private var showDetails = false
+    @State private var recoverableDraft: ForgeDraftCheckpoint?
+    @State private var showDraftRecovery = false
+    @State private var lastFailedChange: String?
 
     let existingApp: SavedHTMLApp?
 
@@ -75,23 +80,59 @@ struct AIGenerationView: View {
             } message: {
                 Text(existingApp == nil ? "The generated preview and current AI work will be lost if you close it without saving." : "Your saved HTMLApp will not be changed unless you choose Save Changes.")
             }
-            .alert("AI Error", isPresented: Binding(
+            .alert("Forge couldn’t finish that step", isPresented: Binding(
                 get: { session.errorMessage != nil },
                 set: { if !$0 { session.errorMessage = nil } }
             )) {
-                Button("OK") { session.errorMessage = nil }
+                Button(retryButtonTitle) {
+                    session.errorMessage = nil
+                    retryLastFailure()
+                }
+                Button("Dismiss", role: .cancel) { session.errorMessage = nil }
             } message: {
                 Text(session.errorMessage ?? "")
             }
+            .confirmationDialog("Resume Forge draft?", isPresented: $showDraftRecovery, titleVisibility: .visible) {
+                Button("Resume Draft") { resumeRecoveredDraft() }
+                Button("Discard Draft", role: .destructive) {
+                    ForgeDraftCheckpointStore.clear()
+                    recoverableDraft = nil
+                }
+                Button("Not Now", role: .cancel) {}
+            } message: {
+                if let draft = recoverableDraft {
+                    Text("A local draft from \(draft.savedAt.formatted(date: .abbreviated, time: .shortened)) is available. Resuming restores the saved preview and plan; it does not restart AI work automatically.")
+                }
+            }
+            .sheet(isPresented: $showDetails) {
+                ForgeDetailsView(
+                    plan: session.refinedBrief,
+                    research: browserResearch.lastReport,
+                    qa: session.verificationReport,
+                    debug: debugTrace.text
+                )
+            }
         }
         .task {
-            guard let existingApp, !didLoadExisting else { return }
-            didLoadExisting = true
-            session.load(existing: existingApp)
+            if let existingApp, !didLoadExisting {
+                didLoadExisting = true
+                session.load(existing: existingApp)
+            }
+            if recoverableDraft == nil,
+               let draft = ForgeDraftCheckpointStore.load(),
+               draft.existingAppID == existingApp?.id {
+                recoverableDraft = draft
+                showDraftRecovery = true
+            }
         }
         .interactiveDismissDisabled(true)
         .onDisappear { generationTask?.cancel(); dictation.stop() }
-        .onChange(of: scenePhase) { value in if value != .active { dictation.stop() } }
+        .onChange(of: scenePhase) { value in
+            if value != .active {
+                dictation.stop()
+                persistDraftForBackground()
+            }
+        }
         .onChange(of: dictation.transcript) { value in
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged } else { prompt = merged }
