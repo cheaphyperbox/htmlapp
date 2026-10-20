@@ -228,9 +228,13 @@ struct AIGenerationView: View {
                         }
                         Spacer(minLength: 8)
                         if session.isWorking || browserResearch.isBrowsing {
-                            Button("Stop", systemImage: "stop.fill") { stopKeepingDraft() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+                            Button {
+                                stopKeepingDraft()
+                            } label: {
+                                Label("Stop", systemImage: "stop.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
                         Button {
                             showDetails = true
