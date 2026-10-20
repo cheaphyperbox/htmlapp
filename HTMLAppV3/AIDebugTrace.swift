@@ -21,7 +21,7 @@ final class AIDebugTraceStore: ObservableObject {
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         fileURL = base.appendingPathComponent("ai-generation-debug.txt")
         if let existing = try? String(contentsOf: fileURL, encoding: .utf8), !existing.isEmpty {
-            text = String(existing.prefix(maxBytes))
+            text = prefixByUTF8Bytes(existing, limit: maxBytes)
             isActive = true
             didReachCap = existing.utf8.count >= maxBytes
         }
@@ -44,7 +44,7 @@ Minimum request spacing: \(AISettingsStore.requestDelaySeconds) seconds
 \(originalPrompt)
 
 """)
-        text = String(initial.prefix(maxBytes))
+        text = prefixByUTF8Bytes(initial, limit: maxBytes)
         isActive = true
         let snapshot = text
         let url = fileURL
