@@ -4,9 +4,47 @@ import SwiftUI
 @MainActor
 final class AgenticBrowserResearch: ObservableObject {
     @Published var activity: [String] = []
-    @Published var status = "Idle" { didSet { if oldValue != status { activity.append(status); if activity.count > 40 { activity.removeFirst() } } } }
+    @Published var progressNote = "I’ll verify sources before Forge depends on them."
+    @Published var status = "Idle" {
+        didSet {
+            if oldValue != status {
+                activity.append(status)
+                if activity.count > 40 { activity.removeFirst() }
+                progressNote = Self.publicProgressNote(for: status)
+            }
+        }
+    }
     @Published var isBrowsing = false
     @Published var lastReport = ""
+
+    private static func publicProgressNote(for status: String) -> String {
+        let lower = status.lowercased()
+        if lower.contains("planning") || lower.contains("thinking about what to read") {
+            return "I’m deciding what evidence is actually needed before the app relies on an external service."
+        }
+        if lower.contains("searching google") || lower.contains("catalog") {
+            return "I’m looking for promising sources, then I’ll open official documentation before treating an API as verified."
+        }
+        if lower.hasPrefix("reading ") {
+            return "I’m reading this page directly so endpoint, field, auth, attribution, and browser-compatibility claims come from evidence."
+        }
+        if lower.contains("page unavailable") {
+            return "That page could not be verified, so I won’t treat its API details as reliable evidence."
+        }
+        if lower.contains("read ") {
+            return "I found readable documentation and am checking whether it is enough to implement the feature honestly."
+        }
+        if lower.contains("summarizing") || lower.contains("using gathered") {
+            return "I’m keeping only implementation details supported by pages that were actually available."
+        }
+        if lower.contains("finished") {
+            return "Research is complete; Forge can now build against the verified evidence and fall back where evidence is missing."
+        }
+        if lower.contains("unavailable") {
+            return "Web research could not complete, so Forge will avoid guessed integrations and keep a useful local fallback."
+        }
+        return "I’m checking the web without exposing private app data or treating search snippets as verified documentation."
+    }
 
     func research(for request: String) async -> String {
         let config = AISettingsStore.configuration(for: .research)
