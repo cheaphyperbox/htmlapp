@@ -73,6 +73,7 @@ struct AIGenerationView: View {
                     generationTask?.cancel()
                     dictation.stop()
                     AIDebugTraceStore.shared.clear()
+                    session.clearCheckpoint()
                     dismiss()
                 }
                 Button("Keep Working", role: .cancel) {}
@@ -136,6 +137,23 @@ struct AIGenerationView: View {
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged } else { prompt = merged }
         }
+    }
+
+    private var currentProgressNote: String {
+        if browserResearch.isBrowsing { return browserResearch.progressNote }
+        if session.isWorking { return session.progressNote }
+        if let uiPolishNotice { return uiPolishNotice }
+        if !session.verificationReport.isEmpty { return "Ready to try. Runtime QA ran in an isolated preview; final behavior still needs an on-device try." }
+        return session.progressNote
+    }
+
+    private var retryButtonTitle: String {
+        if lastFailedChange != nil { return "Retry Edit" }
+        if let failed = session.failedPhase,
+           failed.contains("icon") || failed.contains("app checks") || failed.contains("Reviewing") || failed.contains("Rechecking") {
+            return "Retry Checks"
+        }
+        return "Retry"
     }
 
     private var promptView: some View {
@@ -317,6 +335,7 @@ struct AIGenerationView: View {
 
     private func generateApp() {
         dictation.stop()
+        lastFailedChange = nil
         let originalPrompt = prompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
@@ -374,7 +393,11 @@ Requested edit:
             }
             guard !Task.isCancelled else { return }
             await session.revise(change: change, researchReport: webReport)
-            guard session.errorMessage == nil else { return }
+            guard session.errorMessage == nil else {
+                lastFailedChange = change
+                return
+            }
+            lastFailedChange = nil
             await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
         }
     }
@@ -429,8 +452,60 @@ Requested edit:
                 await store.add(html: html, summary: session.description)
             }
             AIDebugTraceStore.shared.clear()
+            session.clearCheckpoint()
             saving = false
             dismiss()
+        }
+    }
+
+    private func stopKeepingDraft() {
+        session.persistCheckpoint()
+        generationTask?.cancel()
+        dictation.stop()
+        session.isWorking = false
+        uiPolishNotice = session.streamedHTML.isEmpty
+            ? "Stopped. The prompt and planning draft were kept locally."
+            : "Stopped. The latest safe preview was kept locally."
+    }
+
+    private func retryLastFailure() {
+        if let change = lastFailedChange {
+            changePrompt = change
+            showingChange = true
+            applyAIChange()
+            return
+        }
+
+        if !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let failed = session.failedPhase,
+           failed.contains("icon") || failed.contains("app checks") || failed.contains("Reviewing") || failed.contains("Rechecking") {
+            generationTask = Task { await session.verifyCurrent() }
+            return
+        }
+
+        generateApp()
+    }
+
+    private func resumeRecoveredDraft() {
+        guard let draft = recoverableDraft else { return }
+        session.restore(checkpoint: draft, existingIcon: existingApp?.favicon)
+        if existingApp == nil { prompt = draft.originalPrompt }
+        recoverableDraft = nil
+        uiPolishNotice = "Recovered the local draft. AI work was not restarted automatically."
+    }
+
+    private func persistDraftForBackground() {
+        var taskID = UIBackgroundTaskIdentifier.invalid
+        taskID = UIApplication.shared.beginBackgroundTask(withName: "Save Forge Draft") {
+            if taskID != .invalid {
+                UIApplication.shared.endBackgroundTask(taskID)
+                taskID = .invalid
+            }
+        }
+        session.persistCheckpoint()
+        if taskID != .invalid {
+            UIApplication.shared.endBackgroundTask(taskID)
+            taskID = .invalid
         }
     }
 
@@ -444,3 +519,53 @@ Requested edit:
         return tag + "\n" + html
     }
 }
+
+private struct ForgeDetailsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var tab = "Plan"
+
+    let plan: String
+    let research: String
+    let qa: String
+    let debug: String
+
+    private var content: String {
+        switch tab {
+        case "Research": return research.isEmpty ? "No public-web research was needed or available for this run." : research
+        case "QA": return qa.isEmpty ? "QA has not produced a report yet." : qa
+        case "Debug": return debug.isEmpty ? "No active debug trace." : debug
+        default: return plan.isEmpty ? "The product plan is not available yet." : plan
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                Picker("Forge details", selection: $tab) {
+                    Text("Plan").tag("Plan")
+                    Text("Research").tag("Research")
+                    Text("QA").tag("QA")
+                    Text("Debug").tag("Debug")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                ScrollView {
+                    Text(content)
+                        .font(tab == "Debug" ? .caption.monospaced() : .body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+            }
+            .navigationTitle("Forge Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
