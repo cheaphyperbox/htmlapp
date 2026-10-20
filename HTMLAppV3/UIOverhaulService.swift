@@ -57,7 +57,7 @@ Finished functioning HTML app:
             retryOnTransient: true
         )
 
-        let patch = AIHTMLAgent.patch(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
+        let patch = AIHTMLAgent.parse(response).patch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !patch.isEmpty else {
             return UIOverhaulResult(html: html, changedOnlyCSS: true)
         }
