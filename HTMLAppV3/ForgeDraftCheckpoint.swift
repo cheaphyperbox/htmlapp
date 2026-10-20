@@ -22,11 +22,10 @@ enum ForgeDraftCheckpointStore {
     }
 
     static func load() -> ForgeDraftCheckpoint? {
-        guard let data = try? Data(contentsOf: fileURL),
-              let checkpoint = try? JSONDecoder().decode(ForgeDraftCheckpoint.self, from: data) else {
-            return nil
-        }
-        return checkpoint
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(ForgeDraftCheckpoint.self, from: data)
     }
 
     static func save(_ checkpoint: ForgeDraftCheckpoint) {
