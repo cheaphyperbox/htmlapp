@@ -16,6 +16,7 @@ struct OpenSavedHTMLAppIntent: AppIntent {
         let name = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw $appName.needsValueError("Which saved app do you want to open?") }
         UserDefaults.standard.set(String(name.prefix(120)), forKey: "htmlapp.shortcut.openName")
+        NotificationCenter.default.post(name: Notification.Name("HTMLAppShortcutRequested"), object: nil)
         return .result()
     }
 }
@@ -33,6 +34,7 @@ struct CreateHTMLAppFromPromptIntent: AppIntent {
         let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !idea.isEmpty else { throw $prompt.needsValueError("What should the app do?") }
         UserDefaults.standard.set(String(idea.prefix(4000)), forKey: "htmlapp.shortcut.createPrompt")
+        NotificationCenter.default.post(name: Notification.Name("HTMLAppShortcutRequested"), object: nil)
         return .result()
     }
 }
