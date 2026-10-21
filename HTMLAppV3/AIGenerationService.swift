@@ -78,6 +78,8 @@ final class AIGenerationSession: ObservableObject {
     @Published var errorMessage: String?
     @Published var isWorking = false
     @Published var streamedByteCount = 0
+    @Published var streamedSection = "css"
+    @Published var sectionByteCounts: [String: Int] = [:]
     @Published var failedPhase: String?
 
     private var originalPrompt = ""
@@ -86,6 +88,17 @@ final class AIGenerationSession: ObservableObject {
     private var checkpointExistingAppID: String?
     private var latestPartialHTML = ""
     private var iconRefreshAllowed = true
+
+    private static func sectionForLatestStream(_ text: String, fallback: String) -> String {
+        let lower = text.lowercased()
+        let markers = ["<style": "css", "<body": "body", "<script": "script",
+                       "</script>": "body", "</style>": "body"]
+        let last = markers.compactMap { (tag, label) -> (Int, String)? in
+            guard let range = lower.range(of: tag, options: .backwards) else { return nil }
+            return (lower.distance(from: lower.startIndex, to: range.lowerBound), label)
+        }.max { $0.0 < $1.0 }
+        return last?.1 ?? fallback
+    }
 
     private static func defaultProgressNote(for phase: String) -> String {
         switch phase {
@@ -273,7 +286,10 @@ final class AIGenerationSession: ObservableObject {
             var lastPreviewBytes = 0
             var lastPreviewAt = Date.distantPast
             var lastProgressAt = Date.distantPast
+            var lastPublishedByteCount = 0
             var progressTail = ""
+            streamedSection = "css"
+            sectionByteCounts = [:]
             do {
                 let stream = try await AIProviderClient.stream(
                     config: config,
@@ -291,6 +307,9 @@ final class AIGenerationSession: ObservableObject {
 
                     let now = Date()
                     if now.timeIntervalSince(lastProgressAt) >= 0.2 {
+                        streamedSection = Self.sectionForLatestStream(progressTail, fallback: streamedSection)
+                        sectionByteCounts[streamedSection, default: 0] += max(0, receivedBytes - lastPublishedByteCount)
+                        lastPublishedByteCount = receivedBytes
                         streamedByteCount = receivedBytes
                         if let note = AIHTMLAgent.streamingProgress(in: progressTail) {
                             publishModelProgress(note)
@@ -311,6 +330,8 @@ final class AIGenerationSession: ObservableObject {
                         }
                     }
                 }
+                streamedSection = Self.sectionForLatestStream(progressTail, fallback: streamedSection)
+                sectionByteCounts[streamedSection, default: 0] += max(0, receivedBytes - lastPublishedByteCount)
                 streamedByteCount = receivedBytes
                 let partial = AIHTMLAgent.parsePartial(full)
                 if HTMLStreamRepair.isSafeForLivePreview(partial.html) {
