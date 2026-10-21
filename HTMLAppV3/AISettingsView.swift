@@ -42,7 +42,7 @@ struct AIConfigurationSettingsView: View {
             } header: {
                 Text("Provider")
             } footer: {
-                Text("All roles share this provider, base URL, compatibility format, and Keychain-stored API key. HTMLApp only varies the model name by task.")
+                Text("Shared provider for normal generation; specialist AIs can use separate endpoints, models, and Keychain keys below.")
             }
 
             Section("Look & Feel") {
@@ -57,7 +57,7 @@ struct AIConfigurationSettingsView: View {
                 }
             }
 
-            Section("AI Specialists") {
+            Section {
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .planner)
                 } label: { Label("Thinking", systemImage: "brain") }
@@ -78,6 +78,8 @@ struct AIConfigurationSettingsView: View {
                         AIRoleProviderSettingsView(role: .verifier)
                     } label: { Label("QA Reviewer", systemImage: "checkmark.shield") }
                 }
+            } header: {
+                Text("AI Specialists")
             } footer: {
                 Text("Each stage can use a different provider, model and API key. Leave a specialist on Shared Provider to reuse your main connection. UI redesign is optional.")
             }
@@ -112,7 +114,7 @@ struct AIConfigurationSettingsView: View {
                     "Icon & Asset Artist",
                     text: $iconModel,
                     icon: "app.badge.fill",
-                    help: "Creates simple App Store-style icons and portable generated IconScript artwork."
+                    help: "Designs original app-specific icons with appropriate detail, color and personality."
                 )
                 modelField(
                     "QA Verifier",
