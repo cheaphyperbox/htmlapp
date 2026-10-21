@@ -1893,7 +1893,8 @@ ASSET DRAFTS:
         originalPrompt: String,
         previousScript: String,
         repairReason: String? = nil,
-        config: AIProviderConfiguration
+        config: AIProviderConfiguration,
+        onPartialScript: (@MainActor (String) async -> Void)? = nil
     ) async throws -> String {
         let system = """
 You design crisp, high-quality iOS-style app icons. Each icon needs ONE recognizable product-specific metaphor with good contrast, comfortable negative space, balanced proportions and refined but restrained depth. The artwork should look at home beside Apple's iOS apps, not like a dense illustration or a screenshot.
@@ -1919,14 +1920,35 @@ REPAIR / QUALITY NOTE:
         var lastError: Error?
         for retry in 1...3 {
             do {
-                let response = try await AIProviderClient.complete(
-                    config: config,
-                    system: system,
-                    messages: [("user", user)],
-                    timeout: 75,
-                    maxTokens: 3200,
-                    retryOnTransient: false
-                )
+                let response: String
+                if let onPartialScript, retry == 1 {
+                    var streamed = ""
+                    let chunks = try await AIProviderClient.stream(
+                        config: config,
+                        system: system,
+                        messages: [("user", user)]
+                    )
+                    var lastYield = Date.distantPast
+                    for try await chunk in chunks {
+                        try Task.checkCancellation()
+                        streamed += chunk
+                        if Date().timeIntervalSince(lastYield) >= 0.45 {
+                            await onPartialScript(iconScriptFromProviderResponse(streamed))
+                            lastYield = Date()
+                        }
+                    }
+                    response = streamed
+                    await onPartialScript(iconScriptFromProviderResponse(streamed))
+                } else {
+                    response = try await AIProviderClient.complete(
+                        config: config,
+                        system: system,
+                        messages: [("user", user)],
+                        timeout: 75,
+                        maxTokens: 3200,
+                        retryOnTransient: false
+                    )
+                }
                 let parsed = iconScriptFromProviderResponse(response)
                 if !parsed.isEmpty { return parsed }
                 await MainActor.run {
