@@ -40,9 +40,9 @@ final class ForgeBuildMilestones: ObservableObject {
 
     func inspectHTML(_ html: String) {
         // The opening sections may already be streamed; only count a closed section.
-        let lower = html.lowercased()
         func section(_ open: String, _ close: String) -> Int? {
-            guard let first = lower.range(of: open), let last = lower.range(of: close, range: first.upperBound..<lower.endIndex) else { return nil }
+            guard let first = html.range(of: open, options: .caseInsensitive),
+                  let last = html.range(of: close, options: .caseInsensitive, range: first.upperBound..<html.endIndex) else { return nil }
             return html[first.lowerBound..<last.upperBound].utf8.count
         }
         if let bytes = section("<head", "</head>") {
@@ -66,7 +66,6 @@ struct ForgeFallingBlocksView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !active)) { timeline in
             Canvas { graphics, size in
-                let count = max(1, milestones.count)
                 let laneWidth = max(20, size.width / 7)
                 let columnCount = max(1, Int(size.width / laneWidth))
                 for (index, milestone) in milestones.enumerated() {
@@ -88,7 +87,7 @@ struct ForgeFallingBlocksView: View {
                         y = -height - 12 + descent
                     } else {
                         let t = CGFloat(age - impact)
-                        let bounce = abs(sin(t * 10)) * exp(-t * 4.2) * 33 * scale
+                        let bounce = CGFloat(abs(sin(Double(t * 10))) * exp(Double(-t * 4.2))) * 33 * scale
                         y = restingY - bounce
                     }
                     let hue = tint(milestone.kind)
@@ -103,7 +102,6 @@ struct ForgeFallingBlocksView: View {
                 }
                 let base = CGRect(x: 0, y: size.height - 3, width: size.width, height: 3)
                 graphics.fill(Path(base), with: .color(.secondary.opacity(0.20)))
-                _ = count
             }
         }
         .accessibilityHidden(true)
@@ -160,7 +158,7 @@ struct ForgeBuildDashboard: View {
 
             ForgeFallingBlocksView(milestones: milestones, active: active)
                 .frame(height: 235)
-                .background(.quaternary.opacity(0.34), in: RoundedRectangle(cornerRadius: 18))
+                .background(Color.gray.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
                 .overlay(alignment: .topLeading) {
                     Text("Completed milestones")
                         .font(.caption2.weight(.medium))
