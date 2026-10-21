@@ -149,6 +149,7 @@ struct ForgeBuildDashboard: View {
     let milestones: [ForgeBuildMilestone]
     let active: Bool
     let bytes: Int
+    @State private var playGame = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -167,16 +168,38 @@ struct ForgeBuildDashboard: View {
             }
             .padding(.horizontal, 18)
 
-            ForgeFallingBlocksView(milestones: milestones, active: active)
-                .frame(height: 235)
-                .background(Color.gray.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
-                .overlay(alignment: .topLeading) {
-                    Text("Completed milestones")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(12)
+            HStack {
+                Text(playGame ? "Play while Forge works" : "Watch Forge's work")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { playGame.toggle() }
+                } label: {
+                    Label(playGame ? "Watch Blocks" : "Play Game",
+                          systemImage: playGame ? "square.stack.3d.up" : "gamecontroller.fill")
+                        .font(.caption)
                 }
-                .padding(.horizontal, 12)
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 18)
+
+            Group {
+                if playGame {
+                    ForgeBuildArcadeView(milestones: milestones, active: active)
+                        .padding(10)
+                } else {
+                    ForgeFallingBlocksView(milestones: milestones, active: active)
+                        .frame(height: 235)
+                        .overlay(alignment: .topLeading) {
+                            Text("Completed milestones")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .padding(12)
+                        }
+                }
+            }
+            .background(Color.gray.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 12)
 
             if let recent = milestones.last {
                 HStack(spacing: 9) {
