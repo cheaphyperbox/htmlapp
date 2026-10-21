@@ -16,6 +16,7 @@ struct AIIconGenerationView: View {
     @State private var showDebug = false
     @State private var hasStarted = false
     @State private var streamedCommands = 0
+    @State private var partialIcon: Data?
 
     var body: some View {
         NavigationStack {
@@ -27,12 +28,21 @@ struct AIIconGenerationView: View {
                             .fill(Color.secondary.opacity(0.10))
                             .frame(width: 210, height: 210)
                             .overlay {
-                                VStack(spacing: 16) {
-                                    ProgressView().controlSize(.large)
-                                    Image(systemName: "paintbrush.pointed.fill")
-                                        .font(.system(size: 42))
-                                        .symbolEffect(.pulse)
-                                        .foregroundStyle(.secondary)
+                                if let partialIcon, let preview = UIImage(data: partialIcon) {
+                                    Image(uiImage: preview)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 210, height: 210)
+                                        .clipShape(RoundedRectangle(cornerRadius: 35))
+                                        .transition(.opacity)
+                                } else {
+                                    VStack(spacing: 16) {
+                                        ProgressView().controlSize(.large)
+                                        Image(systemName: "paintbrush.pointed.fill")
+                                            .font(.system(size: 42))
+                                            .symbolEffect(.pulse)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                     } else if let rendered, let image = UIImage(data: rendered) {
@@ -117,6 +127,8 @@ struct AIIconGenerationView: View {
         working = true
         rendered = nil
         script = ""
+        partialIcon = nil
+        streamedCommands = 0
         errorMessage = nil
         status = "Designing icon…"
 
@@ -143,7 +155,17 @@ Generate a new icon for the existing HTMLApp named \(app.name).
                         originalPrompt: purpose,
                         previousScript: candidate,
                         repairReason: repairReason,
-                        config: config
+                        config: config,
+                        onPartialScript: { partial in
+                            guard self.working, !partial.isEmpty else { return }
+                            let commands = partial.split(separator: "\n").count
+                            guard commands > self.streamedCommands else { return }
+                            self.streamedCommands = commands
+                            self.status = "Drawing icon… \(commands) commands received"
+                            if let image = await AIIconRenderer.render(script: partial) {
+                                self.partialIcon = image
+                            }
+                        }
                     ).trimmingCharacters(in: .whitespacesAndNewlines)
 
                     guard !candidate.isEmpty else {
