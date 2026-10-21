@@ -5,7 +5,7 @@ enum ForgeProductContract {
 FORGE CORE CONTRACT:
 Make the user's requested app genuinely useful on the first version, with working controls, persistence, navigation, validation, lifecycle cleanup, accessibility, iPhone safe areas and adaptive iPad layout. Do not add unnecessary features, accounts, or fabricated backend/data.
 Choose a fresh visual identity for each app: distinctive palette, meaningful texture and dimensionality where useful, readable type and real product-specific layout. Never impose the same green/teal checklist, circles or flat palette on unrelated apps. Optional visual preferences guide taste, not structure.
-Make interactive tab bars feel distinctly iOS-like: quick compression and elastic release, animated active indicators and eased transitions. Apply restrained tactile feedback to buttons and spring-like motion to sheets/popovers, honoring reduced motion and input accessibility. Avoid static hard cuts where a meaningful transition would help.
+When the app has a tab bar, its selected-tab highlight should compress, stretch toward the next tab and ease back to its normal shape; keep motion subtle, responsive and accessible. Apply restrained tactile feedback to buttons and spring-like motion to sheets/popovers, honoring reduced motion and input accessibility. Avoid static hard cuts where a meaningful transition would help.
 Use documented HTMLApp/browser capabilities only; never fabricate native bridges or external data. Respect permission consent, privacy and error states.
 Before returning, trace every primary interaction and storage round-trip to catch avoidable errors. Do not claim tests you did not execute.
 """
