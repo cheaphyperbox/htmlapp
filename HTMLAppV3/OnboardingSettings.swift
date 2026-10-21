@@ -135,7 +135,19 @@ struct SettingsView: View {
 
                 Section("Developer") {
                     Toggle("Developer Mode", isOn: $developerMode)
-                    Text("Shows diagnostic tools, advanced library settings, detailed AI configuration, and debugging controls.")
+                    if developerMode {
+                        NavigationLink {
+                            ForgeDeveloperDiagnosticsView().environmentObject(store)
+                        } label: {
+                            Label("Build, AI & Failure Diagnostics", systemImage: "ladybug")
+                        }
+                        NavigationLink {
+                            AIDebugTraceView()
+                        } label: {
+                            Label("Past AI Edit Logs", systemImage: "doc.text.magnifyingglass")
+                        }
+                    }
+                    Text("Developer Mode reveals saved error logs, AI task timings, widget diagnostics and advanced controls.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
