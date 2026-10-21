@@ -37,7 +37,17 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
             DispatchQueue.main.async {
                 self?.busy = false
                 self?.status = error == nil ? "Sent. Waiting for the other device to save the app…" : "Transfer failed: \(error!.localizedDescription)"
-                if error != nil { self?.sendFailed = true }
+                if error != nil {
+                    self?.sendFailed = true
+                } else {
+                    // Resource completion is not proof that import succeeded.
+                    // Require an encrypted receipt from the receiving device.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 90) { [weak self] in
+                        guard let self, self.active && !self.recipientConfirmed else { return }
+                        self.status = "The receiving device hasn't confirmed saving yet."
+                        self.sendFailed = true
+                    }
+                }
                 try? FileManager.default.removeItem(at: url); self?.outbound = nil
             }
         }
