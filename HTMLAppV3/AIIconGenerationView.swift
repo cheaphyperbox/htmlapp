@@ -40,8 +40,7 @@ struct AIIconGenerationView: View {
                                         ProgressView().controlSize(.large)
                                         Image(systemName: "paintbrush.pointed.fill")
                                             .font(.system(size: 42))
-                                            .symbolEffect(.pulse)
-                                            .foregroundStyle(.secondary)
+                                                .foregroundStyle(.secondary)
                                     }
                                 }
                             }
