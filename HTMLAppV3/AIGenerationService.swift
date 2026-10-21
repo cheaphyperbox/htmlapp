@@ -74,6 +74,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var iconScript = ""
     @Published var renderedIconData: Data?
     @Published var verificationReport = ""
+    @Published var wantsUIPolish = false
     @Published var errorMessage: String?
     @Published var isWorking = false
     @Published var streamedByteCount = 0
@@ -383,6 +384,7 @@ final class AIGenerationSession: ObservableObject {
         errorMessage = nil
         failedPhase = nil
         verificationReport = ""
+        wantsUIPolish = false
         do {
             let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
             iconRefreshAllowed = Self.changeMayNeedIconRefresh(cleanChange) || renderedIconData == nil
@@ -447,6 +449,7 @@ Requested change:
                 messages: [("user", user)]
             )
             let initialOutput = AIHTMLAgent.parse(response)
+            wantsUIPolish = AIHTMLAgent.editNeedsPolish(response: response, requestedChange: cleanChange)
             let output = try await applyEditOutputWithRecovery(
                 initialOutput,
                 requestedChange: improvedChange,
@@ -1686,6 +1689,7 @@ HTMLAPP FACT-CHECK OVERRIDES:
 You are HTMLApp's code-editing agent. Edit the existing single-file HTML app with the smallest safe patch that satisfies the requested change. Preserve all unrelated behavior, IDs, storage keys, API integrations, permissions, navigation and working code. Prefer patching over rewriting.
 
 Return these sections with no Markdown fences:
+<ui_polish_needed>yes or no</ui_polish_needed>
 <build_summary>short updated implementation plan; conclusions only, not hidden reasoning</build_summary>
 <description>updated one-sentence description if materially changed, otherwise repeat the current purpose</description>
 <icon_script>updated icon script only if the app identity changed; otherwise leave empty</icon_script>
@@ -1702,6 +1706,7 @@ You may include multiple SEARCH/REPLACE blocks. SEARCH text must match exactly a
 
 RULES:
 \(designGuide)
+Decide if <ui_polish_needed> should be yes. Say yes ONLY when the requested edit significantly changes visual identity, layout hierarchy, theme, or multiple screens and a separate UI specialist could meaningfully help. Say no for bug fixes, functional changes, wording, colors on one component, and ordinary small revisions; do not waste a specialist call.
 Keep or improve native-feeling animation and mobile interactions. Do not fabricate facts, APIs, live data or capabilities. If the revision depends on something uncertain, use the documented research below; if no credible API is available, implement an honest local/limited state rather than fake data.
 
 RESEARCH RESULTS:
@@ -2182,6 +2187,16 @@ Interrupted/malformed response:
 </interrupted_response>
 """
         return try await AIProviderClient.complete(config: config, system: system, messages: [("user", user)])
+    }
+
+    static func editNeedsPolish(response: String, requestedChange: String) -> Bool {
+        let decision = value("ui_polish_needed", in: response).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if decision == "yes" { return true }
+        if decision == "no" { return false }
+        // Older providers without the tag still skip unnecessary extra requests.
+        let text = requestedChange.lowercased()
+        return ["redesign entire", "redesign the app", "whole ui", "entire interface", "new design language",
+                "new visual style", "complete makeover"].contains { text.contains($0) }
     }
 
     static func parse(_ text: String) -> AIGenerationOutput {
