@@ -257,7 +257,6 @@ struct LibraryView: View {
         }
     }
 
-    @ViewBuilder
     private func handlePendingShortcut() {
         if let name = UserDefaults.standard.string(forKey: "htmlapp.shortcut.openName") {
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.openName")
@@ -283,7 +282,7 @@ struct LibraryView: View {
         let folderName = folderID.flatMap { store.folder(withID: $0)?.name }
         let queryIsEmpty = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-        Group {
+        return Group {
             if folderID == nil && store.apps.isEmpty && store.folders.isEmpty && queryIsEmpty {
                 EmptyLibraryView { prepareAdd(in: nil) }
             } else if entries.isEmpty {
