@@ -6,6 +6,11 @@ import WidgetKit
 struct HTMLAppMain: App {
     @StateObject private var store = AppStore()
     @AppStorage("onboardingComplete") private var onboardingComplete = false
+    @AppStorage("htmlapp.lastOpenedVersion") private var lastOpenedVersion = ""
+    @AppStorage("htmlapp.previousOpenedVersion") private var previousOpenedVersion = ""
+    @State private var presentingWhatsNew = false
+    @State private var detectedPreviousVersion: String?
+    @State private var checkedVersionThisLaunch = false
 
     init() {
         if let diagnosis = HTMLAppProviderStorage.repairPreviouslyApprovedGroup() {
@@ -43,6 +48,23 @@ struct HTMLAppMain: App {
                     OnboardingView(complete: $onboardingComplete)
                         .interactiveDismissDisabled(true)
                 }
+                .fullScreenCover(isPresented: $presentingWhatsNew, onDismiss: recordVersionSeen) {
+                    HTMLAppWhatsNewView(previousVersion: detectedPreviousVersion) {
+                        presentingWhatsNew = false
+                    }
+                    .interactiveDismissDisabled(true)
+                }
+                .onAppear(perform: checkVersionOnLaunch)
+                .onChange(of: onboardingComplete) { finished in
+                    guard finished else { return }
+                    if lastOpenedVersion.isEmpty {
+                        // On a new installation the tour itself is the introduction.
+                        // Do not show a second full-screen welcome on the same launch.
+                        lastOpenedVersion = HTMLAppReleaseNotes.installedVersion
+                    } else {
+                        checkVersionOnLaunch()
+                    }
+                }
                 .confirmationDialog(
                     "Switch HTML app?",
                     isPresented: Binding(
@@ -66,6 +88,35 @@ struct HTMLAppMain: App {
                     }
                 }
         }
+    }
+
+    private func checkVersionOnLaunch() {
+        guard onboardingComplete, !checkedVersionThisLaunch else { return }
+        checkedVersionThisLaunch = true
+        let installed = HTMLAppReleaseNotes.installedVersion
+        guard installed != "Unknown" else { return }
+        if lastOpenedVersion.isEmpty {
+            // Migration: older HTMLApp installations did not store the version.
+            // Offer current notes once without claiming a specific prior version.
+            detectedPreviousVersion = nil
+            presentingWhatsNew = true
+        } else if installed.compare(lastOpenedVersion, options: .numeric) == .orderedDescending {
+            detectedPreviousVersion = lastOpenedVersion
+            presentingWhatsNew = true
+        } else if installed != lastOpenedVersion {
+            // A downgrade is not advertised as an upgrade.
+            previousOpenedVersion = lastOpenedVersion
+            lastOpenedVersion = installed
+        }
+    }
+
+    private func recordVersionSeen() {
+        let installed = HTMLAppReleaseNotes.installedVersion
+        guard installed != "Unknown" else { return }
+        if !lastOpenedVersion.isEmpty && installed != lastOpenedVersion {
+            previousOpenedVersion = lastOpenedVersion
+        }
+        lastOpenedVersion = installed
     }
 }
 
