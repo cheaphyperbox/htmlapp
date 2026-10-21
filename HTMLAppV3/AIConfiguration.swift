@@ -21,7 +21,11 @@ struct AIProviderConfiguration: Equatable {
     func endpointURL() -> URL? {
         let value = apiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-        if compatibility == .openAI, value.contains("chat/completions") { return URL(string: value) }
+        if compatibility == .openAI {
+            if value.contains("chat/completions") { return URL(string: value) }
+            // Gemini OpenAI compatibility uses /v1beta/openai/chat/completions, not /v1/chat/completions.
+            if value.hasSuffix("/v1beta/openai") { return URL(string: value + "/chat/completions") }
+        }
         if compatibility == .anthropic, value.hasSuffix("/messages") { return URL(string: value) }
         let trimmed = value.hasSuffix("/") ? String(value.dropLast()) : value
         switch compatibility {
