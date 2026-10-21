@@ -13,6 +13,7 @@ struct AIConfigurationSettingsView: View {
     @State private var verifierModel = AISettingsStore.verifierModel
     @State private var requestDelay = AISettingsStore.requestDelaySeconds
     @State private var systemPrompt = AISettingsStore.systemPrompt
+    @State private var appearancePreference = AISettingsStore.appearancePreference
     @State private var saved = false
     @State private var confirmRestorePrompt = false
 
@@ -42,6 +43,43 @@ struct AIConfigurationSettingsView: View {
                 Text("Provider")
             } footer: {
                 Text("All roles share this provider, base URL, compatibility format, and Keychain-stored API key. HTMLApp only varies the model name by task.")
+            }
+
+            Section("Look & Feel") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("What kinds of designs do you like?")
+                        .font(.subheadline.weight(.medium))
+                    TextField("e.g. Detailed, classic and warm — or very simple", text: $appearancePreference, axis: .vertical)
+                        .lineLimit(2...4)
+                        .textInputAutocapitalization(.sentences)
+                    Text("Optional. The AI chooses the actual theme, colors, animations and icon for each new app.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("AI Specialists") {
+                NavigationLink {
+                    AIRoleProviderSettingsView(role: .planner)
+                } label: { Label("Thinking", systemImage: "brain") }
+                NavigationLink {
+                    AIRoleProviderSettingsView(role: .research)
+                } label: { Label("Research", systemImage: "globe") }
+                NavigationLink {
+                    AIRoleProviderSettingsView(role: .coder)
+                } label: { Label("Programming", systemImage: "chevron.left.forwardslash.chevron.right") }
+                NavigationLink {
+                    AIRoleProviderSettingsView(role: .ui)
+                } label: { Label("UI Redesigning", systemImage: "paintpalette") }
+                if developerMode {
+                    NavigationLink {
+                        AIRoleProviderSettingsView(role: .icon)
+                    } label: { Label("Icon Artist", systemImage: "app.badge") }
+                    NavigationLink {
+                        AIRoleProviderSettingsView(role: .verifier)
+                    } label: { Label("QA Reviewer", systemImage: "checkmark.shield") }
+                }
+            } footer: {
+                Text("Each stage can use a different provider, model and API key. Leave a specialist on Shared Provider to reuse your main connection. UI redesign is optional.")
             }
 
             Section {
@@ -196,6 +234,7 @@ struct AIConfigurationSettingsView: View {
         AISettingsStore.verifierModel = verifierModel
         AISettingsStore.requestDelaySeconds = requestDelay
         AISettingsStore.systemPrompt = systemPrompt
+        AISettingsStore.appearancePreference = appearancePreference
 
         guard showConfirmation else { return }
         saved = true
