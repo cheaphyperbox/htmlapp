@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
-  echo 'Discord delivery not configured: DISCORD_WEBHOOK_URL is absent.'
-  exit 1
+  echo '::notice::Discord IPA delivery skipped: DISCORD_WEBHOOK_URL is not configured; the GitHub IPA artifact remains available.'
+  exit 0
 fi
 echo "::add-mask::$DISCORD_WEBHOOK_URL"
 case "$DISCORD_WEBHOOK_URL" in
