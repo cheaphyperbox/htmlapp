@@ -85,7 +85,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
-                Section {
+                DisclosureGroup("Organize Library") {
                     Toggle("Folders on top", isOn: $libraryFoldersOnTop)
                     Toggle("Favorite apps on top", isOn: $libraryFavoritesOnTop)
 
@@ -102,10 +102,9 @@ struct SettingsView: View {
                             }
                         }
                     }
-                } header: {
-                    Text("Library Sorting")
-                } footer: {
                     Text(librarySortDescription)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -131,7 +130,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Creation & Transfer")
                 } footer: {
-                    Text("Set up AI generation, manage widgets, or send apps directly to a nearby device. You can also export a backup.")
+                    Text("Create apps, manage Home Screen widgets, and share or back up your Library.")
                 }
 
                 Section("Developer") {
@@ -192,7 +191,7 @@ struct SettingsView: View {
 
                 Section("About") {
                     LabeledContent("Minimum iOS", value: "16.0")
-                    LabeledContent("URL scheme", value: "htmlapp://")
+                    if developerMode { LabeledContent("URL scheme", value: "htmlapp://") }
                     Text("The interface uses native system navigation, toolbars, menus, materials, and controls and adapts across iPhone and iPad.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
