@@ -73,8 +73,8 @@ struct ForgeFallingBlocksView: View {
                     let scale = CGFloat(min(1.40, max(0.55, 0.58 + log2(Double(max(512, milestone.bytes)) / 512.0 + 1) * 0.11)))
                     let cell = max(8, min(19, laneWidth * 0.43)) * scale
                     let cells = shape(for: milestone.kind)
-                    let width = CGFloat((cells.map(\.0).max() ?? 0) + 1) * cell
-                    let height = CGFloat((cells.map(\.1).max() ?? 0) + 1) * cell
+                    let width = CGFloat((cells.map { $0.0 }.max() ?? 0) + 1) * cell
+                    let height = CGFloat((cells.map { $0.1 }.max() ?? 0) + 1) * cell
                     let lane = (index * 3 + 1) % columnCount
                     let x = min(max(4, CGFloat(lane) * laneWidth + (laneWidth - width) / 2), max(4, size.width - width - 4))
                     let row = CGFloat(index / columnCount)
