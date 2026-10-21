@@ -8,6 +8,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     @Published var busy = false
     @Published var received: URL?
     @Published var recipientConfirmed = false
+    @Published var sendFailed = false
     @Published var invitationName: String?
     private var invitation: ((Bool, MCSession?) -> Void)?
     let session = MCSession(peer: MCPeerID(displayName: String(UIDevice.current.name.prefix(50))), securityIdentity: nil, encryptionPreference: .required)
@@ -31,11 +32,12 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     }
     func send(_ url: URL) {
         guard !busy, let peer = session.connectedPeers.first else { return }
-        outbound = url; busy = true; status = "Sending encrypted backup…"
+        outbound = url; busy = true; sendFailed = false; status = "Sending encrypted backup…"
         session.sendResource(at: url, withName: "HTMLApp.htmlapp.zip", toPeer: peer) { [weak self] error in
             DispatchQueue.main.async {
                 self?.busy = false
                 self?.status = error == nil ? "Sent. Waiting for the other device to save the app…" : "Transfer failed: \(error!.localizedDescription)"
+                if error != nil { self?.sendFailed = true }
                 try? FileManager.default.removeItem(at: url); self?.outbound = nil
             }
         }
@@ -276,6 +278,11 @@ struct NearbyAppTransferView: View {
                 try? FileManager.default.removeItem(at: url)
                 transfer.received = nil
             }
+        }
+        .onChange(of: transfer.sendFailed) { failed in
+            guard failed, !isReceiveOnly else { return }
+            startedSending = false
+            transferError = "The transfer didn't finish. Keep both devices nearby and try again."
         }
         .onChange(of: transfer.recipientConfirmed) { confirmed in
             guard confirmed, !isReceiveOnly else { return }
