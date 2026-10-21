@@ -48,8 +48,9 @@ struct AIGenerationView: View {
 
     let existingApp: SavedHTMLApp?
 
-    init(existingApp: SavedHTMLApp? = nil) {
+    init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "") {
         self.existingApp = existingApp
+        _prompt = State(initialValue: initialPrompt)
     }
 
     var body: some View {
