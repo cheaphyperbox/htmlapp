@@ -11,6 +11,9 @@ struct HTMLAppMain: App {
         if let diagnosis = HTMLAppProviderStorage.repairPreviouslyApprovedGroup() {
             NSLog("HTMLApp widget signing status: %@", diagnosis)
         }
+        if #available(iOS 16.2, *) {
+            HTMLAppSiriShortcuts.updateAppShortcutParameters()
+        }
         HTMLNotificationCenterDelegate.shared.activate()
         HTMLAppBackgroundCoordinator.shared.register()
         HTMLAppBackgroundCoordinator.shared.schedule()
