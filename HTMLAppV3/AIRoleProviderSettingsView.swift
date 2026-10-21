@@ -36,7 +36,18 @@ struct AIRoleProviderSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Use a different AI for \(title)", isOn: $separate)
+                Toggle("Use a specialist AI for \(title)", isOn: $separate)
+                    .onChange(of: separate) { enabled in
+                        guard enabled else { return }
+                        let prior = AISettingsStore.specialistConfiguration(for: role)
+                        // New specialists inherit the saved main connection unless customized.
+                        if !AISettingsStore.usesSpecialistProvider(for: role) &&
+                           prior.apiURL == AISettingsStore.apiURL && prior.apiKey.isEmpty {
+                            format = AISettingsStore.compatibility
+                            endpoint = AISettingsStore.apiURL
+                            key = AISettingsStore.apiKey
+                        }
+                    }
                 Text(separate ? "This stage uses its own endpoint, model and Keychain-stored key." :
                     "This stage uses your main AI provider. Nothing else needs configuring.")
                     .font(.footnote)
@@ -57,6 +68,11 @@ struct AIRoleProviderSettingsView: View {
                     TextField("Model ID", text: $model)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    Button("Fill main API URL and key") {
+                        format = AISettingsStore.compatibility
+                        endpoint = AISettingsStore.apiURL
+                        key = AISettingsStore.apiKey
+                    }
                     SecureField("API key (optional for local endpoints)", text: $key)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -66,7 +82,7 @@ struct AIRoleProviderSettingsView: View {
                 } header: {
                     Text("Specialist Connection")
                 } footer: {
-                    Text("OpenAI-compatible providers can use their own compatible chat/completions endpoint; Anthropic uses /v1/messages. For Gemini's OpenAI-compatible API, use https://generativelanguage.googleapis.com/v1beta/openai. Costs and compatibility depend on your provider.")
+                    Text("Main connection details are filled in when you enable a specialist. Change the provider and key only when needed. Never send your main API key to another provider.")
                 }
             }
 
