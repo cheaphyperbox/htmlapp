@@ -1,11 +1,8 @@
 name: Build HTMLApp IPA
 
+# Manual-only workflow. Source commits and build-request changes must not trigger builds.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/build-request
 
 concurrency:
   group: htmlapp-main-build
