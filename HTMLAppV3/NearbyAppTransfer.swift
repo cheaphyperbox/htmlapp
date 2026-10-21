@@ -277,21 +277,23 @@ struct NearbyAppTransferView: View {
         .onChange(of: transfer.received) { url in
             guard isReceiveOnly, let url, !importing else { return }
             importing = true
-            do {
-                try store.importPortablePackage(from: url, replaceExisting: false)
-                transfer.confirmImport()
-                try? FileManager.default.removeItem(at: url)
-                transfer.received = nil
-                transfer.status = "App saved to Library!"
-                Task {
+            Task { @MainActor in
+                // Let the saving indicator render before importing larger packages.
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                do {
+                    try store.importPortablePackage(from: url, replaceExisting: false)
+                    transfer.confirmImport()
+                    try? FileManager.default.removeItem(at: url)
+                    transfer.received = nil
+                    transfer.status = "App saved to Library!"
                     try? await Task.sleep(nanoseconds: 900_000_000)
                     dismiss()
+                } catch {
+                    transferError = "Couldn't save the received app: \(error.localizedDescription)"
+                    importing = false
+                    try? FileManager.default.removeItem(at: url)
+                    transfer.received = nil
                 }
-            } catch {
-                transferError = "Couldn't save the received app: \(error.localizedDescription)"
-                importing = false
-                try? FileManager.default.removeItem(at: url)
-                transfer.received = nil
             }
         }
         .onChange(of: transfer.sendFailed) { failed in
