@@ -349,7 +349,7 @@ final class AIGenerationSession: ObservableObject {
             await installGeneratedAssets(finalAssets)
             try await ensureValidIcon(
                 config: AISettingsStore.configuration(for: .icon),
-                forceRegenerate: false
+                forceRegenerate: true
             )
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
@@ -736,7 +736,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                     html: streamedHTML,
                     originalPrompt: originalPrompt,
                     previousScript: candidate,
-                    repairReason: "Create the final shipping icon. Treat any existing script only as a draft; simplify or replace it so the selected Icon & Asset model owns the final App Store-style concept.",
+                    repairReason: "Create the final original icon for this product. Preserve a strong silhouette while welcoming layered detail, dimensional composition, and a fresh palette. Reject repetitive flat ticks/discs and default green templates.",
                     config: config
                 ).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !designed.isEmpty { candidate = designed }
@@ -1423,7 +1423,7 @@ Engineering quality is mandatory: loading/empty/error/offline/permission/unsuppo
 """
 
     static let iconGuide = """
-Inside <icon_script>, output only a static drawing script. Commands: SIZE width height; BG color; RECT x y width height color; CIRCLE center_x center_y radius color; LINE x1 y1 x2 y2 thickness color; TRIANGLE x1 y1 x2 y2 x3 y3 color; optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Use absolute coordinates and CSS/HEX colors, draw back-to-front, and never use ANIM, GROUP or FPS.
+Draw a distinctive, purpose-specific 1024px icon in IconScript. Layered geometry, gradients and thoughtful detail are encouraged when useful. Avoid generic teal/green checkmarks by default. Use SIZE, BG, RECT, CIRCLE, LINE, TRIANGLE and optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE; no ANIM, GROUP, FPS or SVG. Draw back-to-front.
 """
 
     private static let webResearchSignals = [
@@ -1739,43 +1739,10 @@ ASSET DRAFTS:
         config: AIProviderConfiguration
     ) async throws -> String {
         let system = """
-You are HTMLApp's specialist iOS app-icon designer. Produce an icon that could plausibly ship beside polished App Store icons: simple, instantly understandable, balanced, and specific to this exact app.
-
-ICON DESIGN PROCESS:
-1. Identify the app's single primary job.
-2. Choose one concrete visual metaphor that communicates that job without text.
-3. Remove secondary ideas until the concept reads at thumbnail size.
-4. Build a large, centered silhouette with strong negative space and clean geometry.
-5. Add only restrained depth or supporting detail if it strengthens recognition.
-6. Mentally downscale to 64px and 32px; if the idea becomes muddy, simplify again.
-
-QUALITY BAR:
-- SIZE must be 1024 1024 with an opaque full-canvas BG.
-- Aim for one dominant symbol and, at most, one supporting form.
-- Prefer about 6-18 visible shape commands. More detail is allowed only when genuinely necessary.
-- Use large shapes and intentional spacing. Avoid tiny decorative marks.
-- Make the icon understandable in about one second.
-- Match the app's palette/personality without drawing a screenshot of the interface.
-- Avoid generic AI imagery unless AI itself is the product: no automatic sparkles, magic wands, brains, chat bubbles, rockets, or purple-gradient filler.
-- Avoid generic "circle + triangle + dot" constructions unless they directly depict the product.
-- No text, letters, numbers, copied third-party logos, emoji, copyrighted characters, SVG, HTML, prose, or comments.
-- Keep key artwork away from extreme edges; iOS applies its own icon mask.
-- If the previous concept is weak or overcomplicated, replace the concept rather than cosmetically tweaking it.
-
-SUPPORTED COMMANDS ONLY:
-SIZE width height
-BG color
-RECT x y width height color
-CIRCLE center_x center_y radius color
-LINE x1 y1 x2 y2 thickness color
-TRIANGLE x1 y1 x2 y2 x3 y3 color
-FILL_LINEAR color1 color2
-FILL_RADIAL color1 color2
-FILL_TEXTURE color1 color2
-
-A FILL_* command modifies only the immediately following shape. Use absolute coordinates and CSS/HEX colors. Never use ANIM, GROUP, FPS, Markdown fences, SVG, or explanatory text.
+You are the specialist icon artist for a polished app. Invent a recognizable, memorable composition based on this exact product and any optional user aesthetic preference. Choose your own palette, pictogram, layering, geometry, textures, highlights, depth and balance. Intricate or classical concepts are welcome when the metaphor needs them; a minimalist style is welcome when the product calls for it. Do NOT automatically use teal/green, white rounded square checklists, generic circles, or copies of previous icons. Use detail and accents purposefully; keep the key silhouette readable at 32px.
+Return ONLY IconScript commands: SIZE 1024 1024, opaque BG, RECT, CIRCLE, LINE, TRIANGLE and optional FILL_LINEAR, FILL_RADIAL, FILL_TEXTURE immediately before a shape. Absolute coordinates; no SVG, markdown, text or comments. Stay within the canvas.
 """
-        let context = iconDesignBrief(html: html, originalPrompt: originalPrompt)
+        let context = iconDesignBrief(html: html, originalPrompt: originalPrompt) + "\n" + AISettingsStore.creativeDirection
         let user = """
 APP IDENTITY BRIEF:
 \(context)
@@ -1843,13 +1810,13 @@ REPAIR / QUALITY NOTE:
             return "The icon must include SIZE 1024 1024 and a full opaque BG."
         }
         guard shapeCommands.count >= 5 else {
-            return "The icon is too sparse to communicate a clear app-specific symbol. Redesign it with one simple, unmistakable concept and enough supporting geometry to read at small size."
+            return "The icon is too sparse and generic. Add product-specific composition or depth while keeping it legible at small size."
         }
         guard shapeKinds.count >= 2 else {
             return "The icon relies on only one primitive type. Add purposeful supporting geometry so the concept reads as designed rather than autogenerated."
         }
-        if shapeCommands.count > 28 {
-            return "The icon is too detailed for app-icon scale. Simplify toward one bold symbol, strong negative space, and roughly 6-18 purposeful shapes."
+        if shapeCommands.count > 55 {
+            return "The icon has excessive geometry; retain meaningful detail while removing only marks that become visual noise at small sizes."
         }
         return nil
     }
@@ -2053,7 +2020,7 @@ Original request: \(originalPrompt)
 HTML title: \(title ?? "Not found")
 Meta description: \(description ?? "Not found")
 Likely product category: \(categoryText.isEmpty ? "Infer from the title and visible labels." : categoryText)
-UI palette candidates: \(colors.isEmpty ? "No reliable hex palette found; choose a restrained purpose-appropriate palette." : colors.joined(separator: ", "))
+UI palette candidates (not mandatory): \(colors.isEmpty ? "Choose a distinctive product-specific palette." : colors.joined(separator: ", "))
 Visible labels/content excerpt: \(visible.isEmpty ? "No useful visible text extracted; infer from title and code-category signals." : visible)
 Icon direction: infer the most distinctive product metaphor yourself. Do not require the user to provide icon details.
 """

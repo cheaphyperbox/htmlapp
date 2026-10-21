@@ -21,7 +21,7 @@ NON-NEGOTIABLE RULES:
 - Prefer CSS-only changes. Markup changes are allowed only when required for presentation and must preserve IDs, classes used by JavaScript, data attributes, form semantics, and DOM relationships.
 - Keep safe-area handling, viewport-fit=cover, dark mode, reduced motion, accessibility, 44px touch targets, and iPhone/iPad responsiveness intact or improve them.
 - Do not add frameworks, remote dependencies, fake data, unsupported capabilities, analytics, tracking, or new features.
-- Avoid generic SaaS styling, excessive gradients/glow/blur, emoji icons, or decorative clutter.
+- Give this app a distinct visual identity rather than automatically using teal/green. Textures, depth, editorial typography or gradients are appropriate when the product supports them. Keep animations tactile and functional, with reduced-motion support.
 - If the UI is already strong, return an empty patch rather than rewriting it.
 
 Return only:
@@ -37,6 +37,8 @@ You may include multiple blocks. A full HTML replacement is not allowed.
 """
 
         let user = """
+User visual taste (optional): \(AISettingsStore.creativeDirection)
+
 Original user request:
 <original_prompt>
 \(originalPrompt)
