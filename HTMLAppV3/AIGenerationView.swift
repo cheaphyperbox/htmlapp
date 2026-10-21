@@ -13,6 +13,12 @@ struct AIGenerationView: View {
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
+    @State private var exploringStyles = false
+    @State private var styleOptions: [ForgeStyleConcept] = []
+    @State private var selectedStyleIndex = 0
+    @State private var styleFailure: String?
+    @State private var selectedStyle: ForgeStyleConcept?
     @State private var prompt = ""
     @State private var changePrompt = ""
     @State private var showingChange = false
@@ -42,7 +48,9 @@ struct AIGenerationView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if session.streamedHTML.isEmpty && !session.isWorking && !browserResearch.isBrowsing {
+                if existingApp == nil && (exploringStyles || !styleOptions.isEmpty || styleFailure != nil) {
+                    styleSelectionView
+                } else if session.streamedHTML.isEmpty && !session.isWorking && !browserResearch.isBrowsing {
                     promptView
                 } else {
                     studioView
@@ -53,7 +61,7 @@ struct AIGenerationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        if session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
+                        if exploringStyles || !styleOptions.isEmpty || styleFailure != nil || session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
                             AIDebugTraceStore.shared.clear()
@@ -82,11 +90,14 @@ struct AIGenerationView: View {
                     dictation.stop()
                     AIDebugTraceStore.shared.clear()
                     session.clearCheckpoint()
+                    styleOptions = []
+                    styleFailure = nil
+                    exploringStyles = false
                     dismiss()
                 }
                 Button("Keep Working", role: .cancel) {}
             } message: {
-                Text(existingApp == nil ? "The generated preview and current AI work will be lost if you close it without saving." : "Your saved HTMLApp will not be changed unless you choose Save Changes.")
+                Text(existingApp == nil ? "The style previews and current AI work will be lost if you close without saving." : "Your saved HTMLApp will not be changed unless you choose Save Changes.")
             }
             .alert("Forge couldn’t finish that step", isPresented: Binding(
                 get: { session.errorMessage != nil },
@@ -212,10 +223,20 @@ struct AIGenerationView: View {
                 }
                 .font(.caption)
 
+                if existingApp == nil {
+                    Toggle("Preview 3 different styles first", isOn: $stylePickerEnabled)
+                        .font(.subheadline)
+                }
+
                 Button {
-                    generateApp()
+                    if existingApp == nil && stylePickerEnabled {
+                        exploreStyleOptions()
+                    } else {
+                        selectedStyle = nil
+                        generateApp()
+                    }
                 } label: {
-                    Label("Generate HTML App", systemImage: "sparkles")
+                    Label(existingApp == nil && stylePickerEnabled ? "Explore App Styles" : "Generate HTML App", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -237,6 +258,196 @@ struct AIGenerationView: View {
                 }
             }
         }
+    }
+
+
+    private var styleSelectionView: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Button {
+                            generationTask?.cancel()
+                            exploringStyles = false
+                            styleOptions = []
+                            styleFailure = nil
+                        } label: {
+                            Label("Back", systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.bordered)
+                        Spacer(minLength: 8)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("Choose your app's look").font(.subheadline.weight(.semibold))
+                            Text("Quick sketches, not finished apps")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(12)
+                    .background(.bar)
+
+                    if exploringStyles {
+                        Spacer()
+                        VStack(spacing: 15) {
+                            ProgressView().controlSize(.large)
+                            Text("Designing three directions").font(.headline)
+                            Text("Making small previews to compare their colors, layouts, and motion. Full app generation starts only after you choose.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 28)
+                            Button("Skip and build directly") { skipStyleSelection() }
+                                .buttonStyle(.bordered)
+                        }
+                        Spacer()
+                    } else if let failure = styleFailure {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "paintpalette")
+                                .font(.largeTitle).foregroundStyle(.secondary)
+                            Text("Style previews aren't available").font(.headline)
+                            Text(failure)
+                                .font(.subheadline).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("Try previews again") { exploreStyleOptions() }
+                                .buttonStyle(.bordered)
+                            Button("Build app directly") { skipStyleSelection() }
+                                .buttonStyle(.borderedProminent)
+                        }
+                        .padding(24)
+                        Spacer()
+                    } else if styleOptions.indices.contains(selectedStyleIndex) {
+                        ForgeStyleSketchView(html: styleOptions[selectedStyleIndex].previewHTML)
+                            .id(styleOptions[selectedStyleIndex].name + String(selectedStyleIndex))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+
+                if !exploringStyles && styleFailure == nil && !styleOptions.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("SELECT A STYLE")
+                                .font(.caption2.weight(.bold))
+                                .tracking(1.1)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(selectedStyleIndex + 1) of \(styleOptions.count)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 7) {
+                            ForEach(styleOptions) { option in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        selectedStyleIndex = option.id
+                                    }
+                                } label: {
+                                    VStack(spacing: 5) {
+                                        Text(option.name)
+                                            .font(.caption.weight(.semibold))
+                                            .lineLimit(2)
+                                            .minimumScaleFactor(0.8)
+                                        if option.id == selectedStyleIndex {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.caption)
+                                        } else {
+                                            Image(systemName: "circle")
+                                                .font(.caption)
+                                                .opacity(0.6)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 46)
+                                    .padding(.horizontal, 4)
+                                    .foregroundStyle(option.id == selectedStyleIndex ? Color.accentColor : Color.primary)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(option.id == selectedStyleIndex ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.08))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .strokeBorder(option.id == selectedStyleIndex ? Color.accentColor : Color.clear, lineWidth: 1.5)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Preview \(option.name)")
+                                .accessibilityAddTraits(option.id == selectedStyleIndex ? [.isSelected] : [])
+                            }
+                        }
+                        Text(styleOptions[selectedStyleIndex].summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Button {
+                                exploreStyleOptions()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .frame(width: 30, height: 32)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Generate new style choices")
+                            Button {
+                                selectedStyle = styleOptions[selectedStyleIndex]
+                                styleOptions = []
+                                styleFailure = nil
+                                generateApp()
+                            } label: {
+                                Label("Build with this style", systemImage: "sparkles")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        Button("Skip styles and build directly") { skipStyleSelection() }
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: min(500, geometry.size.width - 24))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                    .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.13)))
+                    .shadow(color: .black.opacity(0.17), radius: 18, y: 7)
+                    .padding(.bottom, 12)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+
+    private func exploreStyleOptions() {
+        let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !idea.isEmpty, !exploringStyles else { return }
+        generationTask?.cancel()
+        exploringStyles = true
+        styleOptions = []
+        selectedStyleIndex = 0
+        styleFailure = nil
+        selectedStyle = nil
+        generationTask = Task {
+            do {
+                let choices = try await ForgeStylePreviewService.generate(for: idea)
+                try Task.checkCancellation()
+                styleOptions = choices
+                selectedStyleIndex = 0
+                exploringStyles = false
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                styleFailure = error.localizedDescription
+                exploringStyles = false
+            }
+        }
+    }
+
+    private func skipStyleSelection() {
+        generationTask?.cancel()
+        exploringStyles = false
+        styleOptions = []
+        selectedStyleIndex = 0
+        styleFailure = nil
+        selectedStyle = nil
+        generateApp()
     }
 
     private var studioView: some View {
@@ -387,6 +598,9 @@ struct AIGenerationView: View {
         dictation.stop()
         lastFailedChange = nil
         let originalPrompt = prompt
+        let designBrief = selectedStyle.map { originalPrompt + "
+
+" + $0.buildInstruction } ?? originalPrompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.beginDraft(prompt: originalPrompt)
@@ -408,13 +622,13 @@ struct AIGenerationView: View {
             }
             guard !Task.isCancelled else { return }
             await session.generate(
-                prompt: originalPrompt,
+                prompt: designBrief,
                 originalUserPrompt: originalPrompt,
                 researchReport: webReport
             )
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            await runOptionalUIPolish(originalPrompt: originalPrompt)
+            await runOptionalUIPolish(originalPrompt: designBrief)
         }
     }
 
