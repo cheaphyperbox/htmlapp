@@ -4,6 +4,7 @@ import ActivityKit
 
 struct GeneratedIntegrationsView: View {
     @EnvironmentObject private var store: AppStore
+    @AppStorage("developerMode") private var developerMode = false
     @State private var widgets: [HTMLAppWidgetDefinition] = []
     @State private var jobs: [HTMLAppBackgroundFetchJob] = []
     @State private var refreshingJobID: String?
@@ -30,9 +31,16 @@ struct GeneratedIntegrationsView: View {
             if !HTMLAppSharedContainer.appGroupAvailable {
                 Section("Widget Signing Problem") {
                     Label("App Group storage is unavailable on this installation.", systemImage: "exclamationmark.triangle")
-                    Text("Select an authorized group below. Both signed binaries and their provisioning profiles must authorize the same group. A certificate alone is insufficient.")
+                    Text("HTMLApp will try to restore a previously approved group. If it cannot, both binaries must be signed with an authorized matching App Group.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if let suggested = HTMLAppProviderStorage.recommendedCompatibleGroup {
+                        Button("Choose compatible widget storage") {
+                            widgetError = nil
+                            pendingGroup = suggested
+                            confirmGroup = true
+                        }
+                    }
                 }
             }
 
@@ -55,6 +63,7 @@ struct GeneratedIntegrationsView: View {
                 Text("WidgetKit controls the actual refresh schedule. A generated app can request periodic refresh, but iOS may coalesce or delay it.")
             }
 
+            if developerMode {
             Section("Signing group setup") {
                 Text("Active widget storage: \(HTMLAppSharedContainer.appGroupID)").font(.caption.monospaced())
                 if HTMLAppSharedContainer.appGroupID != HTMLAppSharedContainer.originalGroupID {
@@ -101,6 +110,8 @@ struct GeneratedIntegrationsView: View {
                 }
                 Button("Read Diagnostic Result") { widgetError = nil; reload() }
                 if let widgetError { Text(widgetError).foregroundStyle(.red).font(.caption) }
+            }
+
             }
 
             if widgets.isEmpty {
