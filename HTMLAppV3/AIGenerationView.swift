@@ -12,6 +12,8 @@ struct AIGenerationView: View {
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @StateObject private var milestones = ForgeBuildMilestones()
+    @StateObject private var workTracker = ForgeWorkTracker()
+    @State private var draftWorkID = "draft-\(UUID().uuidString)"
     @State private var microphoneTranslation: CGSize = .zero
     @State private var microphoneArmed = false
     @State private var microphoneCapturing = false
@@ -79,7 +81,7 @@ struct AIGenerationView: View {
                     }
                     .disabled(saving)
                 }
-                if developerMode && debugTrace.isActive {
+                if developerMode && (debugTrace.isActive || !debugTrace.history.isEmpty) {
                     ToolbarItem(placement: .confirmationAction) {
                         Button { showDebug = true } label: { Image(systemName: "ladybug") }
                             .accessibilityLabel("View AI debug trace")
@@ -97,7 +99,8 @@ struct AIGenerationView: View {
                 Button("Discard and Close", role: .destructive) {
                     generationTask?.cancel()
                     dictation.stop()
-                    AIDebugTraceStore.shared.clear()
+                    AIDebugTraceStore.shared.finish(outcome: "Discarded")
+                    workTracker.finish(outcome: "Discarded")
                     session.clearCheckpoint()
                     styleOptions = []
                     styleFailure = nil
@@ -142,6 +145,7 @@ struct AIGenerationView: View {
             }
         }
         .task {
+            workTracker.select(appKey: existingApp?.id ?? draftWorkID)
             if let existingApp, !didLoadExisting {
                 didLoadExisting = true
                 session.load(existing: existingApp)
@@ -181,12 +185,31 @@ struct AIGenerationView: View {
         .onChange(of: browserResearch.completedPages) { pages in
             for page in pages {
                 milestones.add(.website, "Read \(page.host)", bytes: page.bytes, key: "web-\(page.id)")
+                workTracker.transition(.research)
+                workTracker.updateVolume(page.bytes)
+            }
+        }
+        .onChange(of: browserResearch.status) { status in
+            workTracker.observe(phase: session.phase, isBrowsing: browserResearch.isBrowsing,
+                                browserStatus: status, streamSection: session.streamedSection)
+        }
+        .onChange(of: session.streamedSection) { part in
+            workTracker.observe(phase: session.phase, isBrowsing: browserResearch.isBrowsing,
+                                browserStatus: browserResearch.status, streamSection: part)
+        }
+        .onChange(of: session.sectionByteCounts) { parts in
+            for (key, bytes) in parts {
+                let stage: ForgeWorkSlice.Stage = key == "script" ? .script : (key == "body" ? .body : .css)
+                workTracker.updateVolume(bytes, stage: stage)
             }
         }
         .onChange(of: session.streamedHTML) { html in
             milestones.inspectHTML(html)
         }
         .onChange(of: session.phase) { phase in
+            workTracker.observe(phase: phase, isBrowsing: browserResearch.isBrowsing,
+                                browserStatus: browserResearch.status, streamSection: session.streamedSection)
+            if debugTrace.isActive { AIDebugTraceStore.shared.append("PHASE", phase) }
             if phase == "Generating live preview" {
                 milestones.add(.api, "Capabilities checked", bytes: browserResearch.lastReport.utf8.count, key: "api-phase")
             }
@@ -566,7 +589,8 @@ struct AIGenerationView: View {
                         explanation: currentProgressNote,
                         milestones: milestones.events,
                         active: session.isWorking || browserResearch.isBrowsing,
-                        bytes: session.streamedByteCount
+                        bytes: session.streamedByteCount,
+                        runs: workTracker.recentRuns
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -746,6 +770,8 @@ struct AIGenerationView: View {
 
     private func generateApp() {
         milestones.reset()
+        workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
+        workTracker.updateVolume(prompt.utf8.count)
         milestones.add(.plan, "Reading your request", bytes: prompt.utf8.count, key: "initial")
         dictation.stop()
         lastFailedChange = nil
@@ -756,6 +782,12 @@ struct AIGenerationView: View {
         session.beginDraft(prompt: originalPrompt)
         session.isWorking = true
         generationTask = Task {
+            defer {
+                let outcome = Task.isCancelled ? "Stopped" :
+                    (session.errorMessage == nil ? "Completed" : "Failed")
+                workTracker.finish(outcome: outcome)
+                AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
+            }
             let webReport: String
             if AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
                 session.phase = "Generating live preview"
@@ -785,11 +817,21 @@ struct AIGenerationView: View {
     private func applyAIChange() {
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         milestones.reset()
+        workTracker.begin(kind: "AI edit", appKey: existingApp?.id ?? draftWorkID)
+        workTracker.updateVolume(changePrompt.utf8.count)
         milestones.add(.plan, "Preparing your edit", bytes: changePrompt.utf8.count, key: "edit")
         let change = changePrompt
         uiPolishNotice = nil
+        AIDebugTraceStore.shared.begin(originalPrompt: "EDIT REQUEST\n" + change, config: AISettingsStore.configuration)
+        AIDebugTraceStore.shared.append("EDIT INPUT", "Prior HTML bytes: \(session.streamedHTML.utf8.count); existing app: \(existingApp?.name ?? "new draft")")
         session.isWorking = true
         generationTask = Task {
+            defer {
+                let outcome = Task.isCancelled ? "Stopped" :
+                    (session.errorMessage == nil ? "Completed" : "Failed")
+                workTracker.finish(outcome: outcome)
+                AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
+            }
             let researchRequest = """
 Existing HTMLApp goal:
 \(session.refinedBrief)
@@ -867,9 +909,13 @@ Requested edit:
                 }
                 store.notice = "Saved AI changes to \(existingApp.name)."
             } else {
+                let beforeIDs = Set(store.apps.map(\.id))
                 await store.add(html: html, summary: session.description)
+                if let added = store.apps.first(where: { !beforeIDs.contains($0.id) }) {
+                    workTracker.associateDraft(with: added.id)
+                }
             }
-            AIDebugTraceStore.shared.clear()
+            AIDebugTraceStore.shared.finish(outcome: "Saved")
             session.clearCheckpoint()
             saving = false
             dismiss()
@@ -879,6 +925,8 @@ Requested edit:
     private func stopKeepingDraft() {
         session.keepCurrentPartialDraft()
         generationTask?.cancel()
+        workTracker.finish(outcome: "Stopped")
+        AIDebugTraceStore.shared.finish(outcome: "Stopped")
         dictation.stop()
         session.isWorking = false
         uiPolishNotice = session.streamedHTML.isEmpty
