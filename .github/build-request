@@ -1,3 +1,3 @@
-Verify physics milestones, voice drag editing, AI runtime checks, clean iOS icons
+Retry Forge dashboard and microphone build after runner startup failed
 source=133a525f15e7af7a47814298891da8052a5500a8
-request=2026-10-20-forge-motion-qa
+requested=2026-10-21-0516
