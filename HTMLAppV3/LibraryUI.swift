@@ -417,41 +417,23 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
-        Button { store.launch(app) } label: { Label("Open", systemImage: "play.fill") }
-        Button { store.toggleFavorite(app) } label: {
-            Label(app.isFavorite == true ? "Remove from Favorites" : "Favorite", systemImage: app.isFavorite == true ? "star.slash" : "star.fill")
-        }
+        Button { store.toggleFavorite(app) } label: { Label(app.isFavorite == true ? "Remove Favorite" : "Favorite", systemImage: "star.fill") }
         Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: { Label("Move To", systemImage: "folder") }
-        Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised.fill") }
+        Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
-        Button { aiIconApp = app } label: { Label("Generate Icon with AI", systemImage: "app.badge") }
-        Button { edit(app) } label: {
-            Label(app.websiteSourceURL == nil ? "Edit HTML Code" : "Edit Website URL", systemImage: app.websiteSourceURL == nil ? "pencil" : "link")
-        }
-        if app.websiteSourceURL != nil {
-            Button { websiteSourcesApp = app } label: { Label("Downloaded Sources", systemImage: "externaldrive") }
-        }
+        Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
+        Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
         Divider()
-        Button { store.exportPortablePackage(appIDs: [app.id]) } label: {
-            Label("Share Package (AirDrop / Files)", systemImage: "square.and.arrow.up.on.square")
-        }
-        Button {
-            nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id])
-        } label: {
-            Label("Send with Nearby Transfer", systemImage: "antenna.radiowaves.left.and.right")
-        }
-        Button { store.exportHTML(app) } label: {
-            Label("Export Raw HTML", systemImage: "doc.text")
-        }
-        Button { profileApp = app } label: { Label("Install Home Screen Web Clip", systemImage: "apps.iphone") }
+        Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
+        Button { profileApp = app } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
-        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: { Label("Copy URL Scheme", systemImage: "link") }
+        Button { store.exportHTML(app) } label: { Label("Export Raw Code", systemImage: "doc.text") }
+        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: { Label("Copy Link to Open App", systemImage: "link") }
         Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
-        Button {} label: { Label("Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock") }
-            .disabled(true)
+        Button {} label: { Label("Last Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock") }.disabled(true)
         Divider()
-        Button(role: .destructive) { pendingDelete = app } label: { Label("Delete HTML App", systemImage: "trash") }
+        Button(role: .destructive) { pendingDelete = app } label: { Label("DELETE", systemImage: "trash") }
     }
 
     private func visibleFolders(in parentID: String?) -> [LibraryFolder] {
