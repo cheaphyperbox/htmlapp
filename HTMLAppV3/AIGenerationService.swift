@@ -401,6 +401,10 @@ final class AIGenerationSession: ObservableObject {
         guard !streamedHTML.trimmed.isEmpty else { return }
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
+        let beforeEditHTML = streamedHTML
+        let beforeEditDescription = description
+        let beforeEditIconScript = iconScript
+        let beforeEditIcon = renderedIconData
         isWorking = true
         errorMessage = nil
         failedPhase = nil
@@ -504,12 +508,22 @@ Requested change:
             phase = "Ready to review"
         } catch is CancellationError {
             failedPhase = phase
+            streamedHTML = beforeEditHTML
+            description = beforeEditDescription
+            iconScript = beforeEditIconScript
+            renderedIconData = beforeEditIcon
             errorMessage = nil
+            AIDebugTraceStore.shared.append("EDIT ROLLBACK", "Canceled edit restored previous working draft.")
             persistCheckpoint()
             phase = "Edit stopped"
         } catch {
             failedPhase = phase
+            streamedHTML = beforeEditHTML
+            description = beforeEditDescription
+            iconScript = beforeEditIconScript
+            renderedIconData = beforeEditIcon
             AIDebugTraceStore.shared.append("EDIT ERROR", error.localizedDescription)
+            AIDebugTraceStore.shared.append("EDIT ROLLBACK", "Restored previous HTML (\(beforeEditHTML.utf8.count) bytes) without changing saved app.")
             errorMessage = Self.friendlyMessage(for: error)
             persistCheckpoint()
             phase = "Edit stopped"
