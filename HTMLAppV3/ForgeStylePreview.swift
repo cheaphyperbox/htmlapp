@@ -118,7 +118,7 @@ struct ForgeStyleSketchView: UIViewRepresentable {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
         """
         var document = html
-        if let head = document.range(of: #"<head\\b[^>]*>"#, options: [.regularExpression, .caseInsensitive]) {
+        if let head = document.range(of: #"<head\b[^>]*>"#, options: [.regularExpression, .caseInsensitive]) {
             document.replaceSubrange(head, with: String(document[head]) + csp)
         }
         view.loadHTMLString(document, baseURL: nil)
