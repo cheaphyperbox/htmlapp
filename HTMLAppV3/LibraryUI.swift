@@ -38,6 +38,7 @@ struct LibraryView: View {
     @State private var showAllApps = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
+    @State private var shortcutPrompt = ""
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
@@ -86,7 +87,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
         .fullScreenCover(isPresented: $showGenerator) {
-            AIGenerationView().environmentObject(store).interactiveDismissDisabled(true)
+            AIGenerationView(initialPrompt: shortcutPrompt).environmentObject(store).interactiveDismissDisabled(true)
         }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
@@ -106,6 +107,10 @@ struct LibraryView: View {
                         }
                     }
             }
+        }
+        .onAppear(perform: handlePendingShortcut)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            handlePendingShortcut()
         }
         .sheet(item: $tintFolder) { folder in
             FolderTintPicker(folder: folder) { hex in
@@ -250,6 +255,24 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
+    private func handlePendingShortcut() {
+        if let name = UserDefaults.standard.string(forKey: "htmlapp.shortcut.openName") {
+            UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.openName")
+            let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let app = store.apps.first(where: { $0.name.localizedCaseInsensitiveCompare(wanted) == .orderedSame })
+                ?? store.apps.first(where: { $0.name.localizedCaseInsensitiveContains(wanted) }) {
+                store.launch(app)
+            } else {
+                store.notice = "Couldn't find the saved app named \(wanted). Check its name in Library."
+            }
+        }
+        if let idea = UserDefaults.standard.string(forKey: "htmlapp.shortcut.createPrompt") {
+            UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.createPrompt")
+            shortcutPrompt = idea
+            showGenerator = true
+        }
+    }
+
     private func libraryPage(folderID: String?) -> some View {
         let folders = visibleFolders(in: folderID)
         let apps = visibleApps(in: folderID)
