@@ -598,9 +598,7 @@ struct AIGenerationView: View {
         dictation.stop()
         lastFailedChange = nil
         let originalPrompt = prompt
-        let designBrief = selectedStyle.map { originalPrompt + "
-
-" + $0.buildInstruction } ?? originalPrompt
+        let designBrief = selectedStyle.map { originalPrompt + "\n\n" + $0.buildInstruction } ?? originalPrompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.beginDraft(prompt: originalPrompt)
