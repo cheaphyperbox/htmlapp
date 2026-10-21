@@ -10,6 +10,9 @@ struct HTMLAppLiveActivityAttributes: ActivityAttributes {
         var value: String
         var progress: Double?
         var accentHex: String
+        var secondaryLabel: String?
+        var secondaryValue: String?
+        var footer: String?
     }
 
     var appID: String
