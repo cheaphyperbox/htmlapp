@@ -75,7 +75,7 @@ struct AIGenerationView: View {
                         if exploringStyles || !styleOptions.isEmpty || styleFailure != nil || session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
-                            AIDebugTraceStore.shared.clear()
+                            AIDebugTraceStore.shared.finish(outcome: "Canceled before starting")
                             dismiss()
                         }
                     }
