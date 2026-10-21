@@ -121,6 +121,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             return
         }
 
+        // Compile each inline classic script without executing it. A syntax error
+        // prevents all handlers in that script from registering.
+        let scriptErrors = try? await evaluate(Self.inlineScriptSyntaxProbe, in: webView) as? [String]
+        if let scriptErrors { scriptErrors.forEach(appendIssue) }
+
         let phone = await snapshot(webView, width: 390, height: 844)
         if let phone {
             if phone.domNonEmpty == false {
@@ -302,6 +307,31 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
       window.confirm = (message) => { push('blocking confirm invoked', message); return false; };
       window.prompt = (message) => { push('blocking prompt invoked', message); return null; };
     })();
+    """#
+
+    private static let inlineScriptSyntaxProbe = #"""
+    (() => {
+      const found = [];
+      for (const [i, el] of Array.from(document.scripts).entries()) {
+        if (el.src || el.type === 'module' ||
+            (el.type && !/^(text\/javascript|application\/javascript)$/i.test(el.type))) continue;
+        const source = el.textContent || '';
+        if (!source.trim()) continue;
+        try {
+          // Function constructor parses only; does not run app code.
+          new Function(source);
+        } catch (error) {
+          found.push('JavaScript syntax in inline script ' + (i + 1) + ': ' +
+            String(error?.message || error).slice(0, 250) +
+            '. Fix this before release; unparsed scripts leave buttons unresponsive.');
+        }
+      }
+      const buttons = document.querySelectorAll('button,[role="button"],[role="tab"]').length;
+      if (found.length && buttons) {
+        found.push('JavaScript did not compile; ' + buttons + ' controls may be unresponsive.');
+      }
+      return found;
+    })()
     """#
 
     private static let clickProbeScript = #"""
