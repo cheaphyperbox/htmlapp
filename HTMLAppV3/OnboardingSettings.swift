@@ -207,6 +207,11 @@ struct OnboardingView: View {
                 .onLongPressGesture {
                     withAnimation { showMenuExample.toggle() }
                 }
+                .accessibilityHint("Press and hold to reveal an example of available app actions.")
+                Button(showMenuExample ? "Hide Example Menu" : "Show Example Menu") {
+                    withAnimation { showMenuExample.toggle() }
+                }
+                .font(.subheadline.weight(.medium))
                 if showMenuExample {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Favorite · Move To · Permissions", systemImage: "star.fill")
