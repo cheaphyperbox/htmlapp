@@ -1,3 +1,3 @@
-Verify SwiftUI specialist editor fix and ActivityKit integration
-source=1ced85a22c6771e7581c84bf8e552d5c880cc44c
-request=2026-10-21-compiler-recheck
+Build Forge 3-style interactive picker and one IPA
+source=b842eb6239de85b3cf3fb6df97cc470f8108d057
+request=2026-10-21-style-picker
