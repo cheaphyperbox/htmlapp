@@ -83,7 +83,7 @@ final class AgenticBrowserResearch: ObservableObject {
 }
 
 enum WebResearchAgent {
-    private static let maximumSteps = 4
+    private static let maximumSteps = 3
     private static let maximumNotebookCharacters = 24_000
 
     static func run(
@@ -182,27 +182,10 @@ Pick the single best next action.
             }
         }
 
-        await status("Summarizing web research…")
-        let summarySystem = """
-Summarize the browser notebook for an HTML app generator. Include only supported facts, useful URLs, documented endpoints/capabilities, authentication/CORS constraints when visible, and concrete implementation guidance. Do not invent anything that is not present in the notebook. Be concise.
-"""
-        do {
-            let final = try await AIProviderClient.complete(
-                config: config,
-                system: summarySystem,
-                messages: [("user", "Request: \(request)\n\nNotebook:\n\(notebook)")],
-                timeout: 45,
-                maxTokens: 1600
-            )
-            let provenance = successfullyOpenedPages == 0
-                ? "Discovery leads only; no documentation page was read. Verify before wiring external APIs.\n\n"
-                : "Documentation pages read: \(successfullyOpenedPages).\n\n"
-            return provenance + final.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\nResearch navigation:\n" + compactEvidence(notebook)
-        } catch {
-            guard !notebook.isEmpty else { throw error }
-            await status("Using gathered research…")
-            return fallbackReport(notebook: notebook, request: request, pagesRead: successfullyOpenedPages)
-        }
+        await status("Using gathered evidence…")
+        // The notebook already contains the actual page observations and URLs.
+        // Avoid a fourth paid AI call just to paraphrase them before coding.
+        return fallbackReport(notebook: notebook, request: request, pagesRead: successfullyOpenedPages)
     }
 
     private static func fallbackReport(notebook: String, request: String, pagesRead: Int) -> String {
