@@ -2,49 +2,258 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Binding var complete: Bool
-    @State private var page = 0
+    @AppStorage("libraryLayout") private var libraryLayout = "list"
+    @State private var step = 0
+    @State private var showAISetup = false
+    @State private var showMenuExample = false
+
+    private let numberOfSteps = 6
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if page > 0 {
-                    Button("Back") { withAnimation { page -= 1 } }
+                if step > 0 {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) { step -= 1 }
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
                 }
                 Spacer()
-                Text("Step \(page + 1) of 3")
-                    .font(.caption.weight(.semibold))
+                Text("STEP \(step + 1) OF \(numberOfSteps)")
+                    .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(.secondary)
+                Spacer()
+                if step < numberOfSteps - 1 {
+                    Button("Skip Setup") { complete = true }
+                        .font(.subheadline)
+                }
             }
-            .padding()
+            .padding(.horizontal, 22)
+            .padding(.top, 15)
+            .padding(.bottom, 12)
 
-            if page == 2 {
+            ProgressView(value: Double(step + 1), total: Double(numberOfSteps))
+                .tint(.accentColor)
+                .padding(.horizontal, 22)
+                .padding(.bottom, 10)
+
+            if step == numberOfSteps - 1 {
                 HTMLAppFirstRunPermissionsView(onFinished: { complete = true })
             } else {
-                Spacer(minLength: 0)
-                VStack(spacing: 20) {
-                    Image(systemName: page == 0 ? "square.stack.3d.up.fill" : "sparkles")
-                        .font(.system(size: 65, weight: .medium))
-                        .foregroundStyle(.tint)
-                    Text(page == 0 ? "Everything in one Library" : "Make your own apps")
-                        .font(.largeTitle.bold())
-                        .multilineTextAlignment(.center)
-                    Text(page == 0
-                         ? "Open your saved apps, share them with nearby devices, or add them to your Home Screen."
-                         : "Tell Forge what you want. Choose a look, build the app, and keep editing until you're happy.")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 22)
-                }
-                .padding(20)
-                Spacer(minLength: 0)
-                Button("Continue") { withAnimation { page += 1 } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: symbol)
+                                .font(.system(size: 56, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 118, height: 118)
+                                .background(
+                                    LinearGradient(colors: [.indigo, .purple, .blue],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: 32)
+                                )
+                                .shadow(color: .indigo.opacity(0.22), radius: 16, y: 8)
+                            Spacer()
+                        }
+                        .padding(.top, 24)
+
+                        Text(title)
+                            .font(.largeTitle.bold())
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(detail)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        tutorialContent
+                    }
+                    .frame(maxWidth: 580)
                     .frame(maxWidth: .infinity)
-                    .padding()
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 36)
+                    .id(step)
+                    .transition(.opacity)
+                }
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 9) {
+                        Button {
+                            advance()
+                        } label: {
+                            Text(step == 0 ? "Show Me How" : "Continue")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        Button("Skip This Step") { advance() }
+                            .font(.subheadline)
+                            .padding(.vertical, 4)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(.regularMaterial)
+                }
             }
         }
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .sheet(isPresented: $showAISetup) {
+            NavigationStack {
+                AIConfigurationSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showAISetup = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    private var title: String {
+        switch step {
+        case 0: return "Welcome to HTMLApp"
+        case 1: return "Your app Library"
+        case 2: return "Make an app with AI"
+        case 3: return "Change anything later"
+        default: return "Share and add to Home Screen"
+        }
+    }
+
+    private var detail: String {
+        switch step {
+        case 0: return "Create, collect, and customize small apps right on your iPhone or iPad. You can skip anything and learn as you go."
+        case 1: return "All your saved apps live here. Choose the way you want to see them."
+        case 2: return "Describe what you want. Forge can design a few looks and create the app for you. Connecting an AI provider is optional until you want to generate."
+        case 3: return "Press and hold a saved app to see its shortcuts. You can also edit its code or ask AI to make changes."
+        default: return "Send apps to another device or put a saved app on your Home Screen. iOS may ask you to approve a profile."
+        }
+    }
+
+    private var symbol: String {
+        switch step {
+        case 0: return "square.stack.3d.up.fill"
+        case 1: return "square.grid.2x2.fill"
+        case 2: return "sparkles"
+        case 3: return "hand.tap.fill"
+        default: return "iphone.gen3.radiowaves.left.and.right"
+        }
+    }
+
+    @ViewBuilder
+    private var tutorialContent: some View {
+        switch step {
+        case 0:
+            tutorialRow("1", "Create or import", "Tap + in your Library to generate with AI, import HTML, or save a website.", symbol: "plus.circle.fill", tint: .blue)
+            tutorialRow("2", "Open and use", "Tap a saved app to launch it. Its files and settings remain in your Library.", symbol: "play.rectangle.fill", tint: .purple)
+            tutorialRow("3", "Keep improving", "Long-press an app to edit, favorite, move, share, or add it to your Home Screen.", symbol: "hand.point.up.left.fill", tint: .orange)
+        case 1:
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Choose your Library layout")
+                    .font(.headline)
+                Picker("Library layout", selection: $libraryLayout) {
+                    Label("List", systemImage: "list.bullet").tag("list")
+                    Label("Grid", systemImage: "square.grid.2x2").tag("grid")
+                }
+                .pickerStyle(.segmented)
+                Text(libraryLayout == "grid"
+                     ? "Grid displays tappable app icons on pages, like the iPhone Home Screen."
+                     : "List displays apps with names and details so they're easy to find.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Label("You can change this later in Settings.", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(19)
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 20))
+        case 2:
+            tutorialRow("1", "Open Forge", "Tap + in the Library and choose Generate with AI.", symbol: "plus.app.fill", tint: .indigo)
+            tutorialRow("2", "Tell it your idea", "Type your idea or hold the microphone to speak. Explore styles if you want.", symbol: "mic.fill", tint: .pink)
+            tutorialRow("3", "Save and refine", "Try your app, then save it. Long-press it and choose Edit with AI for changes.", symbol: "checkmark.circle.fill", tint: .mint)
+            Button {
+                showAISetup = true
+            } label: {
+                Label("Set Up My AI Provider (Optional)", systemImage: "key.horizontal.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        case 3:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Try a long press")
+                    .font(.headline)
+                HStack(spacing: 14) {
+                    Image(systemName: "app.fill")
+                        .font(.system(size: 35))
+                        .foregroundStyle(.indigo)
+                        .frame(width: 62, height: 62)
+                        .background(Color.indigo.opacity(0.10), in: RoundedRectangle(cornerRadius: 15))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Example App").font(.headline)
+                        Text("Press and hold this sample.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 18))
+                .onLongPressGesture {
+                    withAnimation { showMenuExample.toggle() }
+                }
+                if showMenuExample {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Favorite · Move To · Permissions", systemImage: "star.fill")
+                        Label("Edit with AI · Regenerate Icon", systemImage: "sparkles")
+                        Label("Share · Add to Home Screen", systemImage: "square.and.arrow.up")
+                        Label("Delete (with confirmation)", systemImage: "trash")
+                    }
+                    .font(.subheadline)
+                    .padding(16)
+                    .background(Color.accentColor.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 16))
+                }
+                Text("This is just a tutorial example; it won't change your real apps.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        default:
+            tutorialRow("1", "Send to a friend", "Open Share with Nearby Devices on the sending device. The other device chooses Receive. Accept the connection and the app imports automatically.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
+            tutorialRow("2", "Add to Home Screen", "Long-press an app and choose Add to Home Screen. HTMLApp shows the steps to approve its profile in iOS Settings.", symbol: "apps.iphone", tint: .orange)
+            tutorialRow("3", "Find more options", "In Settings, you can choose a layout, manage your AI connection, and replay this tutorial.", symbol: "gearshape.fill", tint: .purple)
+        }
+    }
+
+    private func tutorialRow(_ number: String, _ heading: String, _ explanation: String,
+                             symbol: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: symbol)
+                .font(.title2.weight(.medium))
+                .foregroundStyle(tint)
+                .frame(width: 50, height: 50)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 14))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(number). \(heading)").font(.headline)
+                Text(explanation)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(15)
+        .background(Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 19))
+    }
+
+    private func advance() {
+        guard step < numberOfSteps - 1 else { complete = true; return }
+        withAnimation(.easeInOut(duration: 0.2)) { step += 1 }
     }
 }
 
