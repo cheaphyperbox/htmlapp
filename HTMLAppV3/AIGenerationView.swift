@@ -11,6 +11,10 @@ struct AIGenerationView: View {
     @State private var generationTask: Task<Void, Never>?
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
+    @StateObject private var milestones = ForgeBuildMilestones()
+    @State private var microphoneTranslation: CGSize = .zero
+    @State private var microphoneArmed = false
+    @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
@@ -155,6 +159,30 @@ struct AIGenerationView: View {
         .onChange(of: dictation.transcript) { value in
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged } else { prompt = merged }
+        }
+        .onChange(of: session.refinedBrief) { brief in
+            if !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                milestones.add(.plan, "App plan ready", bytes: brief.utf8.count, key: "prompt-plan")
+            }
+        }
+        .onChange(of: browserResearch.completedPages) { pages in
+            for page in pages {
+                milestones.add(.website, "Read \(page.host)", bytes: page.bytes, key: "web-\(page.id)")
+            }
+        }
+        .onChange(of: session.streamedHTML) { html in
+            milestones.inspectHTML(html)
+        }
+        .onChange(of: session.phase) { phase in
+            if phase == "Generating live preview" {
+                milestones.add(.api, "Capabilities checked", bytes: browserResearch.lastReport.utf8.count, key: "api-phase")
+            }
+            if phase.contains("icon") && (phase.contains("Checking") || phase.contains("Designing")) {
+                milestones.add(.icon, "App icon designed", bytes: session.iconScript.utf8.count, key: "icon")
+            }
+            if phase == "Ready to review" {
+                milestones.add(.test, "App checks completed", bytes: session.verificationReport.utf8.count, key: "checks")
+            }
         }
     }
 
@@ -453,74 +481,57 @@ struct AIGenerationView: View {
     private var studioView: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        if session.isWorking || browserResearch.isBrowsing {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(browserResearch.isBrowsing ? browserResearch.status : session.phase)
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            Text(currentProgressNote)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .contentTransition(.opacity)
-                        }
-                        Spacer(minLength: 8)
-                        if session.isWorking || browserResearch.isBrowsing {
-                            Button {
-                                stopKeepingDraft()
-                            } label: {
-                                Label("Stop", systemImage: "stop.fill")
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                        Button {
-                            showDetails = true
-                        } label: {
-                            Image(systemName: "doc.text.magnifyingglass")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityLabel("Open Forge details")
-                    }
-
-                    if session.isWorking && !session.refinedBrief.isEmpty {
-                        Text(session.refinedBrief.components(separatedBy: "\n").first ?? session.refinedBrief)
-                            .font(.caption)
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(browserResearch.isBrowsing ? "Researching your app" : session.isWorking ? "Creating your app" : "Your app is ready")
+                            .font(.headline)
+                        Text(browserResearch.isBrowsing ? browserResearch.status : session.phase)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
-                    HStack(spacing: 10) {
-                        if session.streamedByteCount > 0 {
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(session.streamedByteCount), countStyle: .file) + " generated")
+                    Spacer(minLength: 4)
+                    if session.isWorking || browserResearch.isBrowsing {
+                        Button { stopKeepingDraft() } label: {
+                            Label("Stop", systemImage: "stop.fill")
                         }
-                        if session.streamedByteCount > 0 || !session.streamedHTML.isEmpty {
-                            Text("Recovery checkpoint active")
-                        }
-                        Spacer()
-                        Text("Runtime QA is offscreen, not a device test")
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    Button { showDetails = true } label: {
+                        Image(systemName: "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Forge details")
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 11)
                 .background(.bar)
 
-                HTMLWebView(
-                    html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
-                    appID: existingApp?.id ?? "PREVIEW"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if session.isWorking || browserResearch.isBrowsing {
+                    ForgeBuildDashboard(
+                        title: browserResearch.isBrowsing ? browserResearch.status : session.phase,
+                        explanation: currentProgressNote,
+                        milestones: milestones.events,
+                        active: session.isWorking || browserResearch.isBrowsing,
+                        bytes: session.streamedByteCount
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    HTMLWebView(
+                        html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
+                        appID: existingApp?.id ?? "PREVIEW"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
 
                 if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty {
                     VStack(spacing: 10) {
+                        if let microphoneEditNotice {
+                            Text(microphoneEditNotice).font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         if let uiPolishNotice {
                             Text(uiPolishNotice)
                                 .font(.caption)
@@ -574,6 +585,12 @@ struct AIGenerationView: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+            .coordinateSpace(name: "forgeEditSurface")
+            .overlay(alignment: .topLeading) {
+                if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty && !saving {
+                    voiceEditBubble(in: proxy.size)
+                }
+            }
             .overlay {
                 if saving {
                     ZStack {
@@ -588,6 +605,75 @@ struct AIGenerationView: View {
         }
     }
 
+    private func voiceEditBubble(in size: CGSize) -> some View {
+        let side: CGFloat = 63
+        let origin = CGPoint(x: -24 + microphoneTranslation.width, y: 68 + microphoneTranslation.height)
+        let fullyVisible = origin.x >= 0 && origin.y >= 0 &&
+            origin.x + side <= size.width && origin.y + side <= size.height
+        return Image(systemName: "mic.fill")
+            .font(.system(size: 25, weight: .semibold))
+            .foregroundStyle(microphoneArmed ? Color.white : Color.primary.opacity(0.85))
+            .frame(width: side, height: side)
+            .background(microphoneArmed ? Color.red : Color(.systemGray4),
+                        in: RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(.white.opacity(0.55), lineWidth: 1))
+            .rotationEffect(.degrees(microphoneArmed ? 0 : -16))
+            .scaleEffect(microphoneArmed ? 1.07 : 1)
+            .shadow(color: .black.opacity(0.18), radius: 9, y: 3)
+            .offset(x: origin.x, y: origin.y)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: microphoneArmed)
+            .gesture(
+                DragGesture(minimumDistance: 3, coordinateSpace: .named("forgeEditSurface"))
+                    .onChanged { gesture in
+                        microphoneTranslation = gesture.translation
+                        let x = -24 + gesture.translation.width
+                        let y = 68 + gesture.translation.height
+                        let inside = x >= 0 && y >= 0 && x + side <= size.width && y + side <= size.height
+                        if inside && !microphoneArmed {
+                            microphoneArmed = true
+                            dictationForEdit = true
+                            dictationPrefix = ""
+                            microphoneEditNotice = nil
+                            Task { await dictation.start() }
+                        } else if !inside && microphoneArmed {
+                            microphoneArmed = false
+                            dictationForEdit = false
+                            dictation.stop()
+                            microphoneEditNotice = nil
+                        }
+                    }
+                    .onEnded { gesture in
+                        let x = -24 + gesture.translation.width
+                        let y = 68 + gesture.translation.height
+                        let inside = x >= 0 && y >= 0 && x + side <= size.width && y + side <= size.height
+                        let wasArmed = microphoneArmed
+                        let spoken = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                        microphoneArmed = false
+                        microphoneTranslation = .zero
+                        dictationForEdit = false
+                        dictation.stop()
+                        if inside && wasArmed {
+                            if !spoken.isEmpty {
+                                changePrompt = spoken
+                                showingChange = true
+                                applyAIChange()
+                            } else {
+                                showingChange = true
+                                microphoneEditNotice = "No words captured. Type your change below, or drag the mic in and try again."
+                            }
+                        }
+                    }
+            )
+            .onTapGesture {
+                showingChange = true
+                microphoneEditNotice = "Type an edit below, or drag this microphone fully on-screen to dictate."
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(fullyVisible && microphoneArmed ? "Recording edit" : "Drag microphone inward to dictate edit")
+            .accessibilityHint("Drag fully onto the screen to record; release to submit. Drag off-screen to cancel. Tap to type instead.")
+    }
+
     private var loadingHTML: String {
         """
         <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font-family:-apple-system;background:#f2f2f7;color:#111;display:grid;place-items:center;min-height:100vh}main{text-align:center;padding:32px}.dot{width:12px;height:12px;border-radius:50%;background:#007aff;margin:18px auto;animation:p 1s infinite alternate}@keyframes p{to{transform:scale(1.6);opacity:.35}}@media(prefers-color-scheme:dark){body{background:#000;color:#fff}}</style></head><body><main><h2>Building your app</h2><p>Your last good preview stays in place while Forge builds the next stable version.</p><div class="dot"></div></main></body></html>
@@ -595,6 +681,8 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        milestones.reset()
+        milestones.add(.plan, "Reading your request", bytes: prompt.utf8.count, key: "initial")
         dictation.stop()
         lastFailedChange = nil
         let originalPrompt = prompt
@@ -631,6 +719,9 @@ struct AIGenerationView: View {
     }
 
     private func applyAIChange() {
+        guard !session.isWorking && !browserResearch.isBrowsing else { return }
+        milestones.reset()
+        milestones.add(.plan, "Preparing your edit", bytes: changePrompt.utf8.count, key: "edit")
         let change = changePrompt
         uiPolishNotice = nil
         session.isWorking = true
