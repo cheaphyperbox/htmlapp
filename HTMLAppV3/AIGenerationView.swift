@@ -235,24 +235,34 @@ struct AIGenerationView: View {
                 TextEditor(text: $prompt)
                     .frame(minHeight: 150)
                     .font(.body)
-                Button {
-                    if dictation.recording {
-                        dictation.stop()
-                        promptDictationActive = false
-                    } else {
-                        dictationForEdit = false
-                        promptDictationActive = true
-                        dictationPrefix = prompt
-                        Task { await dictation.start() }
+                HStack(spacing: 14) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 34, weight: .semibold))
+                        .frame(width: 86, height: 86)
+                        .foregroundStyle(dictation.recording ? Color.white : Color.primary)
+                        .background(dictation.recording ? Color.red : Color(.systemGray4),
+                                    in: RoundedRectangle(cornerRadius: 24))
+                        .contentShape(RoundedRectangle(cornerRadius: 24))
+                        .onLongPressGesture(minimumDuration: 0, maximumDistance: 90,
+                                            pressing: { held in
+                            if held {
+                                startPromptRecording()
+                            } else {
+                                stopPromptRecording()
+                            }
+                        }, perform: {})
+                        .accessibilityLabel("Hold to dictate app idea")
+                        .accessibilityHint("Hold down the microphone while you speak, then release.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dictation.recording ? "Listening…" : "Hold to talk")
+                            .font(.headline)
+                        Text(dictation.recording ? "Release to stop recording." :
+                            "Keep the gray mic pressed while you describe your app.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        Text(dictation.status).font(.caption).foregroundStyle(.secondary)
                     }
-                } label: {
-                    Label(dictation.recording ? "Stop Dictation" : "Dictate Your Idea", systemImage: dictation.recording ? "stop.circle.fill" : "mic.fill")
                 }
-                .disabled(dictation.requestingPermission)
-                Text(dictation.status).font(.caption).foregroundStyle(.secondary)
-                Text("Dictation uses iOS speech recognition and only starts when you tap the microphone.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                .padding(.vertical, 7)
             } header: {
                 Text("What do you want to make?")
             } footer: {
@@ -306,6 +316,22 @@ struct AIGenerationView: View {
         }
     }
 
+
+    private func startPromptRecording() {
+        guard !dictation.recording && !dictation.requestingPermission else { return }
+        dictationForEdit = false
+        promptDictationActive = true
+        dictationPrefix = prompt
+        microphoneRecordingTask?.cancel()
+        microphoneRecordingTask = Task { await dictation.start() }
+    }
+
+    private func stopPromptRecording() {
+        microphoneRecordingTask?.cancel()
+        microphoneRecordingTask = nil
+        dictation.stop()
+        promptDictationActive = false
+    }
 
     private var styleSelectionView: some View {
         GeometryReader { geometry in
@@ -369,14 +395,14 @@ struct AIGenerationView: View {
                 }
 
                 if !exploringStyles && styleFailure == nil && !styleOptions.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("SELECT A STYLE")
+                            Text("Pick a look")
                                 .font(.caption2.weight(.bold))
                                 .tracking(1.1)
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text("\(selectedStyleIndex + 1) of \(styleOptions.count)")
+                            Text("Try the preview above")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
@@ -402,7 +428,7 @@ struct AIGenerationView: View {
                                         }
                                     }
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 46)
+                                    .frame(height: 56)
                                     .padding(.horizontal, 4)
                                     .foregroundStyle(option.id == selectedStyleIndex ? Color.accentColor : Color.primary)
                                     .background(
@@ -422,7 +448,7 @@ struct AIGenerationView: View {
                         Text(styleOptions[selectedStyleIndex].summary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(3)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         HStack(spacing: 8) {
                             Button {
@@ -439,12 +465,12 @@ struct AIGenerationView: View {
                                 styleFailure = nil
                                 generateApp()
                             } label: {
-                                Label("Build with this style", systemImage: "sparkles")
+                                Label("Use this look", systemImage: "checkmark.circle.fill")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
                         }
-                        Button("Skip styles and build directly") { skipStyleSelection() }
+                        Button("Skip and make app now") { skipStyleSelection() }
                             .font(.caption)
                             .frame(maxWidth: .infinity)
                     }
@@ -782,7 +808,11 @@ Requested edit:
             lastFailedChange = nil
             changePrompt = ""
             showingChange = true
-            await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
+            if session.wantsUIPolish {
+                await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
+            } else {
+                uiPolishNotice = "This was a focused edit; no additional UI redesign was needed."
+            }
         }
     }
 
