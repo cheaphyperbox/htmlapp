@@ -149,10 +149,13 @@ struct ForgeBuildDashboard: View {
     let milestones: [ForgeBuildMilestone]
     let active: Bool
     let bytes: Int
+    let runs: [ForgeWorkRun]
     @State private var playGame = true
+    @State private var showNumbers = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        ScrollView {
+        VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .top, spacing: 12) {
                 if active { ProgressView().controlSize(.regular) }
                 VStack(alignment: .leading, spacing: 7) {
@@ -166,6 +169,32 @@ struct ForgeBuildDashboard: View {
                         .lineLimit(4)
                 }
             }
+            .padding(.horizontal, 18)
+
+            HStack(alignment: .center, spacing: 13) {
+                ForgeWorkRing(runs: runs, active: active)
+                    .frame(width: 178)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AI activity")
+                        .font(.subheadline.weight(.semibold))
+                    if let stage = runs.last?.slices.last {
+                        HStack(spacing: 6) {
+                            Circle().fill(stage.stage.color).frame(width: 8, height: 8)
+                            Text(stage.stage.label).font(.subheadline.weight(.medium))
+                        }
+                    }
+                    Text("Colors show each task. Larger arcs took longer; thicker arcs produced more text.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+
+            DisclosureGroup("Compare time and text per task", isExpanded: $showNumbers) {
+                ForgeRunBreakdown(runs: runs).padding(.vertical, 6)
+            }
+            .font(.subheadline)
             .padding(.horizontal, 18)
 
             HStack {
@@ -223,13 +252,13 @@ struct ForgeBuildDashboard: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 18)
             }
-            Spacer(minLength: 0)
-            Text("A visual summary of real milestones — not a completion percentage.")
+            Text("The game keeps moving between real AI milestones. Only named milestones indicate completed work.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 18)
                 .padding(.bottom, 14)
         }
-        .padding(.top, 18)
+        .padding(.top, 14)
+        }
     }
 }
