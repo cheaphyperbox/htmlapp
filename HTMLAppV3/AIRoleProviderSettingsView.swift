@@ -44,7 +44,7 @@ struct AIRoleProviderSettingsView: View {
             }
 
             if separate {
-                Section("Specialist Connection") {
+                Section {
                     Picker("API format", selection: $format) {
                         ForEach(AIProviderConfiguration.Compatibility.allCases) { option in
                             Text(option.rawValue).tag(option)
@@ -63,6 +63,8 @@ struct AIRoleProviderSettingsView: View {
                     if !key.isEmpty {
                         Button("Clear specialist API key", role: .destructive) { key = "" }
                     }
+                } header: {
+                    Text("Specialist Connection")
                 } footer: {
                     Text("OpenAI-compatible providers can use their own compatible chat/completions endpoint; Anthropic uses /v1/messages. For Gemini's OpenAI-compatible API, use https://generativelanguage.googleapis.com/v1beta/openai. Costs and compatibility depend on your provider.")
                 }
