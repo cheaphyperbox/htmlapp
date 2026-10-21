@@ -21,6 +21,25 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.3" || version.hasPrefix("1.3.") {
+            return [
+                Entry(id: "guided-start", title: "A guided welcome",
+                      description: "A clearer, six-step tour teaches you to create, open, edit, organize, and share HTML apps. Skip any step whenever you like.",
+                      symbol: "hand.wave.fill", tint: .indigo),
+                Entry(id: "easy-setup", title: "Set things up as you go",
+                      description: "Choose your Library layout and optionally connect your AI provider during setup. Permission requests remain your choice.",
+                      symbol: "slider.horizontal.3", tint: .blue),
+                Entry(id: "try-menu", title: "Learn app shortcuts",
+                      description: "Try the long-press menu on a safe example so you know how to favorite, edit, move, and share apps.",
+                      symbol: "hand.tap.fill", tint: .orange),
+                Entry(id: "release-notes", title: "Never miss an update",
+                      description: "HTMLApp remembers the last installed version and displays this What's New page when a newer version opens.",
+                      symbol: "sparkles.rectangle.stack", tint: .pink),
+                Entry(id: "replay", title: "Help whenever you need it",
+                      description: "Replay the tutorial or reopen this changelog from Settings → Help & Updates.",
+                      symbol: "questionmark.circle.fill", tint: .mint)
+            ]
+        }
         guard version == "1.2" || version.hasPrefix("1.2.") else { return [] }
         return [
             Entry(id: "forge", title: "A smarter AI creator",
@@ -57,7 +76,7 @@ struct HTMLAppWhatsNewView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Image(systemName: "sparkles.tv.fill")
+                        Image(systemName: "sparkles")
                             .font(.system(size: 42, weight: .medium))
                             .foregroundStyle(.white)
                             .frame(width: 86, height: 86)
@@ -85,7 +104,7 @@ struct HTMLAppWhatsNewView: View {
                                     detail: "Detailed release notes have not been published for this version.",
                                     symbol: "checkmark.seal.fill", tint: .blue)
                     } else {
-                        Text("Explore the 1.2 series improvements")
+                        Text("Highlights in this version")
                             .font(.headline)
                         ForEach(updates) { item in
                             whatsNewRow(title: item.title, detail: item.description,
