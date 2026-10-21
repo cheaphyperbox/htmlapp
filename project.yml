@@ -61,8 +61,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp
         PRODUCT_NAME: HTMLApp
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "2"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -135,8 +135,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mekabrine.htmlapp.widgets
         PRODUCT_NAME: HTMLAppWidgets
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "2"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         APPLICATION_EXTENSION_API_ONLY: YES
