@@ -107,6 +107,15 @@ enum HTMLAppProviderStorage {
                 return "App Group repair could not finish: \(error.localizedDescription)"
             }
         }
+        if let approved = UserDefaults.standard.string(forKey: "htmlapp.approvedWidgetGroup"),
+           compatibleGroups.contains(approved) {
+            do {
+                try activate(approved)
+                return "Recovered your previously approved widget App Group."
+            } catch {
+                return "Previously approved App Group couldn't be restored: \(error.localizedDescription)"
+            }
+        }
         return "App Group permission is missing from this signed app or widget. Re-sign both with the same authorized entitlement, or explicitly select a compatible group in Widget Settings."
     }
 
@@ -122,6 +131,7 @@ enum HTMLAppProviderStorage {
         guard try Data(contentsOf: marker) == data, selectedGroup == group else {
             throw HTMLAppWidgetStoreError(code: "group_selection_failed", message: "The group selection could not be verified. Check the device date and signing configuration.")
         }
+        UserDefaults.standard.set(group, forKey: "htmlapp.approvedWidgetGroup")
         // No saved apps or old snapshots are copied into a provider's shared group.
     }
 }
