@@ -74,7 +74,18 @@ final class ForgeWorkTracker: ObservableObject {
     init() {
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([ForgeWorkRun].self, from: data) {
-            history = decoded
+            // A force-quit may leave a recorded stage open; label it interrupted
+            // instead of counting all time since the app last ran.
+            history = decoded.map { old in
+                var value = old
+                if value.endedAt == nil {
+                    let stoppedAt = value.slices.last?.startedAt ?? value.startedAt
+                    value.endedAt = stoppedAt
+                    value.outcome = "Interrupted"
+                    if !value.slices.isEmpty { value.slices[value.slices.count - 1].endedAt = stoppedAt }
+                }
+                return value
+            }
         }
     }
 
@@ -270,6 +281,8 @@ struct ForgeRunBreakdown: View {
                             Text(String(format: "%.1fs", slice.duration))
                                 .monospacedDigit()
                             if slice.sourceBytes > 0 {
+                                Text("~\(slice.estimatedTokens) tokens")
+                                    .foregroundStyle(.secondary)
                                 Text(ByteCountFormatter.string(fromByteCount: Int64(slice.sourceBytes), countStyle: .file))
                                     .foregroundStyle(.secondary)
                             }
