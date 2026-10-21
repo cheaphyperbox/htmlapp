@@ -14,108 +14,101 @@ struct AIIconGenerationView: View {
     @State private var errorMessage: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @State private var showDebug = false
+    @State private var hasStarted = false
+    @State private var streamedCommands = 0
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack(spacing: 22) {
-                        VStack(spacing: 8) {
-                            AppIconView(app: app, size: 84)
-                            Text("Current").font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        VStack(spacing: 8) {
-                            if let rendered, let image = UIImage(data: rendered) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 84, height: 84)
-                                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            } else {
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(.secondary.opacity(0.12))
-                                    .frame(width: 84, height: 84)
-                                    .overlay {
-                                        Image(systemName: working ? "sparkles" : "app.dashed")
-                                            .font(.title)
-                                            .foregroundStyle(.secondary)
-                                    }
+            VStack(spacing: 22) {
+                Spacer(minLength: 10)
+                Group {
+                    if working {
+                        RoundedRectangle(cornerRadius: 35, style: .continuous)
+                            .fill(Color.secondary.opacity(0.10))
+                            .frame(width: 210, height: 210)
+                            .overlay {
+                                VStack(spacing: 16) {
+                                    ProgressView().controlSize(.large)
+                                    Image(systemName: "paintbrush.pointed.fill")
+                                        .font(.system(size: 42))
+                                        .symbolEffect(.pulse)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            Text("AI Preview").font(.caption).foregroundStyle(.secondary)
+                    } else if let rendered, let image = UIImage(data: rendered) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .interpolation(.high)
+                            .scaledToFill()
+                            .frame(width: 210, height: 210)
+                            .clipShape(RoundedRectangle(cornerRadius: 35, style: .continuous))
+                            .shadow(radius: 14, y: 8)
+                    } else {
+                        RoundedRectangle(cornerRadius: 35)
+                            .fill(Color.secondary.opacity(0.1))
+                            .frame(width: 210, height: 210)
+                            .overlay { Image(systemName: "app.dashed").font(.largeTitle) }
+                    }
+                }
+                Text(working ? "Creating a new icon…" : rendered == nil ? "Preparing an icon" : "Your new icon")
+                    .font(.title2.weight(.bold))
+                Text(status)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                if working {
+                    ProgressView()
+                    Text("The original icon remains saved until you approve this one.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else if rendered != nil {
+                    HStack(spacing: 10) {
+                        Button("Undo") {
+                            AIDebugTraceStore.shared.finish(outcome: "Icon preview discarded")
+                            dismiss()
                         }
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                Section {
-                    TextField("e.g. simpler, blue, emphasize calculator keys", text: $guidance, axis: .vertical)
-                        .lineLimit(2...4)
-                } header: {
-                    Text("Optional Direction")
-                } footer: {
-                    Text("Optional. HTMLApp now infers the app's purpose, visual identity, palette, and icon concept automatically when this field is empty.")
-                }
-
-                Section {
-                    Button {
-                        generate()
-                    } label: {
-                        HStack {
-                            if working { ProgressView() }
-                            Label(rendered == nil ? "Generate Icon" : "Generate Another", systemImage: "sparkles")
+                        .buttonStyle(.bordered)
+                        Button("Regenerate") { generate() }
+                            .buttonStyle(.bordered)
+                        Button("This Looks Good") {
+                            guard let rendered else { return }
+                            store.setGeneratedIcon(rendered, for: app)
+                            AIDebugTraceStore.shared.finish(outcome: "Icon accepted")
+                            dismiss()
                         }
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(working || !AISettingsStore.configuration.isConfigured)
-
-                    if working || status != "Ready" {
-                        Text(status).font(.footnote).foregroundStyle(.secondary)
-                    }
+                    .controlSize(.large)
+                } else if !working {
+                    Button("Try Again") { generate() }
+                        .buttonStyle(.borderedProminent)
                 }
-
-                if !script.isEmpty {
-                    Section("Icon Script") {
-                        Text(script)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                    }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption).foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
                 }
+                Spacer(minLength: 0)
             }
-            .navigationTitle("Generate App Icon")
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .navigationTitle("Regenerate Icon")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        AIDebugTraceStore.shared.clear()
-                        dismiss()
-                    }
+                    Button("Close") { dismiss() }
                 }
-                ToolbarItemGroup(placement: .confirmationAction) {
-                    if debugTrace.isActive {
+                if debugTrace.isActive {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button { showDebug = true } label: { Image(systemName: "ladybug") }
-                            .accessibilityLabel("View AI debug trace")
                     }
-                    Button("Use Icon") {
-                        guard let rendered else { return }
-                        store.setGeneratedIcon(rendered, for: app)
-                        AIDebugTraceStore.shared.clear()
-                        dismiss()
-                    }
-                    .disabled(rendered == nil || working)
                 }
             }
-            .sheet(isPresented: $showDebug) {
-                AIDebugTraceView()
-            }
-            .alert("Icon Generation Failed", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
+            .sheet(isPresented: $showDebug) { AIDebugTraceView() }
+            .task {
+                guard !hasStarted else { return }
+                hasStarted = true
+                generate()
             }
         }
     }
@@ -123,6 +116,7 @@ struct AIIconGenerationView: View {
     private func generate() {
         working = true
         rendered = nil
+        script = ""
         errorMessage = nil
         status = "Designing icon…"
 
