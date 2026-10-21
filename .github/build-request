@@ -1,3 +1,3 @@
-Retry Forge dashboard and microphone build after runner startup failed
-source=133a525f15e7af7a47814298891da8052a5500a8
-requested=2026-10-21-0516
+Compile and verify Forge physics, recorded voice edits, QA checks, and one IPA
+source=315c5c064f991ae1928558f9f2219c01a7de96be
+request=2026-10-21-0520-third-attempt
