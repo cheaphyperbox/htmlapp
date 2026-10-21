@@ -847,6 +847,61 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         return
     }
 
+    private func selfHealBrokenJavaScript(config: AIProviderConfiguration, issues: [String]) async -> Bool {
+        let baseline = streamedHTML
+        let diagnostic = issues.joined(separator: "\n")
+        AIDebugTraceStore.shared.append("SELF HEAL", "Beginning bounded syntax repair. HTML bytes: \(baseline.utf8.count)\n\(diagnostic)")
+        phase = "Repairing unresponsive app controls"
+        // The original remains in memory until a candidate actually passes the
+        // same offscreen JavaScript checks that detected the failure.
+        for attempt in 1...2 {
+            do {
+                let response = try await AIProviderClient.complete(
+                    config: config,
+                    system: """
+                    You are repairing a single-file HTML app that currently contains invalid inline JavaScript.
+                    Return a COMPLETE valid <htmlapp_code>...</htmlapp_code> document, NOT SEARCH/REPLACE patches.
+                    Prioritize valid parsing and functioning event handlers. Preserve the app UI, IDs, storage keys,
+                    native integrations, external endpoints, and existing user data. Change only broken code.
+                    Avoid fragile nested strings or dense minified expressions. No Markdown fences.
+                    """,
+                    messages: [("user", """
+                        ORIGINAL HTML:
+                        <htmlapp_existing>
+                        \(baseline)
+                        </htmlapp_existing>
+
+                        EXACT OFFSCREEN WEBVIEW ERRORS:
+                        \(diagnostic)
+
+                        Repair attempt: \(attempt). Re-check the complete JavaScript syntax before responding.
+                        """)],
+                    timeout: 130,
+                    maxTokens: 16000,
+                    retryOnTransient: true
+                )
+                let candidate = AIHTMLAgent.parse(response).html
+                guard !candidate.trimmed.isEmpty else {
+                    AIDebugTraceStore.shared.append("SELF HEAL", "Attempt \(attempt): no complete HTML returned.")
+                    continue
+                }
+                let structural = HTMLQualityChecks.issues(in: candidate)
+                let runtime = await HTMLRuntimeVerifier.verify(html: candidate)
+                if structural.isEmpty && runtime.isEmpty {
+                    streamedHTML = candidate
+                    verificationReport += "\nSelf-heal succeeded: complete HTML was checked in the offscreen runtime."
+                    AIDebugTraceStore.shared.append("SELF HEAL", "Attempt \(attempt): repaired HTML passed local checks.")
+                    return true
+                }
+                AIDebugTraceStore.shared.append("SELF HEAL", "Attempt \(attempt) still had issues: " + (structural + runtime).joined(separator: "\n"))
+            } catch {
+                AIDebugTraceStore.shared.append("SELF HEAL", "Attempt \(attempt) failed: \(error.localizedDescription)")
+            }
+        }
+        streamedHTML = baseline
+        return false
+    }
+
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         verificationReport = ""
         var uncorrectedSyntaxError = false
@@ -974,7 +1029,11 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription + (issues.isEmpty ? "" : "\n" + issues.joined(separator: "\n")))
         }
         if uncorrectedSyntaxError {
-            AIDebugTraceStore.shared.append("BLOCKED JAVASCRIPT", "Inline script did not compile; the app is not ready to save.")
+            let errors = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+            if await selfHealBrokenJavaScript(config: config, issues: errors) {
+                return
+            }
+            AIDebugTraceStore.shared.append("BLOCKED JAVASCRIPT", "Bounded full-source self-repair failed. The original saved app is untouched.")
             throw AIGenerationError.brokenJavaScript
         }
     }
