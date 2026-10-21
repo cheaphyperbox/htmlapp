@@ -93,6 +93,23 @@ enum HTMLAppProviderStorage {
         return candidates.contains(selectedGroup) ? selectedGroup : candidates.first
     }
 
+    // Only self-repair signing groups that the user already chose, or the
+    // original private app group. Never silently opt into another provider's
+    // shared group: its other signed apps may read published widget snapshots.
+    @discardableResult
+    static func repairPreviouslyApprovedGroup() -> String? {
+        if HTMLAppSharedContainer.appGroupAvailable { return nil }
+        if originalAvailable {
+            do {
+                try activate(HTMLAppSharedContainer.originalGroupID)
+                return "Restored the original authorized App Group."
+            } catch {
+                return "App Group repair could not finish: \(error.localizedDescription)"
+            }
+        }
+        return "App Group permission is missing from this signed app or widget. Re-sign both with the same authorized entitlement, or explicitly select a compatible group in Widget Settings."
+    }
+
     static func activate(_ group: String) throws {
         guard HTMLAppSigningGroups.common.contains(group),
               let directory = directory(group: group) else {
