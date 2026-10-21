@@ -30,7 +30,7 @@ struct AIPlanningResult {
 }
 
 enum AIGenerationError: LocalizedError {
-    case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon
+    case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon, brokenJavaScript
     case provider(String)
 
     var errorDescription: String? {
@@ -38,6 +38,7 @@ enum AIGenerationError: LocalizedError {
         case .notConfigured: return "Configure an AI API URL and model in Settings first."
         case .invalidEndpoint: return "The configured AI API URL is invalid."
         case .missingHTML: return "The AI response did not contain a complete HTML app."
+        case .brokenJavaScript: return "The generated app contains JavaScript syntax errors. Forge stopped before saving broken buttons. Retry the app checks to repair the script."
         case .invalidPatch: return "The AI returned a patch that could not be applied safely."
         case .missingIcon: return "The AI could not produce a valid, renderable app icon."
         case .provider(let message): return message
@@ -221,7 +222,9 @@ final class AIGenerationSession: ObservableObject {
             if AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
-                lastResearch = suppliedResearch
+                let localCapabilities = AIHTMLAgent.fastPathCapabilityQueries(for: originalPrompt)
+                let knownAPIs = HTMLAppDeviceAPIResearch.research(queries: localCapabilities)
+                lastResearch = [suppliedResearch, knownAPIs].filter { !$0.isEmpty }.joined(separator: "\n\n")
                 phase = "Generating live preview"
             } else {
                 phase = "Designing the app"
@@ -349,7 +352,10 @@ final class AIGenerationSession: ObservableObject {
             await installGeneratedAssets(finalAssets)
             try await ensureValidIcon(
                 config: AISettingsStore.configuration(for: .icon),
-                forceRegenerate: true
+                // The coding model's valid draft icon is a useful default. Only
+                // make another model call when a dedicated icon artist is chosen.
+                forceRegenerate: AISettingsStore.usesSpecialistProvider(for: .icon) ||
+                    AISettingsStore.iconModel != AISettingsStore.model
             )
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
@@ -810,6 +816,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         verificationReport = ""
+        var uncorrectedSyntaxError = false
         do {
             var changedOnPreviousPass = false
 
@@ -884,6 +891,9 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             let remainingStructuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
             let remainingRuntimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
             let remainingIssues = remainingStructuralIssues + remainingRuntimeIssues
+            uncorrectedSyntaxError = remainingRuntimeIssues.contains {
+                $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
+            }
             if remainingIssues.isEmpty {
                 verificationReport += verificationReport.isEmpty
                     ? "Local structural and offscreen runtime checks passed."
@@ -902,10 +912,17 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             let structuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
             let runtimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
             let issues = structuralIssues + runtimeIssues
+            uncorrectedSyntaxError = runtimeIssues.contains {
+                $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
+            }
             verificationReport = issues.isEmpty
                 ? "AI review unavailable. Local structure and offscreen runtime checks passed; device behavior still needs testing."
                 : "AI review unavailable. Local checks found: " + issues.joined(separator: " ")
             AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription + (issues.isEmpty ? "" : "\n" + issues.joined(separator: "\n")))
+        }
+        if uncorrectedSyntaxError {
+            AIDebugTraceStore.shared.append("BLOCKED JAVASCRIPT", "Inline script did not compile; the app is not ready to save.")
+            throw AIGenerationError.brokenJavaScript
         }
     }
 
@@ -1453,14 +1470,31 @@ Draw a distinctive, purpose-specific 1024px icon in IconScript. Use a crisp iOS-
     static func canSkipPreflight(for prompt: String) -> Bool {
         let clean = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !clean.isEmpty, clean.count <= 180,
-              !needsCapabilityResearch(for: clean),
               !needsWebResearch(for: clean) else { return false }
+        if clean.contains("habit tracker") || clean.contains("habit tracking") {
+            // Notifications are covered by the built-in native API catalog;
+            // a second planning model call is unnecessary for ordinary trackers.
+            return !clean.contains("sync") && !clean.contains("cloud") && !clean.contains("live data")
+        }
+        guard !needsCapabilityResearch(for: clean) else { return false }
         let selfContainedSignals = [
             "calculator", "counter", "timer", "stopwatch", "converter", "checklist",
             "notepad", "notes app", "flashcards", "pomodoro", "random picker", "dice roller",
             "packing list", "trip packing", "trip planner", "shopping list", "to-do list"
         ]
         return selfContainedSignals.contains(where: { containsSignal($0, in: clean) })
+    }
+
+    static func fastPathCapabilityQueries(for prompt: String) -> [String] {
+        let lower = prompt.lowercased()
+        var queries: [String] = []
+        if lower.contains("remind") || lower.contains("notif") || lower.contains("alert") {
+            queries.append("local notification permission scheduling and cancellation")
+        }
+        if lower.contains("habit") || lower.contains("checklist") || lower.contains("packing") {
+            queries.append("local persistence for structured offline data")
+        }
+        return queries
     }
 
     static func planPrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> AIPlanningResult {
