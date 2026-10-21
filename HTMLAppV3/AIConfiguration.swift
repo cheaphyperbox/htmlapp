@@ -88,7 +88,7 @@ enum AISettingsStore {
 
     static let nativeAPIReference = """
 HTMLAPP NATIVE API REFERENCE (always available in saved apps):
-window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, externalApps.maps/shortcuts, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, appStorage.get/set/remove/all/clear, widgets.configure/list/remove/reload, background.configure/list/remove/refreshNow, and speech.speak/stop.
+window.HTMLAppNative exposes Promise-based wrappers for: device.info/keepAwake, clipboard.readText/writeText, haptics.play, share.present, system.open, externalApps.maps/shortcuts, files.pick, contacts.pick/list/create, photos.pick/save, calendar.createEvent/events/updateEvent/deleteEvent, reminders.create/list/update/delete, notifications.schedule/cancel, biometrics.authenticate, secureStorage.set/get/remove, appStorage.get/set/remove/all/clear, widgets.configure/list/remove/reload, background.configure/list/remove/refreshNow, liveActivities.start/update/end/list (iOS 16.2+, user permission), and speech.speak/stop.
 
 The generation pipeline can also inject HTMLAPP DEVICE API CATALOG RESULTS. Those results are the authoritative searchable reference for exact method names, usage examples, return-shape notes, permission expectations, and limitations. Prefer them over remembered assumptions about iOS or Safari. If the catalog says a capability is unavailable, do not invent a bridge for it.
 

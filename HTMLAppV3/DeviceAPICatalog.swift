@@ -209,6 +209,28 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "A saved app can publish up to 8 widget definitions. Widget refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript execution. Minimum requested interval is 15 minutes, but WidgetKit decides actual refresh timing. iOS 17+ lets users choose among published HTMLApp widgets; iOS 16 exposes a primary/latest widget. Keep widget content glanceable and do not assume continuous execution."
         ),
         .init(
+            id: "live.activities",
+            title: "Native Live Activities and Dynamic Island",
+            keywords: ["live activity", "live activities", "dynamic island", "lock screen activity", "timer", "live progress", "activitykit"],
+            purpose: "Show an ongoing user-requested task on the Lock Screen and, on supported iPhones, the Dynamic Island. HTMLApp renders a safe native status, value and optional progress bar, not arbitrary HTML.",
+            api: "HTMLAppNative.liveActivities.start(definition); liveActivities.update(id,state); liveActivities.end(id); liveActivities.list()",
+            example: """
+            // Call from a user action, only for genuinely ongoing work.
+            const activity = await HTMLAppNative.liveActivities.start({
+              id: "trip-packing", title: "Packing for Rome",
+              subtitle: "Preparing luggage", value: "6 / 12",
+              progress: 0.5, systemSymbol: "airplane",
+              accentHex: "#E69C37"
+            });
+            await HTMLAppNative.liveActivities.update("trip-packing", {
+              subtitle: "Almost ready", value: "10 / 12", progress: 0.83
+            });
+            // Explicitly end when the task finishes or is cancelled:
+            await HTMLAppNative.liveActivities.end("trip-packing");
+            """,
+            constraints: "Requires iOS 16.2+, Live Activities enabled in iOS Settings, a saved app (not preview), and per-HTMLApp user consent. Up to three concurrent activities per saved app. The iOS Lock Screen shows a limited native template; Dynamic Island appears only on supported devices. No arbitrary HTML/JS, push updates, automatic background execution, remote refresh or guaranteed refresh frequency. Update only from running HTMLApp code, and end when done. Avoid sensitive information on the visible Lock Screen."
+        ),
+        .init(
             id: "background.fetch",
             title: "Opportunistic background JSON refresh",
             keywords: ["background", "background refresh", "fetch", "scheduled", "periodic", "sync", "refresh", "offline cache", "background task"],

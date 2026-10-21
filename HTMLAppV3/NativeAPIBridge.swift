@@ -113,6 +113,49 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "appStorage.clear":
             HTMLAppPortableDataStore.clear(appID: appID)
             resolve(id, value: ["cleared": true])
+        case "liveActivities.start":
+            if #available(iOS 16.2, *) {
+                withPermission(.liveActivities, id: id) { [weak self] in
+                    guard let self else { return }
+                    do {
+                        let info = try HTMLAppLiveActivityService.start(appID: self.appID, args: args)
+                        self.resolve(id, value: info)
+                    } catch { self.reject(id, code: "live_activity_failed", message: error.localizedDescription) }
+                }
+            } else {
+                reject(id, code: "unsupported_ios", message: "Live Activities require iOS 16.2 or later.")
+            }
+        case "liveActivities.update":
+            if #available(iOS 16.2, *) {
+                withPermission(.liveActivities, id: id) { [weak self] in
+                    guard let self else { return }
+                    Task {
+                        do {
+                            let result = try await HTMLAppLiveActivityService.update(appID: self.appID, args: args)
+                            self.resolve(id, value: result)
+                        } catch { self.reject(id, code: "live_activity_failed", message: error.localizedDescription) }
+                    }
+                }
+            } else {
+                reject(id, code: "unsupported_ios", message: "Live Activities require iOS 16.2 or later.")
+            }
+        case "liveActivities.end":
+            if #available(iOS 16.2, *) {
+                Task {
+                    do {
+                        let result = try await HTMLAppLiveActivityService.end(appID: appID, args: args)
+                        resolve(id, value: result)
+                    } catch { reject(id, code: "live_activity_failed", message: error.localizedDescription) }
+                }
+            } else {
+                reject(id, code: "unsupported_ios", message: "Live Activities require iOS 16.2 or later.")
+            }
+        case "liveActivities.list":
+            if #available(iOS 16.2, *) {
+                resolve(id, value: ["activities": HTMLAppLiveActivityService.list(appID: appID)])
+            } else {
+                resolve(id, value: ["activities": []])
+            }
         case "widgets.configure":
             configureWidget(id: id, args: args)
         case "widgets.list":
@@ -1541,6 +1584,12 @@ enum HTMLNativeAPIScript {
             return output;
           },
           clear: () => call('appStorage.clear')
+        },
+        liveActivities: {
+          start: (definition) => call('liveActivities.start', definition || {}),
+          update: (id, state = {}) => call('liveActivities.update', { ...state, id: String(id || '') }),
+          end: (id) => call('liveActivities.end', { id: String(id || '') }),
+          list: () => call('liveActivities.list')
         },
         widgets: {
           configure: (definition) => call('widgets.configure', definition || {}),

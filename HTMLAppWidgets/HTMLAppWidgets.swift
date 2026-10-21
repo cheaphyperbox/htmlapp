@@ -457,6 +457,9 @@ struct HTMLAppWidgetsBundle: WidgetBundle {
         if #available(iOS 17.0, *) {
             HTMLAppConfiguredWidget()
         }
+        if #available(iOS 16.2, *) {
+            HTMLAppLiveActivityWidget()
+        }
     }
 }
 

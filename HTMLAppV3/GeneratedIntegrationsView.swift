@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import ActivityKit
 
 struct GeneratedIntegrationsView: View {
     @EnvironmentObject private var store: AppStore
@@ -14,6 +15,18 @@ struct GeneratedIntegrationsView: View {
 
     var body: some View {
         List {
+            Section("Live Activities") {
+                if #available(iOS 16.2, *) {
+                    Label(ActivityAuthorizationInfo().areActivitiesEnabled ? "Live Activities are available" : "Live Activities are disabled in iOS Settings",
+                          systemImage: "timer")
+                    Text("Generated apps can show a native running-task status on the Lock Screen and Dynamic Island (supported iPhones only). Each app asks permission. Custom HTML cannot run in the activity.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Text("Live Activities require iOS 16.2 or later.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+
             if !HTMLAppSharedContainer.appGroupAvailable {
                 Section("Widget Signing Problem") {
                     Label("App Group storage is unavailable on this installation.", systemImage: "exclamationmark.triangle")
