@@ -273,6 +273,8 @@ struct SettingsView: View {
     @AppStorage("webClipPrecomposed") private var webClipPrecomposed = false
     @AppStorage("allowJavaScript") private var allowJavaScript = true
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("htmlapp.previousOpenedVersion") private var previousOpenedVersion = ""
+    @State private var showWhatsNew = false
     @State private var working = false
 
     private var selectedSortMode: LibrarySortMode {
@@ -403,10 +405,17 @@ struct SettingsView: View {
                 }
 
                 }
-                Section("Tutorial") {
-                    Button("Show Tutorial Again") {
+                Section("Help & Updates") {
+                    Button {
+                        showWhatsNew = true
+                    } label: {
+                        Label("What's New in HTMLApp", systemImage: "sparkles.rectangle.stack")
+                    }
+                    Button {
                         onboardingComplete = false
                         dismiss()
+                    } label: {
+                        Label("Replay Guided Tutorial", systemImage: "hand.tap")
                     }
                 }
 
@@ -426,6 +435,11 @@ struct SettingsView: View {
                 }
             }
             .overlay { if working { ProgressView().controlSize(.large) } }
+            .sheet(isPresented: $showWhatsNew) {
+                HTMLAppWhatsNewView(previousVersion: previousOpenedVersion.isEmpty ? nil : previousOpenedVersion) {
+                    showWhatsNew = false
+                }
+            }
         }
     }
 
