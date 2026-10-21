@@ -4,7 +4,7 @@ import UIKit
 
 @MainActor
 enum HTMLRuntimeVerifier {
-    static func verify(html: String, timeout: TimeInterval = 10) async -> [String] {
+    static func verify(html: String, timeout: TimeInterval = 9) async -> [String] {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ["Runtime: generated HTML was empty."]
         }
@@ -92,7 +92,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: 170_000_000)
             guard let self, !Task.isCancelled else { return }
             await self.runChecks()
         }
@@ -125,6 +125,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         // prevents all handlers in that script from registering.
         let scriptErrors = try? await evaluate(Self.inlineScriptSyntaxProbe, in: webView) as? [String]
         if let scriptErrors { scriptErrors.forEach(appendIssue) }
+
+        // Detect tap blockers even when the JavaScript syntax is valid.
+        if let blocked = (try? await evaluate(Self.touchabilityProbe, in: webView)) as? [String] {
+            blocked.forEach(appendIssue)
+        }
 
         let phone = await snapshot(webView, width: 390, height: 844)
         if let phone {
@@ -179,7 +184,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         webView.frame = CGRect(x: 0, y: 0, width: width, height: height)
         webView.setNeedsLayout()
         webView.layoutIfNeeded()
-        try? await Task.sleep(nanoseconds: 90_000_000)
+        try? await Task.sleep(nanoseconds: 65_000_000)
 
         let snapshotValue = try? await evaluate(
             """
@@ -307,6 +312,42 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
       window.confirm = (message) => { push('blocking confirm invoked', message); return false; };
       window.prompt = (message) => { push('blocking prompt invoked', message); return null; };
     })();
+    """#
+
+    private static let touchabilityProbe = #"""
+    (() => {
+      const issues = [];
+      const controls = Array.from(document.querySelectorAll(
+        'button, [role="button"], [role="tab"], input, select, textarea, a[href]'
+      )).filter(el => {
+        const r = el.getBoundingClientRect();
+        const css = getComputedStyle(el);
+        return r.width >= 18 && r.height >= 18 &&
+          css.display !== 'none' && css.visibility !== 'hidden' &&
+          !el.disabled && !el.closest('[hidden], [inert]');
+      }).slice(0, 35);
+      let noPointer = 0, covered = 0;
+      for (const el of controls) {
+        if (getComputedStyle(el).pointerEvents === 'none') {
+          noPointer++;
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        const cx = Math.max(1, Math.min(innerWidth - 1, r.left + r.width / 2));
+        const cy = Math.max(1, Math.min(innerHeight - 1, r.top + r.height / 2));
+        if (cy < 0 || cy >= innerHeight || cx < 0 || cx >= innerWidth) continue;
+        const hit = document.elementFromPoint(cx, cy);
+        if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) covered++;
+      }
+      if (noPointer >= Math.max(2, Math.ceil(controls.length / 2))) {
+        issues.push('Runtime tapability: most visible controls have pointer-events disabled (' +
+          noPointer + '/' + controls.length + ').');
+      }
+      if (covered >= Math.max(3, Math.ceil(controls.length * 0.6))) {
+        issues.push('Runtime tapability: ' + covered + ' visible controls are covered by another element. Inspect overlays/z-index.');
+      }
+      return issues;
+    })()
     """#
 
     private static let inlineScriptSyntaxProbe = #"""
