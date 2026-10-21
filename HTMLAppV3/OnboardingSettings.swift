@@ -4,58 +4,46 @@ struct OnboardingView: View {
     @Binding var complete: Bool
     @State private var page = 0
 
-    private let pages = [
-        ("Make, save, and remix", "rectangle.stack.badge.plus", "HTMLApp keeps websites, hand-written HTML, imported files, and AI-created apps together in one native library."),
-        ("An AI team, not one model", "sparkles", "Use one API connection, then choose separate models for planning, web research, coding, UI refinement, icon/assets, and final verification."),
-        ("Full apps from one request", "wand.and.stars", "Describe the outcome you want. Forge plans a complete first release with persistent data, real workflows, useful settings and recovery states when appropriate—not a shallow mockup."),
-        ("Portable generated artwork", "photo.stack", "AI can create a real app icon plus purpose-built IconScript illustrations. Generated artwork is embedded in the HTMLApp so it survives sharing and backups."),
-        ("Save whole websites", "arrow.down.circle", "Download a website and its referenced resources for offline use. HTMLApp opens the saved copy first and can refresh it in the background."),
-        ("Share the actual HTMLApp", "arrow.left.arrow.right.square", "Use Share HTMLApp Package for AirDrop, Files, Messages, or another device. Packages preserve app metadata and cached resources; nearby QR transfer remains available for smaller apps."),
-        ("Back up your library", "shippingbox.fill", "Settings > Backup & Transfer can export selected apps or the complete library as a ZIP, then Merge or fully Restore it on another device."),
-        ("Widgets and background refresh", "square.grid.2x2", "Generated apps can publish native Home Screen and Lock Screen widgets and request iOS-scheduled public-data refresh when the product benefits from glanceable or periodically refreshed information."),
-        ("Real device capabilities", "gyroscope", "Generated apps can use HTMLApp's documented camera, microphone, location, contacts, photos, calendar, reminders, notifications, biometrics, Files, Maps, Shortcuts, secure storage, speech, sharing, and local-network bridges when appropriate."),
-        ("Tap, swipe, or hold", "hand.tap", "Tap an app to open it. In list view, swipe for common actions. Press and hold for sharing, permissions, AI editing, icon generation, raw HTML, and advanced actions."),
-        ("Add it to Home Screen", "apps.iphone", "Any saved HTMLApp can still be installed as a Home Screen Web Clip with its saved icon.")
-    ]
-
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                if page > 0 { Button("Back") { withAnimation { page -= 1 } } }
-                Spacer()
-                Text("\(page + 1) of \(pages.count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            }
-            .padding()
-
-            TabView(selection: $page) {
-                ForEach(pages.indices, id: \.self) { index in
-                    VStack(spacing: 24) {
-                        Spacer()
-                        Image(systemName: pages[index].1)
-                            .font(.system(size: 66, weight: .semibold))
-                            .foregroundStyle(.tint)
-                            .symbolRenderingMode(.hierarchical)
-                        Text(pages[index].0).font(.largeTitle.bold()).multilineTextAlignment(.center)
-                        Text(pages[index].2)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                        Spacer()
-                    }
-                    .tag(index)
+                if page > 0 {
+                    Button("Back") { withAnimation { page -= 1 } }
                 }
+                Spacer()
+                Text("Step \(page + 1) of 3")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-
-            Button(page == pages.count - 1 ? "Start Using HTMLApp" : "Continue") {
-                if page == pages.count - 1 { complete = true }
-                else { withAnimation { page += 1 } }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .frame(maxWidth: .infinity)
             .padding()
+
+            if page == 2 {
+                HTMLAppFirstRunPermissionsView(onFinished: { complete = true })
+            } else {
+                Spacer(minLength: 0)
+                VStack(spacing: 20) {
+                    Image(systemName: page == 0 ? "square.stack.3d.up.fill" : "sparkles")
+                        .font(.system(size: 65, weight: .medium))
+                        .foregroundStyle(.tint)
+                    Text(page == 0 ? "Everything in one Library" : "Make your own apps")
+                        .font(.largeTitle.bold())
+                        .multilineTextAlignment(.center)
+                    Text(page == 0
+                         ? "Open your saved apps, share them with nearby devices, or add them to your Home Screen."
+                         : "Tell Forge what you want. Choose a look, build the app, and keep editing until you're happy.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 22)
+                }
+                .padding(20)
+                Spacer(minLength: 0)
+                Button("Continue") { withAnimation { page += 1 } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
         }
     }
 }
