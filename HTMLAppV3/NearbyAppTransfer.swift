@@ -265,8 +265,13 @@ struct NearbyAppTransferView: View {
             transfer.start()
         }
         .onChange(of: transfer.connected) { connected in
-            if connected && !isReceiveOnly && !startedSending {
-                sendSelectedApps()
+            if connected {
+                // The sender should never have to press Done in the device browser.
+                browse = false
+                if !isReceiveOnly && !startedSending { sendSelectedApps() }
+            } else if startedSending && !transfer.recipientConfirmed {
+                startedSending = false
+                transferError = "Connection lost. Keep both devices nearby, then try again."
             }
         }
         .onChange(of: transfer.received) { url in
