@@ -1483,7 +1483,10 @@ Draw a distinctive, purpose-specific 1024px icon in IconScript. Use a crisp iOS-
         let selfContainedSignals = [
             "calculator", "counter", "timer", "stopwatch", "converter", "checklist",
             "notepad", "notes app", "flashcards", "pomodoro", "random picker", "dice roller",
-            "packing list", "trip packing", "trip planner", "shopping list", "to-do list"
+            "packing list", "trip packing", "trip planner", "shopping list", "to-do list",
+            "daily journal", "journal", "diary", "simple planner", "meal planner",
+            "expense tracker", "budget tracker", "study tracker", "reading log",
+            "mood tracker", "workout log", "recipe organizer", "flashcard", "habit checklist"
         ]
         return selfContainedSignals.contains(where: { containsSignal($0, in: clean) })
     }
