@@ -32,6 +32,9 @@ struct AIConfigurationSettingsView: View {
                 SecureField("API Key (optional for local servers)", text: $apiKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                TextField("Coding model name", text: $coderModel)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
 
                 if !apiKey.isEmpty {
                     Button("Clear API Key", role: .destructive) {
@@ -58,6 +61,7 @@ struct AIConfigurationSettingsView: View {
             }
 
             Section {
+                DisclosureGroup("Customize specialist AIs (optional)") {
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .planner)
                 } label: { Label("Thinking", systemImage: "brain") }
@@ -78,55 +82,30 @@ struct AIConfigurationSettingsView: View {
                         AIRoleProviderSettingsView(role: .verifier)
                     } label: { Label("QA Reviewer", systemImage: "checkmark.shield") }
                 }
+                }
             } header: {
                 Text("AI Specialists")
             } footer: {
                 Text("Each stage can use a different provider, model and API key. Leave a specialist on Shared Provider to reuse your main connection. UI redesign is optional.")
             }
 
+            if developerMode {
             Section {
-                modelField(
-                    "Coding Agent",
-                    text: $coderModel,
-                    icon: "hammer.fill",
-                    help: "Builds and edits the actual HTMLApp. This is the required model."
-                )
-                if developerMode {
-                modelField(
-                    "Prompt Planner",
-                    text: $plannerModel,
-                    icon: "list.bullet.clipboard.fill",
-                    help: "Turns rough ideas into complete product plans, onboarding decisions, and high-value anticipated features."
-                )
-                modelField(
-                    "Research Agent",
-                    text: $researchModel,
-                    icon: "globe.americas.fill",
-                    help: "Plans searches, reads public pages, and summarizes current evidence before the coding pass."
-                )
-                modelField(
-                    "UI Overhaul",
-                    text: $uiModel,
-                    icon: "paintbrush.fill",
-                    help: "Optional. Leave blank to skip the separate visual-only refinement pass."
-                )
-                modelField(
-                    "Icon & Asset Artist",
-                    text: $iconModel,
-                    icon: "app.badge.fill",
-                    help: "Designs original app-specific icons with appropriate detail, color and personality."
-                )
-                modelField(
-                    "QA Verifier",
-                    text: $verifierModel,
-                    icon: "checkmark.shield.fill",
-                    help: "Runs the independent release audit, applies concrete repairs, and rechecks the result."
-                )
-                }
+                modelField("Prompt Planner", text: $plannerModel, icon: "brain",
+                           help: "Turns requests into an app plan.")
+                modelField("Research Agent", text: $researchModel, icon: "globe",
+                           help: "Used when an app needs external research.")
+                modelField("UI Overhaul", text: $uiModel, icon: "paintpalette",
+                           help: "Optional extra visual review.")
+                modelField("Icon Artist", text: $iconModel, icon: "app.badge",
+                           help: "Optional separate icon generator.")
+                modelField("QA Verifier", text: $verifierModel, icon: "checkmark.shield",
+                           help: "Checks generated app behavior.")
             } header: {
-                Text("AI Team")
+                Text("Advanced model names")
             } footer: {
-                Text(developerMode ? "Blank optional model fields use fallbacks. UI Overhaul stays optional." : "The Coding Agent is all you need for normal generation. Enable Developer Mode in Settings for additional model roles.")
+                Text("Leave optional models blank to reuse your coding model.")
+            }
             }
 
             if developerMode {
