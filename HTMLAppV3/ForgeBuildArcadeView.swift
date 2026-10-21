@@ -14,9 +14,9 @@ struct ForgeBuildArcadeView: View {
     @State private var combo = 0
     @State private var paused = false
 
-    private let spacing: TimeInterval = 1.10
-    private let fallDuration: TimeInterval = 3.3
-    private let lanes = 4
+    private let spacing: TimeInterval = 0.46
+    private let fallDuration: TimeInterval = 2.6
+    private let lanes = 5
 
     var body: some View {
         VStack(spacing: 8) {
@@ -56,7 +56,7 @@ struct ForgeBuildArcadeView: View {
                                         with: .color(Color.primary.opacity(0.035)))
                         }
                         let upper = max(0, Int(elapsed / spacing))
-                        let lower = max(0, upper - 4)
+                        let lower = max(0, upper - 7)
                         for id in lower...upper {
                             guard !captured.contains(id) else { continue }
                             guard let block = piece(id: id, elapsed: elapsed, size: size) else { continue }
@@ -84,7 +84,7 @@ struct ForgeBuildArcadeView: View {
                             guard !paused && active else { return }
                             let now = max(0, Date().timeIntervalSince(startedAt))
                             let upper = max(0, Int(now / spacing))
-                            let lower = max(0, upper - 4)
+                            let lower = max(0, upper - 7)
                             for id in (lower...upper).reversed() {
                                 guard !captured.contains(id),
                                       let block = piece(id: id, elapsed: now, size: proxy.size) else { continue }
@@ -112,7 +112,7 @@ struct ForgeBuildArcadeView: View {
 
             HStack(spacing: 5) {
                 Image(systemName: "hand.tap")
-                Text("Tap falling pieces to catch them. Each finished AI task unlocks new shapes and colors.")
+                Text("Catch the quick falling pieces! New AI milestones unlock different shapes and bonus points.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
