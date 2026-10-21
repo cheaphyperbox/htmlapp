@@ -66,6 +66,22 @@ struct ForgeFallingBlocksView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !active)) { timeline in
             Canvas { graphics, size in
+                // Small dim pieces keep the scene alive during long model
+                // responses. Only opaque, named pieces represent actual milestones.
+                if active, let beginning = milestones.first?.at {
+                    let seconds = max(0, timeline.date.timeIntervalSince(beginning))
+                    let last = Int(seconds / 0.42)
+                    for tick in max(0, last - 9)...last {
+                        let age = seconds - Double(tick) * 0.42
+                        guard age >= 0, age < 3.7 else { continue }
+                        let width: CGFloat = CGFloat(8 + (tick % 3) * 3)
+                        let x = CGFloat((tick * 43 + 17) % max(1, Int(size.width - width)))
+                        let y = CGFloat(-16 + age * 112)
+                        let rect = CGRect(x: x, y: y, width: width, height: width)
+                        graphics.fill(Path(roundedRect: rect, cornerRadius: 3),
+                                      with: .color(Color.accentColor.opacity(0.10)))
+                    }
+                }
                 let laneWidth = max(20, size.width / 7)
                 let columnCount = max(1, Int(size.width / laneWidth))
                 for (index, milestone) in milestones.enumerated() {
