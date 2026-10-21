@@ -841,15 +841,22 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         verificationReport = ""
         var uncorrectedSyntaxError = false
+        var lastCheckedHTML: String? = nil
+        var cachedStructural: [String] = []
+        var cachedRuntime: [String] = []
         do {
             var changedOnPreviousPass = false
 
             for pass in 1...2 {
                 try Task.checkCancellation()
                 phase = "Running app checks"
-                let structuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
-                let runtimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                let localIssues = structuralIssues + runtimeIssues
+                if lastCheckedHTML != streamedHTML {
+                    cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
+                    cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                    lastCheckedHTML = streamedHTML
+                }
+                let localIssues = cachedStructural + cachedRuntime
+                let runtimeIssues = cachedRuntime
                 AIDebugTraceStore.shared.append(
                     "RUNTIME QA",
                     runtimeIssues.isEmpty
@@ -903,18 +910,25 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 changedOnPreviousPass = changedThisPass
                 guard changedThisPass, pass == 1 else { break }
 
-                let postRepairStructural = HTMLQualityChecks.issues(in: streamedHTML)
-                let postRepairRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                if postRepairStructural.isEmpty && postRepairRuntime.isEmpty {
+                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
+                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                lastCheckedHTML = streamedHTML
+                AIDebugTraceStore.shared.append("POST-REPAIR QA",
+                    cachedRuntime.isEmpty ? "Interaction and JavaScript smoke tests passed." : cachedRuntime.joined(separator: "\n"))
+                if cachedStructural.isEmpty && cachedRuntime.isEmpty {
                     verificationReport += "\nRepair passed local structural and offscreen runtime checks; a second AI review was not needed."
                     break
                 }
             }
 
             phase = "Running app checks"
-            let remainingStructuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
-            let remainingRuntimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-            let remainingIssues = remainingStructuralIssues + remainingRuntimeIssues
+            if lastCheckedHTML != streamedHTML {
+                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
+                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                lastCheckedHTML = streamedHTML
+            }
+            let remainingRuntimeIssues = cachedRuntime
+            let remainingIssues = cachedStructural + cachedRuntime
             uncorrectedSyntaxError = remainingRuntimeIssues.contains {
                 $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
             }
@@ -929,13 +943,19 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             if changedOnPreviousPass {
                 AIDebugTraceStore.shared.append("VERIFIER", "A verifier repair was applied and the repaired app was checked again locally and in the offscreen WebView.")
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             // Failure of the optional remote AI review must not conceal actual
             // JavaScript/runtime errors collected by the local verifier.
             phase = "Running app checks"
-            let structuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
-            let runtimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-            let issues = structuralIssues + runtimeIssues
+            if lastCheckedHTML != streamedHTML {
+                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
+                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+                lastCheckedHTML = streamedHTML
+            }
+            let runtimeIssues = cachedRuntime
+            let issues = cachedStructural + cachedRuntime
             uncorrectedSyntaxError = runtimeIssues.contains {
                 $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
             }
