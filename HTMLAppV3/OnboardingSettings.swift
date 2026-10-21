@@ -422,6 +422,9 @@ struct SettingsView: View {
                 Section("About") {
                     LabeledContent("HTMLApp version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
                     LabeledContent("Build number", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")
+                    if !previousOpenedVersion.isEmpty {
+                        LabeledContent("Updated from", value: previousOpenedVersion)
+                    }
                     LabeledContent("Minimum iOS", value: "16.0")
                     if developerMode { LabeledContent("URL scheme", value: "htmlapp://") }
                     Text("The interface uses native system navigation, toolbars, menus, materials, and controls and adapts across iPhone and iPad.")
@@ -436,7 +439,7 @@ struct SettingsView: View {
             }
             .overlay { if working { ProgressView().controlSize(.large) } }
             .sheet(isPresented: $showWhatsNew) {
-                HTMLAppWhatsNewView(previousVersion: previousOpenedVersion.isEmpty ? nil : previousOpenedVersion) {
+                HTMLAppWhatsNewView(previousVersion: nil) {
                     showWhatsNew = false
                 }
             }
