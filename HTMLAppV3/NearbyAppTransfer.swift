@@ -7,6 +7,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     @Published var active = false
     @Published var busy = false
     @Published var received: URL?
+    @Published var recipientConfirmed = false
     @Published var invitationName: String?
     private var invitation: ((Bool, MCSession?) -> Void)?
     let session = MCSession(peer: MCPeerID(displayName: String(UIDevice.current.name.prefix(50))), securityIdentity: nil, encryptionPreference: .required)
@@ -25,7 +26,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     }
     func stop() {
         answer(false); advertiser?.stopAdvertisingPeer(); advertiser = nil
-        session.disconnect(); active = false; connected = false; busy = false
+        session.disconnect(); active = false; connected = false; busy = false; recipientConfirmed = false
         if let outbound { try? FileManager.default.removeItem(at: outbound) }; outbound = nil
     }
     func send(_ url: URL) {
@@ -34,7 +35,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
         session.sendResource(at: url, withName: "HTMLApp.htmlapp.zip", toPeer: peer) { [weak self] error in
             DispatchQueue.main.async {
                 self?.busy = false
-                self?.status = error == nil ? "Transfer sent. The other device must confirm import." : "Transfer failed: \(error!.localizedDescription)"
+                self?.status = error == nil ? "Sent. Waiting for the other device to save the app…" : "Transfer failed: \(error!.localizedDescription)"
                 try? FileManager.default.removeItem(at: url); self?.outbound = nil
             }
         }
@@ -55,7 +56,18 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
             if state == .notConnected { self.busy = false }
         }
     }
-    func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {}
+    private static let importReceipt = Data("HTMLAPP_IMPORTED_V1".utf8)
+    func confirmImport() {
+        guard let peer = session.connectedPeers.first else { return }
+        try? session.send(Self.importReceipt, toPeers: [peer], with: .reliable)
+    }
+    func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
+        guard data == Self.importReceipt, session.connectedPeers.contains(peerID) else { return }
+        DispatchQueue.main.async {
+            self.recipientConfirmed = true
+            self.status = "The other device saved your app!"
+        }
+    }
     func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) { stream.close() }
     func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
         DispatchQueue.main.async { self.busy = true; self.status = "Receiving encrypted backup from \(peerID.displayName)…" }
@@ -99,7 +111,10 @@ struct NearbyAppTransferView: View {
     @AppStorage("developerMode") private var developerMode = false
     @StateObject private var transfer = NearbyAppTransfer()
     @State private var browse = false
-    @State private var confirmImport = false
+    @State private var startedSending = false
+    @State private var importing = false
+    @State private var transferError: String?
+    @Environment(\.dismiss) private var dismiss
     @State private var chooseApps = false
     @State private var selectedAppIDs: Set<String>
 
@@ -111,127 +126,90 @@ struct NearbyAppTransferView: View {
 
     var body: some View {
         List {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Share apps with another device", systemImage: "iphone")
-                        .font(.title3.weight(.bold))
-                    Text("Open this page on both iPhones or iPads. Keep them close together.")
-                        .font(.subheadline)
-                    HStack(spacing: 8) {
-                        Image(systemName: transfer.connected ? "checkmark.circle.fill" : "dot.radiowaves.left.and.right")
+            if isReceiveOnly {
+                Section {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Image(systemName: importing ? "square.and.arrow.down.fill" :
+                            transfer.connected ? "checkmark.circle.fill" : "iphone.gen3.radiowaves.left.and.right")
+                            .font(.system(size: 42))
                             .foregroundStyle(transfer.connected ? Color.green : Color.accentColor)
-                        Text(transfer.connected ? "Devices connected" : "Waiting to connect")
-                            .font(.subheadline.weight(.semibold))
+                        Text(importing ? "Saving your app…" :
+                            transfer.connected ? "Connected! Waiting for the app…" : "Ready to receive")
+                            .font(.title2.weight(.bold))
+                        Text("Ask the sender to choose this device. Tap Accept when its name appears. The app will be saved in your Library automatically.")
+                            .font(.body)
+                        if importing { ProgressView() }
+                        Text(transfer.status).font(.footnote).foregroundStyle(.secondary)
                     }
-                    Text(transfer.status)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 22)
+                } header: {
+                    Text("Receive an app")
                 }
-                .padding(.vertical, 6)
-            }
-
-            Section {
-                Button { chooseApps = true } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: selectedAppIDs.isEmpty ? "square.stack.3d.up" : "checkmark.circle.fill")
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(selectedAppIDs.isEmpty ? "Choose what to send" : "\(selectedAppIDs.count) app\(selectedAppIDs.count == 1 ? "" : "s") ready to send")
-                                .font(.headline)
-                            if selectedAppIDs.count == 1,
-                               let chosen = store.apps.first(where: { selectedAppIDs.contains($0.id) }) {
-                                Text(chosen.name).font(.caption).foregroundStyle(.secondary)
+            } else {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label(selectedAppIDs.count == 1 ? "One app ready to share" : "\(selectedAppIDs.count) apps ready to share",
+                              systemImage: "app.badge")
+                            .font(.title3.bold())
+                        if selectedAppIDs.count == 1,
+                           let app = store.apps.first(where: { selectedAppIDs.contains($0.id) }) {
+                            HStack(spacing: 12) {
+                                AppIconView(app: app, size: 46)
+                                Text(app.name).font(.headline)
                             }
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 5)
-                }
-            } header: {
-                Text("Step 1 — Pick your app")
-            } footer: {
-                Text("Already picked an app in your Library? It stays selected here. The other device doesn't need to pick anything.")
-            }
-
-            Section {
-                if transfer.connected {
-                    Label("Ready! Your devices are connected.", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .font(.headline)
-                } else {
-                    Button { browse = true } label: {
-                        Label("Find my other device", systemImage: "dot.radiowaves.left.and.right")
+                        Button("Change apps") { chooseApps = true }
+                            .font(.subheadline)
+                        Divider()
+                        Text(transfer.connected ? "Connected! Sending automatically…" : "Tap Find device, then choose the receiving phone.")
                             .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                        if transfer.busy { ProgressView() }
+                        Button { browse = true } label: {
+                            Label(transfer.connected ? "Connected to receiver" : "Find receiving phone",
+                                  systemImage: "dot.radiowaves.left.and.right")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!transfer.active || transfer.connected || transfer.busy || startedSending)
+                        Text(transfer.status).font(.footnote).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!transfer.active || transfer.busy)
+                    .padding(.vertical, 18)
+                } header: {
+                    Text("Send an app")
+                } footer: {
+                    Text("Both devices must keep HTMLApp open. Once connected, your app sends automatically and this screen closes after the receiver saves it.")
                 }
-            } header: {
-                Text("Step 2 — Connect")
-            } footer: {
-                Text("On the first device, tap Find my other device and choose its name. On the second device, tap Accept. Both devices should stay on this page.")
             }
-
-            Section {
-                Button { sendSelectedApps() } label: {
-                    HStack {
-                        Spacer()
-                        Label(transfer.busy ? "Sending…" : selectedAppIDs.count == 1 ? "Send App" : "Send \(selectedAppIDs.count) Apps",
-                              systemImage: "paperplane.fill")
-                            .font(.headline)
-                        Spacer()
+            if let transferError {
+                Section {
+                    Label(transferError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                    if isReceiveOnly {
+                        Button("Keep waiting") { self.transferError = nil }
+                    } else {
+                        Button("Try sending again") {
+                            self.transferError = nil
+                            startedSending = false
+                            sendSelectedApps()
+                        }
+                        .disabled(!transfer.connected || transfer.busy)
                     }
-                    .padding(.vertical, 8)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedAppIDs.isEmpty || !transfer.connected || transfer.busy)
-                if selectedAppIDs.isEmpty {
-                    Text("Pick an app in Step 1 to enable Send.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                } else if !transfer.connected {
-                    Text("Connect the devices in Step 2 to enable Send.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                } else if !transfer.busy {
-                    Text("Tap Send App. The other device will ask before importing.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Step 3 — Send")
             }
-
-            Section {
-                if transfer.received != nil {
-                    Button { confirmImport = true } label: {
-                        Label("Save the received apps", systemImage: "square.and.arrow.down.fill")
-                            .font(.headline)
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    Label("Want to receive instead? Just wait here. Accept a connection, then the received apps will appear below.",
-                          systemImage: "square.and.arrow.down")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Receiving apps")
-            } footer: {
-                Text("Received apps are added as new copies. Your existing apps won't be overwritten.")
-            }
-
             if developerMode {
-                Section("Details") {
-                    Text("Uses encrypted peer-to-peer Bluetooth and Wi-Fi via iOS. App data, icons and supported caches can move; passwords and device permissions never do.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    if transfer.active {
-                        Button("Disconnect", role: .destructive) { transfer.stop() }
+                Section("Connection details") {
+                    Text("Encrypted local MultipeerConnectivity over Bluetooth and/or Wi-Fi. Only accept devices you recognize.")
+                        .font(.footnote)
+                    Button("Disconnect", role: .destructive) {
+                        transfer.stop()
+                        dismiss()
                     }
                 }
             }
         }
-        .navigationTitle("Send or Receive Apps")
+        .navigationTitle(isReceiveOnly ? "Receive App" : "Send App")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $browse) {
             NearbyPeerBrowser(session: transfer.session)
@@ -271,28 +249,40 @@ struct NearbyAppTransferView: View {
         } message: {
             Text(transfer.invitationName ?? "Unknown device")
         }
-        .confirmationDialog(
-            "Import this backup from the connected device?",
-            isPresented: $confirmImport,
-            titleVisibility: .visible
-        ) {
-            Button("Merge as New Copies") {
-                guard let url = transfer.received else { return }
-                do {
-                    try store.importPortablePackage(from: url, replaceExisting: false)
-                    transfer.status = "Apps saved! You can find them in your Library."
-                } catch {
-                    transfer.status = "Import failed: \(error.localizedDescription)"
+        .onAppear {
+            transfer.start()
+        }
+        .onChange(of: transfer.connected) { connected in
+            if connected && !isReceiveOnly && !startedSending {
+                sendSelectedApps()
+            }
+        }
+        .onChange(of: transfer.received) { url in
+            guard isReceiveOnly, let url, !importing else { return }
+            importing = true
+            do {
+                try store.importPortablePackage(from: url, replaceExisting: false)
+                transfer.confirmImport()
+                try? FileManager.default.removeItem(at: url)
+                transfer.received = nil
+                transfer.status = "App saved to Library!"
+                Task {
+                    try? await Task.sleep(nanoseconds: 900_000_000)
+                    dismiss()
                 }
+            } catch {
+                transferError = "Couldn't save the received app: \(error.localizedDescription)"
+                importing = false
                 try? FileManager.default.removeItem(at: url)
                 transfer.received = nil
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Existing apps are kept. Imported apps are added as new copies.")
         }
-        .onAppear {
-            transfer.start()
+        .onChange(of: transfer.recipientConfirmed) { confirmed in
+            guard confirmed, !isReceiveOnly else { return }
+            Task {
+                try? await Task.sleep(nanoseconds: 750_000_000)
+                dismiss()
+            }
         }
         .onChange(of: scenePhase) {
             if $0 == .background { transfer.stop() }
@@ -309,17 +299,20 @@ struct NearbyAppTransferView: View {
     }
     private func sendSelectedApps() {
         guard !selectedAppIDs.isEmpty, transfer.connected, !transfer.busy else { return }
+        startedSending = true
         do {
             let url = try store.createNearbyPackage(appIDs: selectedAppIDs)
             let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard size <= 100_000_000 else {
                 try? FileManager.default.removeItem(at: url)
-                transfer.status = "Backup exceeds 100 MB. Use Export and AirDrop instead."
+                transferError = "This app is larger than 100 MB. Use Export and AirDrop."
+                startedSending = false
                 return
             }
             transfer.send(url)
         } catch {
-            transfer.status = "Could not prepare apps: \(error.localizedDescription)"
+            startedSending = false
+            transferError = "Could not prepare app: \(error.localizedDescription)"
         }
     }
 
