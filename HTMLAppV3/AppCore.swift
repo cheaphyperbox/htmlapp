@@ -8,6 +8,9 @@ struct HTMLAppMain: App {
     @AppStorage("onboardingComplete") private var onboardingComplete = false
 
     init() {
+        if let diagnosis = HTMLAppProviderStorage.repairPreviouslyApprovedGroup() {
+            NSLog("HTMLApp widget signing status: %@", diagnosis)
+        }
         HTMLNotificationCenterDelegate.shared.activate()
         HTMLAppBackgroundCoordinator.shared.register()
         HTMLAppBackgroundCoordinator.shared.schedule()
@@ -49,6 +52,9 @@ struct HTMLAppMain: App {
                     Button("Keep Current App", role: .cancel) { store.pendingSwitchApp = nil }
                 } message: {
                     Text("The current HTML app will be unloaded before the linked app opens.")
+                }
+                .sheet(item: $store.pendingWebClipGuideApp) { app in
+                    HTMLAppHomeScreenGuide(appName: app.name)
                 }
                 .onOpenURL(perform: store.openDeepLink)
                 .onReceive(NotificationCenter.default.publisher(for: .htmlAppNotificationOpened)) { notification in
@@ -117,6 +123,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var folders: [LibraryFolder] = []
     @Published var runningApp: SavedHTMLApp?
     @Published var pendingSwitchApp: SavedHTMLApp?
+    @Published var pendingWebClipGuideApp: SavedHTMLApp?
     @Published var pendingWebsiteUpdate: SavedHTMLApp?
     @Published var errorMessage: String?
     @Published var notice: String?
@@ -808,7 +815,8 @@ final class AppStore: ObservableObject {
         WebClipInstaller.shared.install(app: app) { [weak self] result in
             switch result {
             case .success:
-                self?.notice = "Profile download opened. Allow it in Safari, then install from Settings → Profile Downloaded."
+                self?.notice = "Profile opened in Safari. Complete the installation in iOS Settings."
+                self?.pendingWebClipGuideApp = app
             case .failure(let error):
                 self?.errorMessage = error.localizedDescription
             }
