@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 
+struct ForgeResearchPage: Identifiable, Equatable {
+    let id: String
+    let host: String
+    let bytes: Int
+}
+
 @MainActor
 final class AgenticBrowserResearch: ObservableObject {
     @Published var activity: [String] = []
@@ -16,6 +22,7 @@ final class AgenticBrowserResearch: ObservableObject {
     }
     @Published var isBrowsing = false
     @Published var lastReport = ""
+    @Published var completedPages: [ForgeResearchPage] = []
 
     private static func publicProgressNote(for status: String) -> String {
         let lower = status.lowercased()
@@ -50,6 +57,7 @@ final class AgenticBrowserResearch: ObservableObject {
         let config = AISettingsStore.configuration(for: .research)
         guard config.isConfigured else { return "" }
         isBrowsing = true
+        completedPages = []
         status = "Planning web research…"
         defer {
             isBrowsing = false
@@ -57,9 +65,12 @@ final class AgenticBrowserResearch: ObservableObject {
         }
 
         do {
-            let report = try await WebResearchAgent.run(request: request, config: config) { [weak self] message in
+            let report = try await WebResearchAgent.run(request: request, config: config, status: { [weak self] message in
                 self?.status = message
-            }
+            }, pageRead: { [weak self] url, size in
+                guard let self else { return }
+                self.completedPages.append(ForgeResearchPage(id: url, host: URL(string: url)?.host ?? "Website", bytes: size))
+            })
             lastReport = report
             status = "Web research finished"
             return report
@@ -78,7 +89,8 @@ enum WebResearchAgent {
     static func run(
         request: String,
         config: AIProviderConfiguration,
-        status: @escaping @MainActor (String) -> Void
+        status: @escaping @MainActor (String) -> Void,
+        pageRead: @escaping @MainActor (String, Int) -> Void
     ) async throws -> String {
         var notebook = "Discovery leads (not fetched documentation):\n" + ForgeProductContract.catalog
         var visited = Set<String>()
@@ -145,7 +157,10 @@ Pick the single best next action.
                 visited.insert(url.absoluteString)
                 await status("Reading \(url.host ?? short(url.absoluteString, limit: 48))…")
                 let page = await PublicWebBrowser.read(url: url)
-                if page.hasPrefix("URL:") { successfullyOpenedPages += 1 }
+                if page.hasPrefix("URL:") {
+                    successfullyOpenedPages += 1
+                    await pageRead(url.absoluteString, page.utf8.count)
+                }
                 await status(page.hasPrefix("URL:") ? "Read \(url.host ?? "page")" : "Page unavailable: \(url.host ?? "page")")
                 append("OPENED: \(url.absoluteString)\n\(page)", to: &notebook)
                 continue
