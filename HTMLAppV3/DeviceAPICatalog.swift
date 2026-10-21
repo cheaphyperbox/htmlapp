@@ -220,7 +220,9 @@ enum HTMLAppDeviceAPIResearch {
               id: "trip-packing", title: "Packing for Rome",
               subtitle: "Preparing luggage", value: "6 / 12",
               progress: 0.5, systemSymbol: "airplane",
-              accentHex: "#E69C37"
+              accentHex: "#E69C37",
+              secondaryLabel: "Bags packed", secondaryValue: "6 of 12",
+              footer: "Tap to open your packing list"
             });
             await HTMLAppNative.liveActivities.update("trip-packing", {
               subtitle: "Almost ready", value: "10 / 12", progress: 0.83
@@ -228,7 +230,7 @@ enum HTMLAppDeviceAPIResearch {
             // Explicitly end when the task finishes or is cancelled:
             await HTMLAppNative.liveActivities.end("trip-packing");
             """,
-            constraints: "Requires iOS 16.2+, Live Activities enabled in iOS Settings, a saved app (not preview), and per-HTMLApp user consent. Up to three concurrent activities per saved app. The iOS Lock Screen shows a limited native template; Dynamic Island appears only on supported devices. No arbitrary HTML/JS, push updates, automatic background execution, remote refresh or guaranteed refresh frequency. Update only from running HTMLApp code, and end when done. Avoid sensitive information on the visible Lock Screen."
+            constraints: "Requires iOS 16.2+, Live Activities enabled, a saved app, and consent. Up to three activities per app; supports native text, primary/secondary metrics, progress, SF Symbol, accent color, and footer. Design thoughtful activity transitions and update on meaningful state changes, with an explicit end path. Dynamic Island only on supported iPhones; no custom HTML, arbitrary JavaScript, remote push updates, autonomous background execution, or guaranteed real-time refresh. Do not expose private content on the Lock Screen."
         ),
         .init(
             id: "background.fetch",
