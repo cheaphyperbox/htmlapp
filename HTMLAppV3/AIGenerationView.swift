@@ -14,6 +14,7 @@ struct AIGenerationView: View {
     @StateObject private var milestones = ForgeBuildMilestones()
     @State private var microphoneTranslation: CGSize = .zero
     @State private var microphoneArmed = false
+    @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @AppStorage("developerMode") private var developerMode = false
@@ -149,9 +150,12 @@ struct AIGenerationView: View {
             }
         }
         .interactiveDismissDisabled(true)
-        .onDisappear { generationTask?.cancel(); dictation.stop() }
+        .onDisappear { generationTask?.cancel(); microphoneRecordingTask?.cancel(); dictation.stop() }
         .onChange(of: scenePhase) { value in
             if value != .active {
+                microphoneRecordingTask?.cancel()
+                microphoneArmed = false
+                microphoneTranslation = .zero
                 dictation.stop()
                 persistDraftForBackground()
             }
@@ -634,12 +638,17 @@ struct AIGenerationView: View {
                             microphoneArmed = true
                             dictationForEdit = true
                             dictationPrefix = ""
+                            dictation.transcript = ""
                             microphoneEditNotice = nil
-                            Task { await dictation.start() }
+                            microphoneRecordingTask?.cancel()
+                            microphoneRecordingTask = Task { await dictation.start() }
                         } else if !inside && microphoneArmed {
                             microphoneArmed = false
+                            microphoneRecordingTask?.cancel()
+                            microphoneRecordingTask = nil
                             dictationForEdit = false
                             dictation.stop()
+                            dictation.transcript = ""
                             microphoneEditNotice = nil
                         }
                     }
@@ -651,6 +660,8 @@ struct AIGenerationView: View {
                         let spoken = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                         microphoneArmed = false
                         microphoneTranslation = .zero
+                        microphoneRecordingTask?.cancel()
+                        microphoneRecordingTask = nil
                         dictationForEdit = false
                         dictation.stop()
                         if inside && wasArmed {

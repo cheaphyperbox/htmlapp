@@ -896,11 +896,16 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 AIDebugTraceStore.shared.append("VERIFIER", "A verifier repair was applied and the repaired app was checked again locally and in the offscreen WebView.")
             }
         } catch {
-            let localIssues = HTMLQualityChecks.issues(in: streamedHTML)
-            verificationReport = localIssues.isEmpty
-                ? "Independent verifier was unavailable or timed out. Local structural checks passed."
-                : "Independent verifier was unavailable or timed out. Local checks: " + localIssues.joined(separator: " ")
-            AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription)
+            // Failure of the optional remote AI review must not conceal actual
+            // JavaScript/runtime errors collected by the local verifier.
+            phase = "Running app checks"
+            let structuralIssues = HTMLQualityChecks.issues(in: streamedHTML)
+            let runtimeIssues = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+            let issues = structuralIssues + runtimeIssues
+            verificationReport = issues.isEmpty
+                ? "AI review unavailable. Local structure and offscreen runtime checks passed; device behavior still needs testing."
+                : "AI review unavailable. Local checks found: " + issues.joined(separator: " ")
+            AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription + (issues.isEmpty ? "" : "\n" + issues.joined(separator: "\n")))
         }
     }
 
