@@ -16,6 +16,7 @@ struct AIGenerationView: View {
     @State private var microphoneArmed = false
     @State private var microphoneCapturing = false
     @State private var promptDictationActive = false
+    @State private var promptMicHeld = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
@@ -240,8 +241,8 @@ struct AIGenerationView: View {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 34, weight: .semibold))
                         .frame(width: 86, height: 86)
-                        .foregroundStyle(dictation.recording ? Color.white : Color.primary)
-                        .background(dictation.recording ? Color.red : Color(.systemGray4),
+                        .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
+                        .background(promptMicHeld ? Color.red : Color(.systemGray4),
                                     in: RoundedRectangle(cornerRadius: 24))
                         .contentShape(RoundedRectangle(cornerRadius: 24))
                         .onLongPressGesture(minimumDuration: 0, maximumDistance: 90,
@@ -252,6 +253,10 @@ struct AIGenerationView: View {
                                 stopPromptRecording()
                             }
                         }, perform: {})
+                        .accessibilityAction {
+                            if dictation.recording || promptMicHeld { stopPromptRecording() }
+                            else { startPromptRecording() }
+                        }
                         .accessibilityLabel("Hold to dictate app idea")
                         .accessibilityHint("Hold down the microphone while you speak, then release.")
                     VStack(alignment: .leading, spacing: 4) {
@@ -320,6 +325,7 @@ struct AIGenerationView: View {
 
     private func startPromptRecording() {
         guard !dictation.recording && !dictation.requestingPermission else { return }
+        promptMicHeld = true
         dictationForEdit = false
         promptDictationActive = true
         dictationPrefix = prompt
@@ -328,6 +334,7 @@ struct AIGenerationView: View {
     }
 
     private func stopPromptRecording() {
+        promptMicHeld = false
         microphoneRecordingTask?.cancel()
         microphoneRecordingTask = nil
         dictation.stop()
