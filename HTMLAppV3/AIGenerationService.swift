@@ -218,7 +218,7 @@ final class AIGenerationSession: ObservableObject {
         do {
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             let improved: String
-            if AIHTMLAgent.canSkipPreflight(for: prompt) {
+            if AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
                 lastResearch = suppliedResearch
