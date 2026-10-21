@@ -206,6 +206,22 @@ struct AIGenerationView: View {
         .onChange(of: session.streamedHTML) { html in
             milestones.inspectHTML(html)
         }
+        .onChange(of: session.errorMessage) { message in
+            if let message, AIDebugTraceStore.shared.isActive {
+                AIDebugTraceStore.shared.append("ERROR DETAILS",
+                    "Phase: \(session.phase)\nFailure: \(message)\nHTML: \(session.streamedHTML.utf8.count) bytes")
+            }
+        }
+        .onChange(of: session.verificationReport) { report in
+            if !report.isEmpty && AIDebugTraceStore.shared.isActive {
+                AIDebugTraceStore.shared.append("APP QA REPORT", report)
+            }
+        }
+        .onChange(of: session.wantsUIPolish) { needed in
+            if AIDebugTraceStore.shared.isActive {
+                AIDebugTraceStore.shared.append("UI SPECIALIST DECISION", needed ? "Requested" : "Skipped")
+            }
+        }
         .onChange(of: session.phase) { phase in
             workTracker.observe(phase: phase, isBrowsing: browserResearch.isBrowsing,
                                 browserStatus: browserResearch.status, streamSection: session.streamedSection)
