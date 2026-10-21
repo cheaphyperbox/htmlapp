@@ -72,7 +72,7 @@ struct ForgeFallingBlocksView: View {
                     let age = max(0, timeline.date.timeIntervalSince(milestone.at))
                     let scale = CGFloat(min(1.40, max(0.55, 0.58 + log2(Double(max(512, milestone.bytes)) / 512.0 + 1) * 0.11)))
                     let cell = max(8, min(19, laneWidth * 0.43)) * scale
-                    let cells = shape(for: milestone.kind)
+                    let cells = shape(for: milestone.kind, bytes: milestone.bytes)
                     let width = CGFloat((cells.map { $0.0 }.max() ?? 0) + 1) * cell
                     let height = CGFloat((cells.map { $0.1 }.max() ?? 0) + 1) * cell
                     let lane = (index * 3 + 1) % columnCount
@@ -81,7 +81,7 @@ struct ForgeFallingBlocksView: View {
                     let restingY = max(2, size.height - height - 7 - row * cell * 2.35)
                     // Gravity with a damped restitution oscillation after impact.
                     let descent = CGFloat(0.5 * 740 * age * age)
-                    let impact = sqrt(2 * Double(max(1, size.height + height)) / 740)
+                    let impact = sqrt(2 * Double(max(1, restingY + height + 12)) / 740)
                     let y: CGFloat
                     if age < impact {
                         y = -height - 12 + descent
@@ -121,13 +121,24 @@ struct ForgeFallingBlocksView: View {
         }
     }
 
-    private func shape(for kind: ForgeBuildMilestone.Kind) -> [(Int, Int)] {
+    private func shape(for kind: ForgeBuildMilestone.Kind, bytes: Int) -> [(Int, Int)] {
+        // Bigger source/page milestones grow into richer polyomino shapes.
+        let magnitude = max(0, bytes)
+        if magnitude > 14_000 {
+            return [(0,0),(1,0),(2,0),(1,1),(1,2),(2,2)]
+        }
+        if magnitude > 5_000 {
+            return [(0,0),(1,0),(2,0),(0,1),(0,2)]
+        }
+        if magnitude > 1_400 {
+            return [(0,0),(1,0),(1,1),(2,1)]
+        }
         switch kind {
-        case .plan, .head: return [(0,0),(1,0),(1,1),(2,1)]
+        case .plan, .head: return [(0,0),(1,0),(1,1)]
         case .api, .script: return [(0,0),(1,0),(2,0),(1,1)]
-        case .website, .icon: return [(0,0),(0,1),(1,1),(1,2)]
+        case .website, .icon: return [(0,0),(0,1),(1,1)]
         case .body: return [(0,0),(1,0),(0,1),(1,1)]
-        case .test, .finished: return [(0,0),(0,1),(0,2),(1,2)]
+        case .test, .finished: return [(0,0),(0,1),(1,1)]
         }
     }
 }
