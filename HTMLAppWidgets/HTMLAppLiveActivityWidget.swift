@@ -21,9 +21,20 @@ struct HTMLAppLiveActivityWidget: Widget {
                 Text(context.state.subtitle)
                     .font(.subheadline)
                     .lineLimit(2)
+                if let second = context.state.secondaryValue, !second.isEmpty {
+                    HStack(spacing: 8) {
+                        Text(context.state.secondaryLabel ?? "Details")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                        Text(second).font(.caption.weight(.semibold)).lineLimit(1)
+                    }
+                }
                 if let progress = context.state.progress {
                     ProgressView(value: max(0, min(progress, 1)))
                         .tint(activityAccent(context.state.accentHex))
+                }
+                if let footer = context.state.footer, !footer.isEmpty {
+                    Text(footer).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .padding(14)
@@ -48,6 +59,17 @@ struct HTMLAppLiveActivityWidget: Widget {
                         if let progress = context.state.progress {
                             ProgressView(value: max(0, min(progress, 1)))
                                 .tint(activityAccent(context.state.accentHex))
+                        }
+                        if let secondary = context.state.secondaryValue, !secondary.isEmpty {
+                            HStack(spacing: 6) {
+                                Text(context.state.secondaryLabel ?? "Details").foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                                Text(secondary).fontWeight(.semibold)
+                            }
+                            .font(.caption)
+                        }
+                        if let footer = context.state.footer, !footer.isEmpty {
+                            Text(footer).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
