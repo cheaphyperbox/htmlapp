@@ -112,6 +112,9 @@ struct LibraryView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handlePendingShortcut()
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppShortcutRequested"))) { _ in
+            handlePendingShortcut()
+        }
         .sheet(item: $tintFolder) { folder in
             FolderTintPicker(folder: folder) { hex in
                 store.setFolderTint(folder, hex: hex)
