@@ -48,7 +48,10 @@ enum HTMLAppLiveActivityService {
             subtitle: args["subtitle"] == nil ? (previous?.subtitle ?? "") : clip(args["subtitle"], max: 120),
             value: args["value"] == nil ? (previous?.value ?? "") : clip(args["value"], max: 24),
             progress: value.map { max(0, min(1, $0.doubleValue)) } ?? previous?.progress,
-            accentHex: goodHex ? hex : (previous?.accentHex ?? "#3576D3")
+            accentHex: goodHex ? hex : (previous?.accentHex ?? "#3576D3"),
+            secondaryLabel: args["secondaryLabel"] == nil ? previous?.secondaryLabel : clip(args["secondaryLabel"], max: 36),
+            secondaryValue: args["secondaryValue"] == nil ? previous?.secondaryValue : clip(args["secondaryValue"], max: 28),
+            footer: args["footer"] == nil ? previous?.footer : clip(args["footer"], max: 90)
         )
     }
 
@@ -66,6 +69,9 @@ enum HTMLAppLiveActivityService {
                  "systemSymbol": $0.attributes.systemSymbol,
                  "subtitle": $0.content.state.subtitle,
                  "value": $0.content.state.value,
+                 "secondaryLabel": $0.content.state.secondaryLabel ?? "",
+                 "secondaryValue": $0.content.state.secondaryValue ?? "",
+                 "footer": $0.content.state.footer ?? "",
                  "state": String(describing: $0.activityState)]
             }
     }
