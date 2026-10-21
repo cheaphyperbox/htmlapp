@@ -138,8 +138,19 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             appendIssue("Runtime: page has horizontal overflow at 820pt width.")
         }
 
-        _ = try? await evaluate(Self.clickProbeScript, in: webView)
-        try? await Task.sleep(nanoseconds: 220_000_000)
+        // Exercise non-destructive navigation in a disposable, nonpersistent runtime.
+        // These are smoke tests, not permission to submit forms or mutate user data.
+        if let tapped = (try? await evaluate(Self.clickProbeScript, in: webView)) as? [String: Any],
+           let count = tapped["tested"] as? Int, count > 0 {
+            try? await Task.sleep(nanoseconds: 320_000_000)
+            let stillAlive = (try? await evaluate(
+                "!!document.body && (document.body.children.length > 0 || (document.body.textContent || '').trim().length > 0)",
+                in: webView
+            )) as? Bool
+            if stillAlive == false {
+                appendIssue("Runtime: document became blank after simulated navigation interaction.")
+            }
+        }
 
         let recordedValue = try? await evaluate(
             "JSON.stringify((window.__htmlappRuntimeIssues || []).slice(0, 40))",
@@ -295,33 +306,42 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
 
     private static let clickProbeScript = #"""
     (() => {
-      const targets = Array.from(document.querySelectorAll(
-        'button, a[href], [role="button"], input[type="button"], input[type="submit"]'
+      // Only try small safe navigation/toggle affordances. Never press save,
+      // delete, purchase, submit, permission or external actions during QA.
+      const safe = /\b(tab|menu|open|close|view|show|next|back|settings|details|more|filter)\b/i;
+      const forbidden = /\b(delete|remove|reset|clear|pay|buy|purchase|send|share|upload|download|save|submit|connect|record|start|stop|log ?out|sign ?out)\b/i;
+      const controls = Array.from(document.querySelectorAll(
+        'button:not([type="submit"]),[role="tab"],[role="button"],input[type="checkbox"]'
       )).filter((element) => {
+        const label = [element.getAttribute('aria-label'), element.textContent,
+          element.getAttribute('title')].filter(Boolean).join(' ').trim().slice(0, 140);
         const rect = element.getBoundingClientRect();
         const style = getComputedStyle(element);
-        return !element.disabled &&
+        return !element.disabled && !element.closest('form') &&
           rect.width > 0 && rect.height > 0 &&
-          style.display !== 'none' &&
-          style.visibility !== 'hidden';
-      }).slice(0, 60);
-
-      const preventDefault = (event) => event.preventDefault();
-      document.addEventListener('click', preventDefault, true);
-      for (const target of targets) {
+          style.visibility !== 'hidden' && style.display !== 'none' &&
+          safe.test(label) && !forbidden.test(label);
+      }).slice(0, 12);
+      let tested = 0;
+      const preventNavigation = (event) => {
+        const link = event.target?.closest?.('a');
+        if (link) event.preventDefault();
+      };
+      document.addEventListener('click', preventNavigation, true);
+      for (const control of controls) {
         try {
-          target.dispatchEvent(new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            view: window
+          control.dispatchEvent(new MouseEvent('click', {
+            bubbles: true, cancelable: true, view: window
           }));
+          tested++;
         } catch (error) {
-          const text = `click handler threw: ${error?.stack || error?.message || String(error)}`.slice(0, 900);
-          if (!window.__htmlappRuntimeIssues.includes(text)) window.__htmlappRuntimeIssues.push(text);
+          const text = 'navigation click threw: ' + String(error?.message || error).slice(0, 260);
+          window.__htmlappRuntimeIssues?.push(text);
         }
       }
-      document.removeEventListener('click', preventDefault, true);
-      return targets.length;
+      document.removeEventListener('click', preventNavigation, true);
+      return { tested };
     })();
+
     """#
 }
