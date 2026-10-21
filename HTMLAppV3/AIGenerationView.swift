@@ -765,16 +765,16 @@ Requested edit:
             let result = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
             session.acceptExternalHTML(result.html)
             session.isWorking = false
-            if result.changedOnlyCSS {
+            if result.html == functionalHTML {
                 session.phase = "Ready to review"
-                uiPolishNotice = result.html == functionalHTML
-                    ? "UI Overhaul found no safe visual change worth applying."
-                    : "UI Overhaul applied a CSS-only refinement without rewriting app behavior."
+                uiPolishNotice = "UI Redesign found no safe change worth applying."
             } else {
-                uiPolishNotice = "UI Overhaul refined presentation markup. Running a focused final QA check…"
+                uiPolishNotice = "Checking the redesigned app's navigation, rendering and logic…"
                 await session.verifyCurrent()
                 if session.errorMessage == nil {
-                    uiPolishNotice = "UI Overhaul finished and the refined markup passed the final checks."
+                    uiPolishNotice = result.changedOnlyCSS
+                        ? "Refined the interface and rechecked the finished app."
+                        : "Redesigned the interface and rechecked its behavior."
                 }
             }
         } catch {
