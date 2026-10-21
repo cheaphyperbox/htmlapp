@@ -14,6 +14,8 @@ struct AIGenerationView: View {
     @StateObject private var milestones = ForgeBuildMilestones()
     @State private var microphoneTranslation: CGSize = .zero
     @State private var microphoneArmed = false
+    @State private var microphoneCapturing = false
+    @State private var promptDictationActive = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
@@ -154,6 +156,7 @@ struct AIGenerationView: View {
         .onChange(of: scenePhase) { value in
             if value != .active {
                 microphoneRecordingTask?.cancel()
+                microphoneCapturing = false
                 microphoneArmed = false
                 microphoneTranslation = .zero
                 dictation.stop()
@@ -161,8 +164,12 @@ struct AIGenerationView: View {
             }
         }
         .onChange(of: dictation.transcript) { value in
+            // Drag-edit dictation is committed only on release; never overwrite a
+            // typed request, and never clear the creation prompt on cancellation.
+            guard !microphoneCapturing else { return }
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
-            if dictationForEdit { changePrompt = merged } else { prompt = merged }
+            if dictationForEdit { changePrompt = merged }
+            else if promptDictationActive { prompt = merged }
         }
         .onChange(of: session.refinedBrief) { brief in
             if !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -229,8 +236,15 @@ struct AIGenerationView: View {
                     .frame(minHeight: 150)
                     .font(.body)
                 Button {
-                    if dictation.recording { dictation.stop() }
-                    else { dictationForEdit = false; dictationPrefix = prompt; Task { await dictation.start() } }
+                    if dictation.recording {
+                        dictation.stop()
+                        promptDictationActive = false
+                    } else {
+                        dictationForEdit = false
+                        promptDictationActive = true
+                        dictationPrefix = prompt
+                        Task { await dictation.start() }
+                    }
                 } label: {
                     Label(dictation.recording ? "Stop Dictation" : "Dictate Your Idea", systemImage: dictation.recording ? "stop.circle.fill" : "mic.fill")
                 }
@@ -548,8 +562,9 @@ struct AIGenerationView: View {
                                     .lineLimit(1...4)
                                     .textFieldStyle(.roundedBorder)
                                 Button {
-                                    if dictation.recording { dictation.stop() }
+                                    if dictation.recording { dictation.stop(); dictationForEdit = false }
                                     else {
+                                        promptDictationActive = false
                                         dictationForEdit = true
                                         dictationPrefix = changePrompt
                                         Task { await dictation.start() }
@@ -636,7 +651,9 @@ struct AIGenerationView: View {
                         let inside = x >= 0 && y >= 0 && x + side <= size.width && y + side <= size.height
                         if inside && !microphoneArmed {
                             microphoneArmed = true
-                            dictationForEdit = true
+                            microphoneCapturing = true
+                            promptDictationActive = false
+                            dictationForEdit = false
                             dictationPrefix = ""
                             dictation.transcript = ""
                             microphoneEditNotice = nil
@@ -646,9 +663,10 @@ struct AIGenerationView: View {
                             microphoneArmed = false
                             microphoneRecordingTask?.cancel()
                             microphoneRecordingTask = nil
-                            dictationForEdit = false
                             dictation.stop()
                             dictation.transcript = ""
+                            microphoneCapturing = false
+                            dictationForEdit = false
                             microphoneEditNotice = nil
                         }
                     }
@@ -662,8 +680,9 @@ struct AIGenerationView: View {
                         microphoneTranslation = .zero
                         microphoneRecordingTask?.cancel()
                         microphoneRecordingTask = nil
-                        dictationForEdit = false
                         dictation.stop()
+                        microphoneCapturing = false
+                        dictationForEdit = false
                         if inside && wasArmed {
                             if !spoken.isEmpty {
                                 changePrompt = spoken
