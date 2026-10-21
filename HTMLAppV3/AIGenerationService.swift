@@ -471,6 +471,15 @@ Requested change:
             )
             let initialOutput = AIHTMLAgent.parse(response)
             wantsUIPolish = AIHTMLAgent.editNeedsPolish(response: response, requestedChange: cleanChange)
+            let changedSource = initialOutput.patch.isEmpty ? initialOutput.html : initialOutput.patch
+            let changedText = changedSource.lowercased()
+            streamedSection = changedText.contains("<script") || changedText.contains("javascript")
+                ? "script" : (changedText.contains("<style") || changedText.contains("css")
+                    ? "css" : "body")
+            sectionByteCounts = [streamedSection: changedSource.utf8.count]
+            streamedByteCount = response.utf8.count
+            AIDebugTraceStore.shared.append("EDIT PATCH VOLUME",
+                "Source bytes: \(changedSource.utf8.count); response bytes: \(response.utf8.count); section: \(streamedSection)")
             let output = try await applyEditOutputWithRecovery(
                 initialOutput,
                 requestedChange: improvedChange,
