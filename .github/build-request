@@ -1,3 +1,3 @@
-Build creative icon overhaul, specialist providers and native Live Activities
-source=6d21d2ddcda7aae23860e8d3dfa15b010b2533f3
-request=2026-10-21-release-check
+Verify SwiftUI specialist editor fix and ActivityKit integration
+source=1ced85a22c6771e7581c84bf8e552d5c880cc44c
+request=2026-10-21-compiler-recheck
