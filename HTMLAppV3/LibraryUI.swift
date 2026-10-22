@@ -131,8 +131,8 @@ struct LibraryView: View {
             }
             .environmentObject(store)
         }
-        .confirmationDialog("Add HTML App", isPresented: $showAddOptions, titleVisibility: .visible) {
-            Button("Generate with AI") { showGenerator = true }
+        .confirmationDialog("What would you like to do?", isPresented: $showAddOptions, titleVisibility: .visible) {
+            Button("Make an App with AI") { showGenerator = true }
             Button("Download Website") { showWebsiteImporter = true }
             Button("Enter Custom Code") { editor = .new }
             Button("Select an HTML File") { importingFile = true }
@@ -318,24 +318,29 @@ struct LibraryView: View {
                 }
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { showAllApps = true } label: {
-                    Image(systemName: "square.stack.3d.up")
-                }
-                .accessibilityLabel("All HTML Apps")
-
-                Button {
-                    newFolderParentID = folderID
-                    newFolderName = ""
-                    showNewFolder = true
+                Menu {
+                    Button { showAllApps = true } label: {
+                        Label("See All Apps", systemImage: "square.stack.3d.up")
+                    }
+                    Button {
+                        newFolderParentID = folderID
+                        newFolderName = ""
+                        showNewFolder = true
+                    } label: {
+                        Label("Create Folder", systemImage: "folder.badge.plus")
+                    }
+                    Button { showSettings = true } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
                 } label: {
-                    Image(systemName: "folder.badge.plus")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("New Folder")
-
+                .accessibilityLabel("More Library options")
                 Button { prepareAdd(in: folderID) } label: {
-                    Image(systemName: "plus")
+                    Label("Create", systemImage: "plus")
+                        .fontWeight(.semibold)
                 }
-                .accessibilityLabel("Add or Import HTML App")
+                .accessibilityLabel("Create or import an app")
             }
         }
     }
