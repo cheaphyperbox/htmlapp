@@ -130,22 +130,22 @@ struct HTMLWebView: UIViewRepresentable {
         controller.addUserScript(WKUserScript(
             source: PermissionBridgeScript.source(sensorPolicy: sensorPolicy),
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
+            forMainFrameOnly: true
         ))
         controller.addUserScript(WKUserScript(
             source: DownloadBridgeScript.source,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
+            forMainFrameOnly: true
         ))
         controller.addUserScript(WKUserScript(
             source: HTMLNativeAPIScript.source,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
+            forMainFrameOnly: true
         ))
         controller.addUserScript(WKUserScript(
             source: HTMLLocalNetworkScript.source,
             injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
+            forMainFrameOnly: true
         ))
         // WKWebView may enlarge text on narrow phones independently of CSS
         // media queries, causing transferred layouts to overflow or collide.
@@ -238,12 +238,29 @@ struct HTMLWebView: UIViewRepresentable {
                      createWebViewWith configuration: WKWebViewConfiguration,
                      for navigationAction: WKNavigationAction,
                      windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if let url = navigationAction.request.url { webView.load(URLRequest(url: url)) }
+            guard let url = navigationAction.request.url,
+                  let scheme = url.scheme?.lowercased() else { return nil }
+            switch scheme {
+            case "https", "http":
+                // External windows open in the system browser, not in the
+                // privileged HTMLApp WebView where native bridges exist.
+                UIApplication.shared.open(url, options: [:])
+            case "about":
+                break
+            default:
+                // file:, javascript:, data:, custom and other schemes are not
+                // automatically loaded into the privileged app context.
+                break
+            }
             return nil
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let body = message.body as? [String: Any] else { return }
+            // Any embedded third-party frame can otherwise invoke privileged
+            // HTMLApp bridges, including reading clipboard or native data.
+            // The installed app is the top-level document only.
+            guard message.frameInfo.isMainFrame,
+                  let body = message.body as? [String: Any] else { return }
             switch message.name {
             case "htmlappLocation":
                 guard let callbackID = body["id"] as? String else { return }
