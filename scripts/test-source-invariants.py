@@ -48,4 +48,12 @@ assert "maxAppBytes" in cache and "maxFileBytes" in cache
 for obsolete in ("HTMLApp/HTMLApp.swift", "HTMLApp/HTMLAppV2.swift", "HTMLApp/HTMLAppV3.swift"):
     assert not (root / obsolete).exists(), "Old unused app entry point remains: " + obsolete
 
+
+assert "func updateFromAI" in core and "func restoreAIEdit" in core
+assert "clearAIEditHistory" in source("HTMLAppV3/EditorWeb.swift")
+assert "Restore AI Edit" in source("HTMLAppV3/LibraryUI.swift")
+assert "Regenerate from scratch" in source("HTMLAppV3/AIGenerationView.swift")
+assert "symbols.search" in native and "symbols.render" in native
+assert "lastEditSummary" in ai
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
