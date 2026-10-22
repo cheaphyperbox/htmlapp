@@ -261,6 +261,14 @@ struct HTMLWebView: UIViewRepresentable {
             // The installed app is the top-level document only.
             guard message.frameInfo.isMainFrame,
                   let body = message.body as? [String: Any] else { return }
+            // The top-level HTMLApp document is loaded from its local
+            // app-scoped WebView. If it navigates to an external origin, that
+            // origin must never gain access to native message handlers.
+            if let url = message.frameInfo.request.url,
+               let scheme = url.scheme?.lowercased(),
+               !["file", "about", "applewebdata"].contains(scheme) {
+                return
+            }
             switch message.name {
             case "htmlappLocation":
                 guard let callbackID = body["id"] as? String else { return }
@@ -306,6 +314,16 @@ struct HTMLWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
+            if let url = navigationAction.request.url,
+               navigationAction.targetFrame?.isMainFrame == true,
+               let scheme = url.scheme?.lowercased(),
+               ["http", "https"].contains(scheme) {
+                // Never replace the privileged local document with a
+                // third-party website carrying the same native bridges.
+                UIApplication.shared.open(url, options: [:])
+                decisionHandler(.cancel)
+                return
+            }
             if navigationAction.shouldPerformDownload {
                 decisionHandler(.download)
                 return
