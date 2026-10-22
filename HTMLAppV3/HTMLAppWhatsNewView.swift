@@ -12,15 +12,40 @@ enum HTMLAppReleaseNotes {
         let tint: Color
     }
 
-    static var installedVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
-    }
+    // Compile-time release identity. This is not computed from a possibly
+    // stale IPA Info.plist or the GitHub runner's commit count.
+    static let compiledVersion = "1.4.0"
+    static let compiledBuild = "5"
 
-    static var installedBuild: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+    static var installedVersion: String { compiledVersion }
+    static var installedBuild: String { compiledBuild }
+    static var packagedVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Missing"
+    }
+    static var packagedBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Missing"
+    }
+    static var packagingMatchesCode: Bool {
+        packagedVersion == compiledVersion && packagedBuild == compiledBuild
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.4" || version.hasPrefix("1.4.") {
+            return [
+                Entry(id: "verified-build", title: "Check exactly which build you're running",
+                      description: "Settings now shows a hardcoded app release and the actual IPA Info.plist version side by side, including warnings if they don't match.",
+                      symbol: "checkmark.shield.fill", tint: .blue),
+                Entry(id: "fast-qa", title: "Faster generation and dependable testing",
+                      description: "Forge runs its local app checks first and asks a separate reviewer only when concrete errors need repairing.",
+                      symbol: "bolt.fill", tint: .orange),
+                Entry(id: "icon-check", title: "Stop blank app icons",
+                      description: "Icon rendering checks for genuinely visible artwork instead of accepting a background-only image.",
+                      symbol: "app.badge.fill", tint: .purple),
+                Entry(id: "style-feedback", title: "Tell Forge what to change about every mockup",
+                      description: "Drag the floating microphone onto the screen to dictate feedback and regenerate all mockups around it.",
+                      symbol: "mic.fill", tint: .pink)
+            ]
+        }
         if version == "1.3" || version.hasPrefix("1.3.") {
             return [
                 Entry(id: "guided-start", title: "A guided welcome",
@@ -97,6 +122,11 @@ struct HTMLAppWhatsNewView: View {
                         Text("VERSION \(version) · BUILD \(HTMLAppReleaseNotes.installedBuild)")
                             .font(.caption.weight(.bold).monospacedDigit())
                             .foregroundStyle(.secondary)
+                        if !HTMLAppReleaseNotes.packagingMatchesCode {
+                            Label("This IPA's packaged version does not match the app code. Please update your build process.", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
 
                     if updates.isEmpty {
