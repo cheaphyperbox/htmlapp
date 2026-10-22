@@ -422,13 +422,13 @@ struct LibraryView: View {
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
         Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
-        Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
         Divider()
         Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
         Button { profileApp = app } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
         Button { store.exportHTML(app) } label: { Label("Export Raw Code", systemImage: "doc.text") }
+        Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
         Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: { Label("Copy Link to Open App", systemImage: "link") }
         Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
         Button {} label: { Label("Last Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock") }.disabled(true)
