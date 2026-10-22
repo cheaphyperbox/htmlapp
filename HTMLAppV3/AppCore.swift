@@ -242,7 +242,7 @@ final class AppStore: ObservableObject {
         pendingInsertionFolderID = nil
         apps.insert(app, at: 0)
         save()
-        await SourceCache.shared.refresh(app: app, force: false)
+        Task(priority: .utility) { await SourceCache.shared.refresh(app: app, force: false) }
     }
 
     func addTransferredApp(
@@ -304,7 +304,7 @@ final class AppStore: ObservableObject {
         }
         installTransferredIntegrations(appID: id, widgets: widgets, backgroundJobs: backgroundJobs)
         save()
-        await SourceCache.shared.refresh(app: app, force: false)
+        Task(priority: .utility) { await SourceCache.shared.refresh(app: app, force: false) }
         notice = "Received \(app.name)."
     }
 
@@ -366,7 +366,8 @@ final class AppStore: ObservableObject {
         apps[index].favicon = await HTMLAppIconTools.savedIcon(html: html, name: name)
         apps[index].updatedAt = Date()
         save()
-        await SourceCache.shared.refresh(app: apps[index], force: false)
+        let updated = apps[index]
+        Task(priority: .utility) { await SourceCache.shared.refresh(app: updated, force: false) }
     }
 
     func updateWebsiteSource(_ app: SavedHTMLApp, urlString: String) async throws {
