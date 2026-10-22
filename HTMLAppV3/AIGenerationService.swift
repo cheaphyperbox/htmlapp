@@ -89,6 +89,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var iconScript = ""
     @Published var renderedIconData: Data?
     @Published var verificationReport = ""
+    @Published var lastEditSummary = ""
     @Published var wantsUIPolish = false
     @Published var errorMessage: String?
     @Published var isWorking = false
@@ -417,6 +418,7 @@ final class AIGenerationSession: ObservableObject {
         guard !streamedHTML.trimmed.isEmpty else { return }
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
+        lastEditSummary = ""
         let beforeEditHTML = streamedHTML
         let beforeEditDescription = description
         let beforeEditIconScript = iconScript
@@ -490,6 +492,12 @@ Requested change:
                 messages: [("user", user)]
             )
             let initialOutput = AIHTMLAgent.parse(response)
+            // The edit contract returns a concise one-sentence edit summary.
+            // Fall back to a meaningful description of the requested change.
+            let concise = AIHTMLAgent.value("edit_summary", in: response)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            lastEditSummary = concise.isEmpty ? "Applied AI edit: " + String(cleanChange.prefix(160)) : concise
+            AIDebugTraceStore.shared.append("EDIT SUMMARY", lastEditSummary)
             wantsUIPolish = AIHTMLAgent.editNeedsPolish(response: response, requestedChange: cleanChange)
             let changedSource = initialOutput.patch.isEmpty ? initialOutput.html : initialOutput.patch
             let changedText = changedSource.lowercased()
@@ -1845,6 +1853,7 @@ You are HTMLApp's code-editing agent. Edit the existing single-file HTML app wit
 
 Return these sections with no Markdown fences:
 <ui_polish_needed>yes or no</ui_polish_needed>
+<edit_summary>Exactly one plain-language sentence about the changes actually made.</edit_summary>
 <build_summary>short updated implementation plan; conclusions only, not hidden reasoning</build_summary>
 <description>updated one-sentence description if materially changed, otherwise repeat the current purpose</description>
 <icon_script>updated icon script only if the app identity changed; otherwise leave empty</icon_script>
