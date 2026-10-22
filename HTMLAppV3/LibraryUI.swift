@@ -41,6 +41,7 @@ struct LibraryView: View {
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
     @State private var aiEditorApp: SavedHTMLApp?
+    @State private var editHistoryApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
     @State private var showWebsiteImporter = false
@@ -92,6 +93,34 @@ struct LibraryView: View {
         }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
+        }
+        .sheet(item: $editHistoryApp) { app in
+            NavigationStack {
+                List {
+                    let history = store.editHistory(for: app)
+                    if history.isEmpty {
+                        Text("No AI edit checkpoints yet. Earlier versions appear after you save an AI edit.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(history.reversed()) { checkpoint in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(checkpoint.note).font(.headline)
+                            Text(checkpoint.created.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Button("Restore this version") {
+                                Task {
+                                    await store.restoreAIEdit(app, checkpointID: checkpoint.id)
+                                    editHistoryApp = nil
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("AI Edit History")
+                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { editHistoryApp = nil }
+                } }
+            }
         }
         .sheet(item: $aiIconApp) { app in
             AIIconGenerationView(app: app).environmentObject(store)
@@ -429,6 +458,7 @@ struct LibraryView: View {
         Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: { Label("Move To", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
+        Button { editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
         Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
         Divider()
         Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
