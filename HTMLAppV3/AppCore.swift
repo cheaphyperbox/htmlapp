@@ -684,7 +684,12 @@ final class AppStore: ObservableObject {
     }
 
     func createNearbyPackage(appIDs: Set<String>) throws -> URL {
-        let selected = apps.filter { appIDs.contains($0.id) }
+        let selected = apps.filter { appIDs.contains($0.id) }.map { original in
+            var clean = original
+            clean.lastOpenedAt = nil
+            clean.isFavorite = nil
+            return clean
+        }
         guard !selected.isEmpty else { throw HTMLAppPackageError.invalidArchive }
         let links = FolderAppLinkStore.shared.snapshot(appIDs: Set(selected.map(\.id)))
         let url = try HTMLAppPackageTransfer.createArchive(apps: selected, folders: foldersForPortableExport(apps: selected, links: links), links: links, includePersonalData: false)
