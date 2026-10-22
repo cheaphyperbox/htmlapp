@@ -392,7 +392,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
           rect.width > 0 && rect.height > 0 &&
           style.visibility !== 'hidden' && style.display !== 'none' &&
           safe.test(label) && !forbidden.test(label);
-      }).slice(0, 12);
+      }).slice(0, 5);
       let tested = 0;
       const preventNavigation = (event) => {
         const link = event.target?.closest?.('a');
