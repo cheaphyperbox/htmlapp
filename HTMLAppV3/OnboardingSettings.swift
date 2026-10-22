@@ -289,6 +289,24 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Button {
+                        onboardingComplete = false
+                        dismiss()
+                    } label: {
+                        Label("Show Me How to Use HTMLApp", systemImage: "graduationcap.fill")
+                            .font(.headline)
+                    }
+                    NavigationLink {
+                        AIConfigurationSettingsView()
+                    } label: {
+                        Label("Connect My AI", systemImage: "sparkles")
+                    }
+                } header: {
+                    Text("Need a hand?")
+                } footer: {
+                    Text("The guide explains every major feature. You can skip any step and come back later.")
+                }
                 Section("Home View") {
                     Picker("Layout", selection: $libraryLayout) {
                         Label("List", systemImage: "list.bullet").tag("list")
