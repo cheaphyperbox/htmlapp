@@ -686,7 +686,7 @@ final class AppStore: ObservableObject {
         let selected = apps.filter { appIDs.contains($0.id) }
         guard !selected.isEmpty else { throw HTMLAppPackageError.invalidArchive }
         let links = FolderAppLinkStore.shared.snapshot(appIDs: Set(selected.map(\.id)))
-        let url = try HTMLAppPackageTransfer.createArchive(apps: selected, folders: foldersForPortableExport(apps: selected, links: links), links: links)
+        let url = try HTMLAppPackageTransfer.createArchive(apps: selected, folders: foldersForPortableExport(apps: selected, links: links), links: links, includePersonalData: false)
         let unique = FileManager.default.temporaryDirectory.appendingPathComponent("Nearby-Send-\(UUID().uuidString).zip")
         try FileManager.default.copyItem(at: url, to: unique)
         return unique
@@ -718,7 +718,7 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func importPortablePackage(from url: URL, replaceExisting: Bool) throws {
+    func importPortablePackage(from url: URL, replaceExisting: Bool, includePersonalData: Bool = true) throws {
         let decoded = try HTMLAppPackageTransfer.readArchive(from: url)
         let imported = decoded.bundle
 
@@ -818,11 +818,13 @@ final class AppStore: ObservableObject {
             folderIDMap: folderIDMap,
             canonicalApps: apps
         )
-        try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: appIDMap)
-        restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
-        restorePortableAppData(bundle: imported, appIDMap: appIDMap)
-        restorePortableWebsiteState(bundle: imported, appIDMap: appIDMap)
-        restoreGeneratedIntegrations(bundle: imported, appIDMap: appIDMap)
+        if includePersonalData {
+            try HTMLAppPackageTransfer.restoreCache(decoded.cacheFiles, appIDMap: appIDMap)
+            restorePortablePermissions(bundle: imported, appIDMap: appIDMap)
+            restorePortableAppData(bundle: imported, appIDMap: appIDMap)
+            restorePortableWebsiteState(bundle: imported, appIDMap: appIDMap)
+            restoreGeneratedIntegrations(bundle: imported, appIDMap: appIDMap)
+        }
 
         save()
         persistFolders()
