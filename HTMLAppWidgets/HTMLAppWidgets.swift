@@ -469,6 +469,7 @@ struct HTMLAppWidgetsBundle: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
         HTMLAppPrimaryWidget()
+        HTMLAppVoiceCreateWidget()
         // Removed broken picker-based widget variants. The primary widget
         // always displays the latest snapshot and needs no manual app selection.
         if #available(iOS 16.2, *) {
