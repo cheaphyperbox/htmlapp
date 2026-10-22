@@ -43,16 +43,22 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "device.info":
             deviceInfo(id: id)
         case "device.keepAwake":
-            UIApplication.shared.isIdleTimerDisabled = args["enabled"] as? Bool ?? false
-            resolve(id, value: ["enabled": UIApplication.shared.isIdleTimerDisabled])
+            withPermission(.displayControl, id: id) { [weak self] in
+                guard let self else { return }
+                UIApplication.shared.isIdleTimerDisabled = args["enabled"] as? Bool ?? false
+                self.resolve(id, value: ["enabled": UIApplication.shared.isIdleTimerDisabled])
+            }
         case "clipboard.readText":
             withPermission(.clipboard, id: id) { [weak self] in
                 guard let self else { return }
                 self.resolve(id, value: ["text": UIPasteboard.general.string ?? ""])
             }
         case "clipboard.writeText":
-            UIPasteboard.general.string = args["text"] as? String ?? ""
-            resolve(id, value: ["written": true])
+            withPermission(.clipboard, id: id) { [weak self] in
+                guard let self else { return }
+                UIPasteboard.general.string = args["text"] as? String ?? ""
+                self.resolve(id, value: ["written": true])
+            }
         case "haptics.play":
             let values = (args["pattern"] as? [NSNumber])?.map { $0.intValue } ?? [8]
             HTMLHapticsBridge.perform(pattern: values)
@@ -60,11 +66,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "share.present":
             presentShare(id: id, args: args)
         case "system.open":
-            openURL(id: id, value: args["url"] as? String ?? "")
+            withPermission(.externalApps, id: id) { [weak self] in
+                self?.openURL(id: id, value: args["url"] as? String ?? "")
+            }
         case "externalApps.maps":
-            openMaps(id: id, args: args)
+            withPermission(.externalApps, id: id) { [weak self] in
+                self?.openMaps(id: id, args: args)
+            }
         case "externalApps.shortcuts":
-            runShortcut(id: id, args: args)
+            withPermission(.externalApps, id: id) { [weak self] in
+                self?.runShortcut(id: id, args: args)
+            }
         case "files.pick":
             pickFiles(id: id, args: args)
         case "contacts.pick":
@@ -602,8 +614,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func openURL(id: String, value: String) {
-        guard let url = URL(string: value) else {
-            reject(id, code: "invalid_url", message: "The requested URL is invalid.")
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              !["javascript", "data", "blob", "file", "itms-services"].contains(scheme) else {
+            reject(id, code: "invalid_url", message: "The requested URL uses a blocked or invalid scheme.")
             return
         }
         UIApplication.shared.open(url, options: [:]) { [weak self] success in
