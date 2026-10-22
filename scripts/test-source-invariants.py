@@ -30,6 +30,13 @@ assert "mekapc.hostish.site" not in workflow and "mekapc.hostish.site" not in so
 assert "message.frameInfo.isMainFrame" in bridge, "Iframe-to-native messaging must remain blocked"
 assert '["file", "about", "applewebdata"].contains(scheme)' in bridge
 assert 'withPermission(.clipboard, id: id)' in native, "Clipboard read requires per-app consent"
+assert 'withPermission(.files, id: id)' in native, "Files picker requires per-app consent"
+assert 'case files' in source("HTMLAppV3/PermissionSystem.swift")
+assert 'includePersonalData: false' in core, "Nearby export must omit personal state"
+assert 'includePersonalData: false' in source("HTMLAppV3/NearbyAppTransfer.swift"), "Nearby import must ignore old personal state"
+assert 'blocking.isEmpty' in ai and 'qaRepairResponseBytes' in ai, "Local clean QA should not send unnecessary repair requests"
+assert 'HTMLAppPackageTransfer' in core
+
 assert "library.corrupt-" in core and "libraryBackupURL" in core
 assert "guard !libraryLoadBlocked" in core, "No writes after unreadable Library load"
 assert "HTMLQualityChecks.blockingIssues" in ai
