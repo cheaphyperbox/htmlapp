@@ -94,6 +94,8 @@ struct LibraryView: View {
                 showVoiceCreate = false
             }, generate: { idea in
                 shortcutPrompt = idea
+                UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
+                shortcutGenerationNonce += 1
                 showVoiceCreate = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     showGenerator = true
