@@ -1056,7 +1056,7 @@ Requested edit:
                 html = injectIcon(icon, into: html)
             }
             if let existingApp {
-                await store.update(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description)
+                await store.updateFromAI(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description, note: session.lastEditSummary.isEmpty ? "AI changed this app." : session.lastEditSummary)
                 if let icon = session.renderedIconData {
                     store.setGeneratedIcon(icon, for: existingApp)
                 }
