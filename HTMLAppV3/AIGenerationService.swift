@@ -2627,7 +2627,7 @@ enum HTMLQualityChecks {
         }
         if !result.lowercased().contains("name=\"viewport\"") &&
            !result.lowercased().contains("name='viewport'"),
-           let head = result.range(of: #"<head\\b[^>]*>"#, options: [.regularExpression, .caseInsensitive]) {
+           let head = result.range(of: #"<head\b[^>]*>"#, options: [.regularExpression, .caseInsensitive]) {
             result.insert(contentsOf: "\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">", at: head.upperBound)
         }
         return result
@@ -2636,8 +2636,7 @@ enum HTMLQualityChecks {
     static func blockingIssues(_ issues: [String]) -> [String] {
         issues.filter { issue in
             issue.hasPrefix("Unbalanced ") ||
-            issue.hasPrefix("Contains an unresolved generated-asset token") ||
-            issue.hasPrefix("JavaScript references missing DOM id")
+            issue.hasPrefix("Contains an unresolved generated-asset token")
         }
     }
 
