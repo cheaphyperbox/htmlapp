@@ -2531,7 +2531,7 @@ Interrupted/malformed response:
         return result
     }
 
-    private static func value(_ tag: String, in text: String) -> String { values(tag, in: text).first ?? "" }
+    static func value(_ tag: String, in text: String) -> String { values(tag, in: text).first ?? "" }
     private static func partial(_ tag: String, in text: String) -> String {
         let open = "<\(tag)>"; let close = "</\(tag)>"
         guard let start = text.range(of: open) else { return "" }
