@@ -225,10 +225,25 @@ struct HTMLAppWidgetView: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             Spacer(minLength: 0)
-            heroValue
-            if let progress = snapshot.progress {
-                ProgressView(value: min(max(progress, 0), 1))
-                    .tint(accent)
+            if snapshot.layout?.lowercased() == "ring",
+               let progress = snapshot.progress {
+                ZStack {
+                    Circle().stroke(accent.opacity(0.20), lineWidth: 12)
+                    Circle()
+                        .trim(from: 0, to: min(max(progress, 0), 1))
+                        .stroke(accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    heroValue
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(5)
+            } else {
+                heroValue
+                if let progress = snapshot.progress {
+                    ProgressView(value: min(max(progress, 0), 1))
+                        .tint(accent)
+                }
             }
             footer
         }
@@ -252,6 +267,18 @@ struct HTMLAppWidgetView: View {
                     .scaledToFill()
                     .frame(width: 108, height: 108)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else if snapshot.layout?.lowercased() == "ring",
+                      let progress = snapshot.progress {
+                ZStack {
+                    Circle().stroke(accent.opacity(0.2), lineWidth: 12)
+                    Circle().trim(from: 0, to: min(max(progress, 0), 1))
+                        .stroke(accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    if let value = snapshot.value {
+                        Text(value).font(.title3.bold()).lineLimit(1)
+                    }
+                }
+                .frame(width: 110, height: 110)
             } else {
                 itemList(limit: 3)
                     .frame(maxWidth: 140, alignment: .leading)
@@ -356,9 +383,15 @@ struct HTMLAppWidgetView: View {
                             }
                         }
                         Spacer(minLength: 4)
-                        Text(item.value)
-                            .font(.caption.bold())
-                            .lineLimit(1)
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text(item.value)
+                                .font(.caption.bold()).lineLimit(1)
+                            if let progress = item.progress {
+                                ProgressView(value: min(max(progress, 0), 1))
+                                    .tint(accent)
+                                    .frame(width: 55)
+                            }
+                        }
                     }
                 }
             }
