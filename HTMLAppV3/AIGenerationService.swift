@@ -1832,6 +1832,10 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
         return base + contract + """
 
+HTMLAPP SF SYMBOLS:
+- Generated apps may call await HTMLAppNative.symbols.search("heart") to find supported curated system-symbol names, and await HTMLAppNative.symbols.render("heart.fill") to receive {dataURL} for an <img>. SF Symbols are not a web font: do not pretend arbitrary symbol names work directly in CSS or HTML.
+- Call the local catalog before selecting a symbol; render it as an image with descriptive alt text and use CSS filters/tint thoughtfully. Missing symbols must fall back to inline SVG/text. Do not use SF Symbols as app icons or trademarks. The catalog is a safe iOS 16-oriented subset, not every symbol Apple ships.
+
 HTMLAPP APPEARANCE AND FUNCTIONAL CONTROLS:
 - Every NEW generated app MUST implement light and dark color palettes, with readable semantic surface, text, border, primary, secondary, and error tokens. Use @media (prefers-color-scheme: dark) and (prefers-color-scheme: light), and apply the tokens throughout; avoid fixed light backgrounds or dark text that become unreadable in the opposite appearance. Keep the selected visual identity in both schemes.
 - Provide an explicit accessible Light / Dark / System setting when an app has a Settings screen; persist selection locally and update the root data-theme attribute. System follows prefers-color-scheme changes. Otherwise automatic system switching is mandatory.
