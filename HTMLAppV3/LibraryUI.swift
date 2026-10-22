@@ -133,15 +133,15 @@ struct LibraryView: View {
         }
         .confirmationDialog("What would you like to do?", isPresented: $showAddOptions, titleVisibility: .visible) {
             Button("Make an App with AI") { showGenerator = true }
-            Button("Download Website") { showWebsiteImporter = true }
-            Button("Enter Custom Code") { editor = .new }
-            Button("Select an HTML File") { importingFile = true }
-            Button("Receive from Nearby Device") {
+            Button("Save a Website") { showWebsiteImporter = true }
+            Button("Write HTML Code") { editor = .new }
+            Button("Import an HTML File") { importingFile = true }
+            Button("Receive an App from Another Device") {
                 nearbyTransferRoute = NearbyTransferRoute(appIDs: [])
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Generate an app, download a website for offline use, paste code, choose an HTML file, or transfer directly over Nearby Transfer (Bluetooth/Wi-Fi).")
+            Text("Choose the easiest way to get started. You can create with AI, add a website or file, or receive an app from someone nearby.")
         }
         .alert("New Folder", isPresented: $showNewFolder) {
             TextField("Folder name", text: $newFolderName)
