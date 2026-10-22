@@ -7,7 +7,10 @@ struct OnboardingView: View {
     @State private var showAISetup = false
     @State private var showMenuExample = false
 
-    private let numberOfSteps = 11
+    @State private var demoStage = -1
+    @State private var demoEdit = ""
+    @StateObject private var demoDictation = ForgeDictation()
+    private let numberOfSteps = 12
 
     var body: some View {
         VStack(spacing: 0) {
@@ -128,6 +131,7 @@ struct OnboardingView: View {
         case 7: return "Permissions and widgets"
         case 8: return "Sharing and backups"
         case 9: return "Settings and help"
+        case 10: return "Practice making a calculator"
         default: return "Optional permissions"
         }
     }
@@ -144,6 +148,7 @@ struct OnboardingView: View {
         case 7: return "Control what an app may access. Some apps can publish Home Screen widgets."
         case 8: return "Send apps nearby, export code, back up personal data, or add an app to Home Screen."
         case 9: return "Adjust your preferences, read debug logs, or replay this tutorial whenever you want."
+        case 10: return "Try a safe sample AI generation, play with a real calculator, and practice asking for edits. This lesson does not use your API or save an app."
         default: return "Choose optional iOS permissions. Each can be skipped and changed later."
         }
     }
@@ -160,6 +165,7 @@ struct OnboardingView: View {
         case 7: return "square.grid.2x2"
         case 8: return "square.and.arrow.up"
         case 9: return "gearshape.2"
+        case 10: return "plus.forwardslash.minus"
         default: return "hand.raised"
         }
     }
@@ -273,6 +279,48 @@ struct OnboardingView: View {
             tutorialRow("1", "Find Settings", "Tap the gear to change layout and configure your AI provider.", symbol: "gearshape", tint: .blue)
             tutorialRow("2", "Read debug logs", "Developer Mode shows AI logs and timings. Review private information before sharing logs.", symbol: "ladybug", tint: .blue)
             tutorialRow("3", "Learn again", "Select Replay Tutorial in Settings whenever you need help.", symbol: "arrow.counterclockwise", tint: .blue)
+        case 10:
+            if AISettingsStore.configuration.isConfigured {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Practice prompt: Make a simple calculator")
+                        .font(.headline)
+                    if demoStage == -1 {
+                        Button("Start practice generation") { startCalculatorDemo() }
+                            .buttonStyle(.borderedProminent)
+                    } else if demoStage < 8 {
+                        ProgressView(value: Double(demoStage + 1), total: 8)
+                        Text(["Reading your request", "Planning the calculator", "Designing the screen",
+                              "Writing the buttons", "Adding calculator logic", "Preparing preview",
+                              "Checking the app", "Finishing the practice app"][max(0, demoStage)])
+                            .font(.headline)
+                        Text("This is a prebuilt teaching example, not an AI request.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Try the calculator's buttons below, then describe what you would change.")
+                            .font(.subheadline)
+                        HTMLWebView(html: Self.calculatorDemoHTML, appID: "PREVIEW")
+                            .frame(height: 320)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                        TextField("Example: Make the buttons blue", text: $demoEdit)
+                            .textFieldStyle(.roundedBorder)
+                        Button(demoDictation.recording ? "Stop recording" : "Try the edit microphone") {
+                            if demoDictation.recording { demoDictation.stop() }
+                            else { Task { await demoDictation.start() } }
+                        }
+                        .buttonStyle(.bordered)
+                        Text(demoDictation.status).font(.caption).foregroundStyle(.secondary)
+                        if !demoEdit.isEmpty {
+                            Text("In the real Forge editor, tap Apply Change to ask AI to make this edit.")
+                                .font(.subheadline)
+                        }
+                        Button("Replay practice generation") { startCalculatorDemo() }
+                            .buttonStyle(.bordered)
+                    }
+                }
+                .onChange(of: demoDictation.transcript) { demoEdit = $0 }
+            } else {
+                tutorialRow("1", "Set up AI first", "Return to the Make an app with AI lesson to add a provider, then replay this tutorial to practice.", symbol: "key.fill", tint: .blue)
+            }
         default:
             tutorialRow("1", "Send to a friend", "Open Share with Nearby Devices on the sending device. The other device chooses Receive. Accept the connection and the app imports automatically.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
             tutorialRow("2", "Add to Home Screen", "Long-press an app and choose Add to Home Screen. HTMLApp shows the steps to approve its profile in iOS Settings.", symbol: "apps.iphone", tint: .orange)
@@ -301,6 +349,48 @@ struct OnboardingView: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground),
                     in: RoundedRectangle(cornerRadius: 19))
     }
+
+    private func startCalculatorDemo() {
+        demoStage = 0
+        Task {
+            // 8 visible phases, approximately 40 seconds total.
+            for stage in 1...8 {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { return }
+                demoStage = stage
+            }
+        }
+    }
+
+    private static let calculatorDemoHTML = """
+    <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>body{font:20px -apple-system;margin:0;padding:16px;background:#f4f4f7;color:#17171a}
+    #screen{text-align:right;font-size:30px;background:white;border-radius:10px;padding:12px;margin-bottom:10px}
+    main{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    button{padding:16px 2px;border:0;border-radius:12px;background:white;font:inherit}
+    button:last-child{background:#3378ed;color:white}</style></head><body>
+    <div id="screen">0</div><main>
+    <button>7</button><button>8</button><button>9</button><button>÷</button>
+    <button>4</button><button>5</button><button>6</button><button>×</button>
+    <button>1</button><button>2</button><button>3</button><button>−</button>
+    <button>C</button><button>0</button><button>+</button><button>=</button>
+    </main><script>
+    let a=null,op=null,input="0";
+    const screen=document.querySelector("#screen");
+    document.querySelector("main").addEventListener("click",e=>{
+      if(e.target.tagName!=="BUTTON")return;
+      const t=e.target.textContent;
+      if(/^\\d$/.test(t)){input=input==="0"?t:input+t;}
+      else if(t==="C"){a=null;op=null;input="0";}
+      else if(t==="="&&op&&a!==null){
+        const b=Number(input);
+        const result=op==="+"?a+b:op==="−"?a-b:op==="×"?a*b:b===0?"Error":a/b;
+        input=String(result);a=null;op=null;
+      }else if(["+","−","×","÷"].includes(t)){a=Number(input);op=t;input="0";}
+      screen.textContent=input;
+    });
+    </script></body></html>
+    """
 
     private func advance() {
         guard step < numberOfSteps - 1 else { complete = true; return }
