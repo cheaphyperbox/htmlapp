@@ -38,7 +38,7 @@ struct HTMLAppLiveActivityWidget: Widget {
                 }
             }
             .padding(14)
-            .activityBackgroundTint(Color(.secondarySystemBackground))
+            .activityBackgroundTint(context.state.backgroundHex.map { activityAccent($0) } ?? Color(.secondarySystemBackground))
             .activitySystemActionForegroundColor(activityAccent(context.state.accentHex))
             .widgetURL(activityURL(context.attributes))
         } dynamicIsland: { context in
@@ -78,7 +78,7 @@ struct HTMLAppLiveActivityWidget: Widget {
                 Image(systemName: context.attributes.systemSymbol)
                     .foregroundStyle(activityAccent(context.state.accentHex))
             } compactTrailing: {
-                Text(context.state.value.isEmpty ? "•" : context.state.value)
+                Text((context.state.compactLabel?.isEmpty == false ? context.state.compactLabel : nil) ?? (context.state.value.isEmpty ? "•" : context.state.value))
                     .font(.caption2.monospacedDigit())
                     .lineLimit(1)
             } minimal: {
