@@ -367,6 +367,20 @@ struct AIGenerationView: View {
                     .font(.caption)
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker("App testing", selection: Binding(
+                        get: { ForgeTestMode.selected },
+                        set: { UserDefaults.standard.set($0.rawValue, forKey: "forgeTestMode") }
+                    )) {
+                        ForEach(ForgeTestMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    Text("Skip: no runtime checks. Fast: short on-device smoke tests without AI repair. Balanced: test and attempt one focused AI repair. None guarantees every button works.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if existingApp == nil {
                     Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
