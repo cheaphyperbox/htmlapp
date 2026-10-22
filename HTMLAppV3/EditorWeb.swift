@@ -101,7 +101,7 @@ enum HTMLAppResponsiveViewport {
         viewport.name = 'viewport';
         viewport.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
         document.head?.appendChild(viewport);
-      } else if (!/width\\s*=/.test(viewport.content || '')) {
+      } else if (!/width\s*=/.test(viewport.content || '')) {
         viewport.content += ', width=device-width';
       }
       // Preserve author-defined sizes, avoid WebKit's automatic text inflation.
