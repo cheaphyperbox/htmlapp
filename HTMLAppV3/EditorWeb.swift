@@ -75,7 +75,9 @@ struct EditorView: View {
         Task {
             switch mode {
             case .new: await store.add(html: html, summary: summary)
-            case .edit(let app): await store.update(app, html: html, summary: summary)
+            case .edit(let app):
+                await store.update(app, html: html, summary: summary)
+                store.clearAIEditHistory(for: app)
             }
             saving = false
             dismiss()
