@@ -88,6 +88,30 @@ struct WebRunner: View {
     var body: some View { HTMLWebView(html: app.html, appID: app.id).statusBarHidden(true) }
 }
 
+/// Applies a consistent CSS viewport on both iPhone and iPad while leaving
+/// app-specific flex/grid layouts, fonts and breakpoints under the app's control.
+enum HTMLAppResponsiveViewport {
+    static let source = #"""
+    (() => {
+      const root = document.documentElement;
+      if (!root) return;
+      let viewport = document.querySelector('meta[name="viewport"]');
+      if (!viewport) {
+        viewport = document.createElement('meta');
+        viewport.name = 'viewport';
+        viewport.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+        document.head?.appendChild(viewport);
+      } else if (!/width\\s*=/.test(viewport.content || '')) {
+        viewport.content += ', width=device-width';
+      }
+      // Preserve author-defined sizes, avoid WebKit's automatic text inflation.
+      // Do not override user zoom, max-scale, or fixed-size layout rules.
+      root.style.setProperty('-webkit-text-size-adjust', '100%');
+      root.style.setProperty('text-size-adjust', '100%');
+    })();
+    """#
+}
+
 struct HTMLWebView: UIViewRepresentable {
     let html: String
     let appID: String
@@ -121,6 +145,14 @@ struct HTMLWebView: UIViewRepresentable {
             source: HTMLLocalNetworkScript.source,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
+        ))
+        // WKWebView may enlarge text on narrow phones independently of CSS
+        // media queries, causing transferred layouts to overflow or collide.
+        // Normalize the viewport without rewriting or changing the app's HTML.
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppResponsiveViewport.source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
         ))
         controller.add(context.coordinator, name: "htmlappLocation")
         controller.add(context.coordinator, name: "htmlappNotificationPermission")
