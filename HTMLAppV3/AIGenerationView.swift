@@ -238,6 +238,12 @@ struct AIGenerationView: View {
                 workTracker.updateVolume(bytes, stage: stage)
             }
         }
+        .onChange(of: session.qaRepairResponseBytes) { bytes in
+            workTracker.updateVolume(bytes, stage: .repair)
+        }
+        .onChange(of: session.iconScript) { script in
+            workTracker.updateVolume(script.utf8.count, stage: .icon)
+        }
         .onChange(of: session.streamedHTML) { html in
             milestones.inspectHTML(html)
         }
