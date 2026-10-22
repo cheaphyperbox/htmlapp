@@ -32,7 +32,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     }
     func send(_ url: URL) {
         guard !busy, let peer = session.connectedPeers.first else { return }
-        outbound = url; busy = true; sendFailed = false; status = "Sending encrypted backup…"
+        outbound = url; busy = true; sendFailed = false; status = "Sending app without saved data…"
         session.sendResource(at: url, withName: "HTMLApp.htmlapp.zip", toPeer: peer) { [weak self] error in
             DispatchQueue.main.async {
                 self?.busy = false
@@ -82,7 +82,7 @@ final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MC
     }
     func session(_ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID) { stream.close() }
     func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {
-        DispatchQueue.main.async { self.busy = true; self.status = "Receiving encrypted backup from \(peerID.displayName)…" }
+        DispatchQueue.main.async { self.busy = true; self.status = "Receiving app from \(peerID.displayName)…" }
     }
     func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?) {
         do {
@@ -281,7 +281,7 @@ struct NearbyAppTransferView: View {
                 // Let the saving indicator render before importing larger packages.
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 do {
-                    try store.importPortablePackage(from: url, replaceExisting: false)
+                    try store.importPortablePackage(from: url, replaceExisting: false, includePersonalData: false)
                     transfer.confirmImport()
                     try? FileManager.default.removeItem(at: url)
                     transfer.received = nil
