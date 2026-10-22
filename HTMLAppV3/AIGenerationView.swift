@@ -28,6 +28,9 @@ struct AIGenerationView: View {
     @State private var styleOptions: [ForgeStyleConcept] = []
     @State private var selectedStyleIndex = 0
     @State private var styleFailure: String?
+    @State private var styleFeedback = ""
+    @State private var showingStyleFeedback = false
+    @State private var styleFeedbackNotice: String?
     @State private var selectedStyle: ForgeStyleConcept?
     @State private var prompt = ""
     @State private var changePrompt = ""
@@ -517,6 +520,17 @@ struct AIGenerationView: View {
                             }
                             .buttonStyle(.borderedProminent)
                         }
+                        Button {
+                            showingStyleFeedback = true
+                        } label: {
+                            Label("Give feedback on all looks", systemImage: "text.bubble")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        if let styleFeedbackNotice {
+                            Text(styleFeedbackNotice)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         Button("Skip and make app now") { skipStyleSelection() }
                             .font(.caption)
                             .frame(maxWidth: .infinity)
@@ -530,6 +544,24 @@ struct AIGenerationView: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .coordinateSpace(name: "forgeEditSurface")
+            .overlay(alignment: .topLeading) {
+                if !exploringStyles && !styleOptions.isEmpty {
+                    voiceEditBubble(in: geometry.size, forStyleFeedback: true)
+                }
+            }
+            .alert("Feedback for all three looks", isPresented: $showingStyleFeedback) {
+                TextField("What should be different?", text: $styleFeedback)
+                Button("Regenerate All Looks") {
+                    if !styleFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        styleFeedbackNotice = "Using your feedback for all three new mockups."
+                        exploreStyleOptions()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Describe what you want changed. Forge will generate three fresh mockups using the same feedback.")
+            }
         }
     }
 
@@ -544,7 +576,7 @@ struct AIGenerationView: View {
         selectedStyle = nil
         generationTask = Task {
             do {
-                let choices = try await ForgeStylePreviewService.generate(for: idea)
+                let choices = try await ForgeStylePreviewService.generate(for: idea, feedback: styleFeedback)
                 try Task.checkCancellation()
                 styleOptions = choices
                 selectedStyleIndex = 0
@@ -698,7 +730,7 @@ struct AIGenerationView: View {
         }
     }
 
-    private func voiceEditBubble(in size: CGSize) -> some View {
+    private func voiceEditBubble(in size: CGSize, forStyleFeedback: Bool = false) -> some View {
         let side: CGFloat = 63
         let origin = CGPoint(x: -24 + microphoneTranslation.width, y: 68 + microphoneTranslation.height)
         let fullyVisible = origin.x >= 0 && origin.y >= 0 &&
@@ -758,7 +790,16 @@ struct AIGenerationView: View {
                         microphoneCapturing = false
                         dictationForEdit = false
                         if inside && wasArmed {
-                            if !spoken.isEmpty {
+                            if forStyleFeedback {
+                                if !spoken.isEmpty {
+                                    styleFeedback = spoken
+                                    styleFeedbackNotice = "Regenerating all three looks using: " + spoken
+                                    exploreStyleOptions()
+                                } else {
+                                    showingStyleFeedback = true
+                                    styleFeedbackNotice = "No words captured. Type feedback or drag the microphone again."
+                                }
+                            } else if !spoken.isEmpty {
                                 changePrompt = spoken
                                 showingChange = true
                                 applyAIChange()
@@ -770,12 +811,18 @@ struct AIGenerationView: View {
                     }
             )
             .onTapGesture {
-                showingChange = true
-                microphoneEditNotice = "Type an edit below, or drag this microphone fully on-screen to dictate."
+                if forStyleFeedback {
+                    showingStyleFeedback = true
+                } else {
+                    showingChange = true
+                    microphoneEditNotice = "Type an edit below, or drag this microphone fully on-screen to dictate."
+                }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(fullyVisible && microphoneArmed ? "Recording edit" : "Drag microphone inward to dictate edit")
-            .accessibilityHint("Drag fully onto the screen to record; release to submit. Drag off-screen to cancel. Tap to type instead.")
+            .accessibilityLabel(fullyVisible && microphoneArmed ? "Recording" : (forStyleFeedback ? "Drag microphone inward to give feedback on all mockups" : "Drag microphone inward to dictate edit"))
+            .accessibilityHint(forStyleFeedback
+                ? "Drag fully onto the screen and speak. Release to regenerate all three mockups, or drag offscreen to cancel. Tap to type feedback."
+                : "Drag fully onto the screen to record; release to submit. Drag off-screen to cancel. Tap to type instead.")
     }
 
     private var loadingHTML: String {
