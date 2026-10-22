@@ -6,6 +6,8 @@ import ActivityKit
 @available(iOS 16.2, *)
 struct HTMLAppLiveActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
+        var primaryDeadline: Date?
+        var secondaryDeadline: Date?
         var subtitle: String
         var value: String
         var progress: Double?
