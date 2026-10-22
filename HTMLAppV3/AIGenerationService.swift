@@ -917,139 +917,90 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
     }
 
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
+        try Task.checkCancellation()
+        phase = "Testing the app"
         verificationReport = ""
-        var uncorrectedSyntaxError = false
-        var lastCheckedHTML: String? = nil
-        var cachedStructural: [String] = []
-        var cachedRuntime: [String] = []
-        do {
-            var changedOnPreviousPass = false
+        var structural = HTMLQualityChecks.issues(in: streamedHTML)
+        var runtime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+        var issues = structural + runtime
+        AIDebugTraceStore.shared.append("FAST QA", issues.isEmpty
+            ? "Initial structure, inline JavaScript, tapability, layout and non-destructive navigation tests passed."
+            : issues.joined(separator: "\n"))
 
-            for pass in 1...2 {
-                try Task.checkCancellation()
-                phase = "Running app checks"
-                if lastCheckedHTML != streamedHTML {
-                    cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
-                    cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                    lastCheckedHTML = streamedHTML
-                }
-                let localIssues = cachedStructural + cachedRuntime
-                let runtimeIssues = cachedRuntime
-                AIDebugTraceStore.shared.append(
-                    "RUNTIME QA",
-                    runtimeIssues.isEmpty
-                        ? "Offscreen WebView checks passed without captured runtime errors or horizontal overflow."
-                        : runtimeIssues.joined(separator: "\n")
-                )
+        // Previously every generation and edit made at least one slow, paid AI
+        // reviewer request even when all WebKit checks passed. A second request
+        // could follow even when nothing needed fixing.
+        if issues.isEmpty {
+            verificationReport = "Local app checks passed: JavaScript, layout and interaction smoke tests. No unnecessary AI reviewer call."
+            return
+        }
 
-                phase = pass == 1 ? "Reviewing source (not running device tests)" : "Rechecking repaired app"
+        for attempt in 1...2 {
+            try Task.checkCancellation()
+            phase = "Repairing detected app issues"
+            AIDebugTraceStore.shared.append("QA REPAIR", "Attempt \(attempt) for: " + issues.joined(separator: "\n"))
+            let before = streamedHTML
+            do {
                 let response = try await AIHTMLAgent.reviewArtifact(
                     html: streamedHTML,
                     iconScript: iconScript,
                     originalPrompt: originalPrompt,
                     research: lastResearch,
-                    localIssues: localIssues,
-                    pass: pass,
+                    localIssues: issues,
+                    pass: attempt,
                     config: AISettingsStore.configuration(for: .verifier)
                 )
-
-                let summary = AIHTMLAgent.verification(from: response)
-                if !summary.isEmpty {
-                    verificationReport += verificationReport.isEmpty
-                        ? "Pass \(pass): \(summary)"
-                        : "\nPass \(pass): \(summary)"
-                }
-
-                var changedThisPass = false
                 let patch = AIHTMLAgent.patch(from: response)
-                if !patch.trimmed.isEmpty {
-                    let beforeRepair = streamedHTML
-                    let verifierOutput = AIHTMLAgent.parse(response)
+                let proposed = AIHTMLAgent.parse(response)
+                if !patch.trimmed.isEmpty || !proposed.html.trimmed.isEmpty {
                     _ = try await applyEditOutputWithRecovery(
-                        verifierOutput,
-                        requestedChange: "Repair only the concrete verifier findings from pass \(pass): \(summary)",
-                        config: AISettingsStore.configuration(for: .verifier)
+                        proposed, requestedChange: "Fix exactly these detected QA issues: " +
+                            issues.joined(separator: "; "), config: config
                     )
-                    if streamedHTML != beforeRepair {
-                        changedThisPass = true
-                        verificationReport += "\nPass \(pass) repaired the HTML."
-                    }
                 }
-
-                let correctedIcon = AIHTMLAgent.iconScript(from: response).trimmingCharacters(in: .whitespacesAndNewlines)
-                if iconRefreshAllowed, !correctedIcon.isEmpty, correctedIcon != iconScript {
+                let correctedIcon = AIHTMLAgent.iconScript(from: response)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if iconRefreshAllowed && !correctedIcon.isEmpty && correctedIcon != iconScript {
                     iconScript = correctedIcon
                     renderedIconData = nil
-                    try await ensureValidIcon(config: config)
-                    changedThisPass = true
-                    verificationReport += "\nPass \(pass) repaired the icon."
+                    try await ensureValidIcon(config: AISettingsStore.configuration(for: .icon))
                 }
-
-                changedOnPreviousPass = changedThisPass
-                guard changedThisPass, pass == 1 else { break }
-
-                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
-                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                lastCheckedHTML = streamedHTML
-                AIDebugTraceStore.shared.append("POST-REPAIR QA",
-                    cachedRuntime.isEmpty ? "Interaction and JavaScript smoke tests passed." : cachedRuntime.joined(separator: "\n"))
-                if cachedStructural.isEmpty && cachedRuntime.isEmpty {
-                    verificationReport += "\nRepair passed local structural and offscreen runtime checks; a second AI review was not needed."
-                    break
-                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                AIDebugTraceStore.shared.append("QA REVIEW ERROR", error.localizedDescription)
+                // A faulty AI repair is not a reason to discard the last valid draft.
+                streamedHTML = before
             }
 
-            phase = "Running app checks"
-            if lastCheckedHTML != streamedHTML {
-                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
-                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                lastCheckedHTML = streamedHTML
+            if before == streamedHTML {
+                AIDebugTraceStore.shared.append("QA REPAIR", "No applicable source change; stopping repeated AI reviews.")
+                break
             }
-            let remainingRuntimeIssues = cachedRuntime
-            let remainingIssues = cachedStructural + cachedRuntime
-            uncorrectedSyntaxError = remainingRuntimeIssues.contains {
-                $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
-            }
-            if remainingIssues.isEmpty {
-                verificationReport += verificationReport.isEmpty
-                    ? "Local structural and offscreen runtime checks passed."
-                    : "\nLocal structural and offscreen runtime checks passed."
-            } else {
-                verificationReport += "\nRemaining checks: " + remainingIssues.joined(separator: " ")
-            }
-
-            if changedOnPreviousPass {
-                AIDebugTraceStore.shared.append("VERIFIER", "A verifier repair was applied and the repaired app was checked again locally and in the offscreen WebView.")
-            }
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            // Failure of the optional remote AI review must not conceal actual
-            // JavaScript/runtime errors collected by the local verifier.
-            phase = "Running app checks"
-            if lastCheckedHTML != streamedHTML {
-                cachedStructural = HTMLQualityChecks.issues(in: streamedHTML)
-                cachedRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-                lastCheckedHTML = streamedHTML
-            }
-            let runtimeIssues = cachedRuntime
-            let issues = cachedStructural + cachedRuntime
-            uncorrectedSyntaxError = runtimeIssues.contains {
-                $0.contains("JavaScript syntax in inline script") || $0.contains("JavaScript did not compile")
-            }
-            verificationReport = issues.isEmpty
-                ? "AI review unavailable. Local structure and offscreen runtime checks passed; device behavior still needs testing."
-                : "AI review unavailable. Local checks found: " + issues.joined(separator: " ")
-            AIDebugTraceStore.shared.append("VERIFIER FALLBACK", error.localizedDescription + (issues.isEmpty ? "" : "\n" + issues.joined(separator: "\n")))
-        }
-        if uncorrectedSyntaxError {
-            let errors = await HTMLRuntimeVerifier.verify(html: streamedHTML)
-            if await selfHealBrokenJavaScript(config: config, issues: errors) {
+            phase = "Retesting repaired app"
+            structural = HTMLQualityChecks.issues(in: streamedHTML)
+            runtime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+            issues = structural + runtime
+            if issues.isEmpty {
+                verificationReport = "AI repaired the detected problems and local WebKit tests passed."
+                AIDebugTraceStore.shared.append("QA REPAIRED", verificationReport)
                 return
             }
-            AIDebugTraceStore.shared.append("BLOCKED JAVASCRIPT", "Bounded full-source self-repair failed. The original saved app is untouched.")
+            AIDebugTraceStore.shared.append("QA RETEST", issues.joined(separator: "\n"))
+        }
+
+        let syntaxProblems = runtime.filter {
+            $0.contains("JavaScript syntax in inline script") ||
+            $0.contains("JavaScript did not compile")
+        }
+        if !syntaxProblems.isEmpty {
+            if await selfHealBrokenJavaScript(config: config, issues: syntaxProblems) {
+                return
+            }
+            AIDebugTraceStore.shared.append("BLOCKED JAVASCRIPT", "Self-repair could not produce valid scripts.")
             throw AIGenerationError.brokenJavaScript
         }
+        verificationReport = "Local tests found issues after repair: " + issues.joined(separator: " ")
     }
 
     private func refineGeneratedAssets(_ assets: [AIGeneratedAsset]) async -> [AIGeneratedAsset] {
