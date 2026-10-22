@@ -44,7 +44,11 @@ enum HTMLAppLiveActivityService {
         let hex = clip(args["accentHex"], max: 7)
         let goodHex = hex.range(of: #"^#[0-9A-Fa-f]{6}$"#, options: .regularExpression) != nil
         let value = args["progress"] as? NSNumber
+        let primary = args["primaryDeadlineMs"] as? NSNumber
+        let secondary = args["secondaryDeadlineMs"] as? NSNumber
         return .init(
+            primaryDeadline: primary.map { Date(timeIntervalSince1970: $0.doubleValue / 1000) } ?? previous?.primaryDeadline,
+            secondaryDeadline: secondary.map { Date(timeIntervalSince1970: $0.doubleValue / 1000) } ?? previous?.secondaryDeadline,
             subtitle: args["subtitle"] == nil ? (previous?.subtitle ?? "") : clip(args["subtitle"], max: 120),
             value: args["value"] == nil ? (previous?.value ?? "") : clip(args["value"], max: 24),
             progress: value.map { max(0, min(1, $0.doubleValue)) } ?? previous?.progress,
