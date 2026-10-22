@@ -77,6 +77,19 @@ struct HTMLAppMain: App {
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
                     HTMLAppHomeScreenGuide(appName: app.name, profileURL: store.pendingWebClipProfileURL)
                 }
+                .alert("Library recovery needed", isPresented: Binding(
+                    get: { store.libraryLoadBlocked },
+                    set: { _ in }
+                )) {
+                    Button("Keep Library Protected", role: .cancel) {}
+                    if store.libraryCorruptCopyName != nil {
+                        Button("Start Empty Library", role: .destructive) {
+                            store.allowNewLibraryAfterRecoveryCopy()
+                        }
+                    }
+                } message: {
+                    Text("HTMLApp couldn't read your saved apps. It preserved the damaged file rather than deleting it. Starting empty will not restore those apps. Use Keep Library Protected until you've recovered your data.")
+                }
                 .onOpenURL(perform: store.openDeepLink)
                 .onReceive(NotificationCenter.default.publisher(for: .htmlAppNotificationOpened)) { notification in
                     if let url = notification.object as? URL {
@@ -178,6 +191,8 @@ final class AppStore: ObservableObject {
     @Published var pendingWebsiteUpdate: SavedHTMLApp?
     @Published var errorMessage: String?
     @Published var notice: String?
+    @Published private(set) var libraryLoadBlocked = false
+    @Published private(set) var libraryCorruptCopyName: String?
 
     private let libraryURL: URL
     private let folderRecordsDefaultsKey = "htmlapp.libraryFolderRecords.v2"
@@ -1036,19 +1051,79 @@ final class AppStore: ObservableObject {
         return value
     }
 
+    private var libraryBackupURL: URL {
+        libraryURL.appendingPathExtension("bak")
+    }
+
     private func load() {
-        guard let data = try? Data(contentsOf: libraryURL) else { return }
-        do { apps = try JSONDecoder().decode([SavedHTMLApp].self, from: data) }
-        catch { errorMessage = "The saved library could not be loaded." }
+        guard FileManager.default.fileExists(atPath: libraryURL.path) else {
+            if let fallback = try? Data(contentsOf: libraryBackupURL),
+               let recovered = try? JSONDecoder().decode([SavedHTMLApp].self, from: fallback) {
+                apps = recovered
+                try? fallback.write(to: libraryURL, options: .atomic)
+            }
+            return
+        }
+        do {
+            let data = try Data(contentsOf: libraryURL)
+            apps = try JSONDecoder().decode([SavedHTMLApp].self, from: data)
+        } catch {
+            // Preserve exact damaged bytes before attempting any recovery.
+            let stamp = Int(Date().timeIntervalSince1970)
+            let name = "library.corrupt-\(stamp).json"
+            let archive = libraryURL.deletingLastPathComponent().appendingPathComponent(name)
+            do {
+                try FileManager.default.copyItem(at: libraryURL, to: archive)
+                libraryCorruptCopyName = name
+            } catch {
+                libraryLoadBlocked = true
+                errorMessage = "Your Library couldn't be read or safely copied. Saving is blocked to protect your apps."
+                return
+            }
+            if let backup = try? Data(contentsOf: libraryBackupURL),
+               let recovered = try? JSONDecoder().decode([SavedHTMLApp].self, from: backup) {
+                apps = recovered
+                do {
+                    try backup.write(to: libraryURL, options: .atomic)
+                    notice = "Library recovered from its last valid backup. The damaged original was preserved as \(name)."
+                } catch {
+                    libraryLoadBlocked = true
+                    errorMessage = "A backup was found, but restoration failed. Saving is blocked; your Library files are preserved."
+                }
+            } else {
+                libraryLoadBlocked = true
+                errorMessage = "Your Library couldn't be read. Its damaged data was saved as \(name). Saving is blocked until you choose how to recover."
+            }
+        }
+    }
+
+    /// Never overwrite an unreadable library simply because the in-memory
+    /// array is empty. The user must explicitly acknowledge this recovery risk.
+    func allowNewLibraryAfterRecoveryCopy() {
+        guard libraryLoadBlocked, libraryCorruptCopyName != nil else { return }
+        libraryLoadBlocked = false
+        notice = "Starting a fresh Library. Your original library copy remains available for recovery."
+        save()
     }
 
     private func save() {
+        guard !libraryLoadBlocked else {
+            errorMessage = "Library changes weren't saved because recovery is required. Your existing files remain untouched."
+            return
+        }
         do {
             let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(apps).write(to: libraryURL, options: .atomic)
+            encoder.outputFormatting = [.sortedKeys]
+            let result = try encoder.encode(apps)
+            // Keep one known-good previous snapshot, not an empty failed load.
+            if FileManager.default.fileExists(atPath: libraryURL.path) {
+                let previous = try Data(contentsOf: libraryURL)
+                _ = try JSONDecoder().decode([SavedHTMLApp].self, from: previous)
+                try previous.write(to: libraryBackupURL, options: .atomic)
+            }
+            try result.write(to: libraryURL, options: .atomic)
         } catch {
-            errorMessage = "The library could not be saved."
+            errorMessage = "The library couldn't be saved. Existing data and its backup were kept."
         }
     }
 
