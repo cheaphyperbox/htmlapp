@@ -206,7 +206,7 @@ enum HTMLAppDeviceAPIResearch {
               }
             });
             """,
-            constraints: "A saved app can publish up to 8 widget definitions. Widget refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript execution. Minimum requested interval is 15 minutes, but WidgetKit decides actual refresh timing. iOS 17+ lets users choose among published HTMLApp widgets; iOS 16 exposes a primary/latest widget. Keep widget content glanceable and do not assume continuous execution."
+            constraints: "A saved app can publish up to 8 widget definitions, including custom colors, text, images, progress, row lists and ring layouts. The supported Home Screen and Lock Screen widget uses the latest primary snapshot; the broken manual selection gallery has been removed. For a chosen app to appear, publish its widget as primary. Refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript. Minimum requested interval is 15 minutes, but iOS controls actual delivery. Keep content glanceable; no continuous background HTML execution."
         ),
         .init(
             id: "live.activities",
@@ -222,7 +222,8 @@ enum HTMLAppDeviceAPIResearch {
               progress: 0.5, systemSymbol: "airplane",
               accentHex: "#E69C37",
               secondaryLabel: "Bags packed", secondaryValue: "6 of 12",
-              footer: "Tap to open your packing list"
+              footer: "Tap to open your packing list",
+              backgroundHex: "#152437", compactLabel: "6/12"
             });
             await HTMLAppNative.liveActivities.update("trip-packing", {
               subtitle: "Almost ready", value: "10 / 12", progress: 0.83
@@ -230,7 +231,7 @@ enum HTMLAppDeviceAPIResearch {
             // Explicitly end when the task finishes or is cancelled:
             await HTMLAppNative.liveActivities.end("trip-packing");
             """,
-            constraints: "Requires iOS 16.2+, Live Activities enabled, a saved app, and consent. Up to three activities per app; supports native text, primary/secondary metrics, progress, SF Symbol, accent color, and footer. Design thoughtful activity transitions and update on meaningful state changes, with an explicit end path. Dynamic Island only on supported iPhones; no custom HTML, arbitrary JavaScript, remote push updates, autonomous background execution, or guaranteed real-time refresh. Do not expose private content on the Lock Screen."
+            constraints: "Requires iOS 16.2+, Live Activities enabled, a saved app, and consent. Up to three activities per app; supports native text, primary/secondary metrics, progress, SF Symbol, accent color, backgroundHex and compactLabel for the Dynamic Island, and a footer. Design thoughtful activity transitions and update on meaningful state changes, with an explicit end path. Dynamic Island only on supported iPhones; no custom HTML, arbitrary JavaScript, remote push updates, autonomous background execution, or guaranteed real-time refresh. Do not expose private content on the Lock Screen."
         ),
         .init(
             id: "background.fetch",
