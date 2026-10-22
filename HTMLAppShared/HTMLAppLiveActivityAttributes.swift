@@ -13,6 +13,8 @@ struct HTMLAppLiveActivityAttributes: ActivityAttributes {
         var secondaryLabel: String?
         var secondaryValue: String?
         var footer: String?
+        var backgroundHex: String?
+        var compactLabel: String?
     }
 
     var appID: String
