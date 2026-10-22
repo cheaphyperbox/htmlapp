@@ -23,6 +23,7 @@ struct AIGenerationView: View {
     @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
     @State private var exploringStyles = false
     @State private var styleOptions: [ForgeStyleConcept] = []
@@ -368,12 +369,9 @@ struct AIGenerationView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("App testing", selection: Binding(
-                        get: { ForgeTestMode.selected },
-                        set: { UserDefaults.standard.set($0.rawValue, forKey: "forgeTestMode") }
-                    )) {
+                    Picker("App testing", selection: $forgeTestMode) {
                         ForEach(ForgeTestMode.allCases) { mode in
-                            Text(mode.label).tag(mode)
+                            Text(mode.label).tag(mode.rawValue)
                         }
                     }
                     Text("Skip: no runtime checks. Fast: short on-device smoke tests without AI repair. Balanced: test and attempt one focused AI repair. None guarantees every button works.")
