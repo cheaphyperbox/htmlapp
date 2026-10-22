@@ -43,21 +43,24 @@ jobs:
           set -euo pipefail
           brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
 
-      - name: Announce build start via HOSTISH
+      - name: Announce build start in Discord (optional)
         continue-on-error: true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         shell: bash
         run: |
+          set -euo pipefail
           if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then exit 0; fi
           echo "::add-mask::$DISCORD_WEBHOOK_URL"
-          BODY="$(jq -nc --arg hook "$DISCORD_WEBHOOK_URL" --arg content "HTMLApp single IPA build started. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{webhook_url:$hook,wait:true,payload:{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}}')"
-          STATUS="$(curl --silent --show-error --connect-timeout 10 --max-time 25 --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data-binary "$BODY" 'https://mekapc.hostish.site/api/webhook' || true)"
-          echo "HOSTISH build-start HTTP $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "204" ]; then
-            echo '::warning::HOSTISH proxy unavailable; trying direct Discord update without exposing credentials.'
-            curl --silent --show-error --fail --connect-timeout 10 --max-time 25 --output /dev/null --header 'Content-Type: application/json' --data-binary "$(jq -nc --arg content "HTMLApp build started: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" '{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}')" "$DISCORD_WEBHOOK_URL" || true
-          fi
+          case "$DISCORD_WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo 'Invalid Discord webhook URL'; exit 1 ;;
+          esac
+          MESSAGE="HTMLApp build started: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curl --silent --show-error --fail --connect-timeout 10 --max-time 25 --output /dev/null \
+            -H 'Content-Type: application/json' \
+            --data-binary "$(jq -nc --arg content "$MESSAGE" '{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}')" \
+            "$DISCORD_WEBHOOK_URL"
 
       - name: Test JavaScript widget rejection diagnostics
         run: node scripts/test-widget-bridge.js
