@@ -79,6 +79,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var isWorking = false
     @Published var streamedByteCount = 0
     @Published var streamedSection = "css"
+    @Published var qaRepairResponseBytes = 0
     @Published var sectionByteCounts: [String: Int] = [:]
     @Published var failedPhase: String?
 
@@ -920,6 +921,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         try Task.checkCancellation()
         phase = "Testing the app"
         verificationReport = ""
+        qaRepairResponseBytes = 0
 
         let normalized = HTMLQualityChecks.normalizeDocument(streamedHTML)
         if normalized != streamedHTML {
@@ -967,6 +969,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 pass: 1,
                 config: AISettingsStore.configuration(for: .verifier)
             )
+            qaRepairResponseBytes = response.utf8.count
             let patch = AIHTMLAgent.patch(from: response)
             let proposed = AIHTMLAgent.parse(response)
             if !patch.trimmed.isEmpty, let fixed = HTMLPatchApplier.apply(patch, to: baseline) {
