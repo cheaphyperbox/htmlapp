@@ -33,6 +33,15 @@ struct HTMLAppMain: App {
                         .environmentObject(store)
                         .ignoresSafeArea()
                         .interactiveDismissDisabled(true)
+                        .alert("Switch HTML app?", isPresented: Binding(
+                            get: { store.pendingSwitchApp != nil },
+                            set: { if !$0 { store.pendingSwitchApp = nil } }
+                        )) {
+                            Button("Switch App") { store.confirmPendingSwitch() }
+                            Button("Keep Current App", role: .cancel) { store.pendingSwitchApp = nil }
+                        } message: {
+                            Text("Switch to the other app? Your current app will close only after you choose Switch App.")
+                        }
                         .overlay(alignment: .top) {
                             if store.pendingWebsiteUpdate?.id == app.id {
                                 WebsiteUpdateBanner(app: app)
@@ -64,19 +73,6 @@ struct HTMLAppMain: App {
                     } else {
                         checkVersionOnLaunch()
                     }
-                }
-                .confirmationDialog(
-                    "Switch HTML app?",
-                    isPresented: Binding(
-                        get: { store.pendingSwitchApp != nil },
-                        set: { if !$0 { store.pendingSwitchApp = nil } }
-                    ),
-                    titleVisibility: .visible
-                ) {
-                    Button("Switch App") { store.confirmPendingSwitch() }
-                    Button("Keep Current App", role: .cancel) { store.pendingSwitchApp = nil }
-                } message: {
-                    Text("The current HTML app will be unloaded before the linked app opens.")
                 }
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
                     HTMLAppHomeScreenGuide(appName: app.name)
@@ -933,10 +929,10 @@ final class AppStore: ObservableObject {
     }
 
     private func replaceRunningApp(with app: SavedHTMLApp) {
-        runningApp = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-            self?.launch(app)
-        }
+        // Keep the existing full-screen presentation alive until the new
+        // app has been selected. Replacing the identifiable item in place
+        // prevents a transient dismiss from canceling the switch dialog.
+        launch(app)
     }
 
     private func foldersForPortableExport(apps selectedApps: [SavedHTMLApp], links: [LibraryAppLink]) -> [LibraryFolder] {
