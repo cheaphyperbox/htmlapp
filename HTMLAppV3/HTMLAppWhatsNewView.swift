@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.2"
-    static let compiledBuild = "9"
+    static let compiledVersion = "1.6.3"
+    static let compiledBuild = "10"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.3" { return [
+            Entry(id: "timers", title: "Self-updating Live Activity timers", description: "Countdown Live Activities can now use native deadline-based timer labels even when HTMLApp is asleep.", symbol: "timer", tint: .orange),
+            Entry(id: "voice-lock", title: "Voice create from Lock Screen", description: "A dedicated Lock Screen widget opens a voice-first AI creation screen.", symbol: "mic.fill", tint: .blue)
+        ] }
         if version == "1.6.2" { return [
             Entry(id: "offline-whisper", title: "Whisper offline dictation", description: "Switch between Apple Speech and local Whisper speech recognition in Settings.", symbol: "waveform", tint: .blue),
             Entry(id: "dictation-guide", title: "Test your microphone", description: "Try Apple dictation during onboarding and choose Whisper if your words do not appear.", symbol: "mic.circle", tint: .purple)
