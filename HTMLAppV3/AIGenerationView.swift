@@ -44,6 +44,8 @@ struct AIGenerationView: View {
     @State private var recoverableDraft: ForgeDraftCheckpoint?
     @State private var showDraftRecovery = false
     @State private var lastFailedChange: String?
+    @State private var handledShortcutNonce = 0
+    @State private var activeShortcutPrompt = ""
 
     private let starterPrompts = [
         "A simple homework planner that works offline",
@@ -54,8 +56,12 @@ struct AIGenerationView: View {
 
     let existingApp: SavedHTMLApp?
 
-    init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "") {
+    let shortcutGenerationNonce: Int
+
+    init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "",
+         shortcutGenerationNonce: Int = 0) {
         self.existingApp = existingApp
+        self.shortcutGenerationNonce = shortcutGenerationNonce
         _prompt = State(initialValue: initialPrompt)
     }
 
@@ -157,8 +163,15 @@ struct AIGenerationView: View {
                let draft = ForgeDraftCheckpointStore.load(),
                draft.existingAppID == existingApp?.id {
                 recoverableDraft = draft
-                showDraftRecovery = true
+                if shortcutGenerationNonce == 0 { showDraftRecovery = true }
             }
+            acceptShortcutRequest(shortcutGenerationNonce, incoming: prompt)
+        }
+        .onChange(of: shortcutGenerationNonce) { nonce in
+            // Library sends a new nonce even if this screen is already open.
+            // Receive the new prompt and start again only after canceling
+            // the previous generation, without auto-saving anything.
+            acceptShortcutRequest(nonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? activeShortcutPrompt)
         }
         .interactiveDismissDisabled(true)
         .onDisappear { generationTask?.cancel(); microphoneRecordingTask?.cancel(); dictation.stop() }
@@ -835,6 +848,25 @@ struct AIGenerationView: View {
         """
         <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0;font-family:-apple-system;background:#f2f2f7;color:#111;display:grid;place-items:center;min-height:100vh}main{text-align:center;padding:32px}.dot{width:12px;height:12px;border-radius:50%;background:#007aff;margin:18px auto;animation:p 1s infinite alternate}@keyframes p{to{transform:scale(1.6);opacity:.35}}@media(prefers-color-scheme:dark){body{background:#000;color:#fff}}</style></head><body><main><h2>Building your app</h2><p>Your last good preview stays in place while Forge builds the next stable version.</p><div class="dot"></div></main></body></html>
         """
+    }
+
+    private func acceptShortcutRequest(_ nonce: Int, incoming: String) {
+        guard existingApp == nil, nonce > 0, nonce != handledShortcutNonce else { return }
+        handledShortcutNonce = nonce
+        let idea = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !idea.isEmpty else { return }
+        generationTask?.cancel()
+        dictation.stop()
+        exploringStyles = false
+        styleOptions = []
+        styleFailure = nil
+        selectedStyle = nil
+        showDraftRecovery = false
+        recoverableDraft = nil
+        activeShortcutPrompt = idea
+        prompt = idea
+        // Siri explicitly requested generation: do not stop at mockup selection.
+        generateApp()
     }
 
     private func generateApp() {
