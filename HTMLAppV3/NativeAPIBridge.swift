@@ -46,7 +46,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             UIApplication.shared.isIdleTimerDisabled = args["enabled"] as? Bool ?? false
             resolve(id, value: ["enabled": UIApplication.shared.isIdleTimerDisabled])
         case "clipboard.readText":
-            resolve(id, value: ["text": UIPasteboard.general.string ?? ""])
+            withPermission(.clipboard, id: id) { [weak self] in
+                guard let self else { return }
+                self.resolve(id, value: ["text": UIPasteboard.general.string ?? ""])
+            }
         case "clipboard.writeText":
             UIPasteboard.general.string = args["text"] as? String ?? ""
             resolve(id, value: ["written": true])
