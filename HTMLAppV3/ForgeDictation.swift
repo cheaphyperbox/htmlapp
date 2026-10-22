@@ -9,6 +9,9 @@ final class ForgeDictation: ObservableObject {
     @Published var transcript = ""
     @Published var status = "Dictate your idea. Review the text before generating."
     private let engine = AVAudioEngine()
+    private var offlineRecorder: AVAudioRecorder?
+    private var offlineURL: URL?
+    private var offlineMode = false
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var generation = UUID()
@@ -17,6 +20,10 @@ final class ForgeDictation: ObservableObject {
 
     func start() async {
         guard !recording, !requestingPermission else { return }
+        if UserDefaults.standard.string(forKey: "htmlapp.dictationEngine") == "whisper" {
+            await startOffline()
+            return
+        }
         requestingPermission = true
         defer { requestingPermission = false }
         let attempt = generation
@@ -70,7 +77,67 @@ final class ForgeDictation: ObservableObject {
             }
         } catch { stop(); status = error.localizedDescription }
     }
+    private func startOffline() async {
+        requestingPermission = true
+        defer { requestingPermission = false }
+        let allowed = await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+        }
+        guard allowed else {
+            status = "Allow Microphone for HTMLApp in iOS Settings. Whisper needs no Apple Speech permission."
+            return
+        }
+        do {
+            stop()
+            let audio = AVAudioSession.sharedInstance()
+            try audio.setCategory(.record, mode: .default, options: .duckOthers)
+            try audio.setActive(true)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("htmlapp-dictation-" + UUID().uuidString + ".wav")
+            let recorder = try AVAudioRecorder(url: url, settings: [
+                AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                AVSampleRateKey: 16000,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false
+            ])
+            guard recorder.record() else {
+                throw NSError(domain: "Dictation", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not record microphone audio."])
+            }
+            offlineURL = url
+            offlineRecorder = recorder
+            offlineMode = true
+            transcript = ""
+            recording = true
+            status = "Recording for Whisper… Release to transcribe offline."
+        } catch {
+            status = "Offline recording could not start: " + error.localizedDescription
+            stop()
+        }
+    }
+
     func stop() {
+        if offlineMode {
+            offlineRecorder?.stop()
+            offlineRecorder = nil
+            offlineMode = false
+            recording = false
+            let url = offlineURL
+            offlineURL = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            guard let url else { return }
+            status = "Transcribing offline… The first use downloads a speech model."
+            Task {
+                defer { try? FileManager.default.removeItem(at: url) }
+                do {
+                    let result = try await HTMLAppOfflineSpeech.shared.transcribe(fileURL: url)
+                    transcript = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                    status = transcript.isEmpty ? "No speech detected. Try again or type instead." : "Whisper transcription is ready."
+                } catch {
+                    status = "Whisper unavailable: " + error.localizedDescription
+                }
+            }
+            return
+        }
         generation = UUID()
         if recording { status = "Dictation stopped. Review your text before generating." }
         timeout?.cancel(); timeout = nil
