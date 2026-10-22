@@ -87,7 +87,21 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.isHidden = true
         self.webView = webView
-        webView.loadHTMLString(html, baseURL: SourceCache.shared.baseURL(appID: "PREVIEW"))
+        // QA must not wait on external CDNs or send traffic when exercising
+        // preview controls. Block remote resources in the disposable test view.
+        let rules = #"[{"trigger":{"url-filter":"^https?://"},"action":{"type":"block"}}]"#
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "HTMLAppOfflineQAV1", encodedContentRuleList: rules
+        ) { [weak self, weak webView] list, error in
+            Task { @MainActor in
+                guard let self, !self.completed, let webView else { return }
+                if let list { webView.configuration.userContentController.add(list) }
+                if let error {
+                    self.issues.append("QA network filter could not initialize: " + error.localizedDescription)
+                }
+                webView.loadHTMLString(self.html, baseURL: SourceCache.shared.baseURL(appID: "PREVIEW"))
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
