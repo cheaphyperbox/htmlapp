@@ -275,6 +275,7 @@ struct LibraryView: View {
         if let idea = UserDefaults.standard.string(forKey: "htmlapp.shortcut.createPrompt") {
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.createPrompt")
             shortcutPrompt = idea
+            UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
             shortcutGenerationNonce += 1
             showGenerator = true
         }
