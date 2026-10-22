@@ -1,33 +1,33 @@
 # HTMLApp
 
-HTMLApp is an iPhone-only iOS 16+ application for saving and running user-provided HTML as full-screen local apps.
+HTMLApp is an iOS 16+ app for creating, saving, running, editing, and privately sharing single-file HTML mini apps on iPhone and iPad.
 
-## Current development features
+## Current features
 
-- SwiftUI library interface
-- Add, preview, update, duplicate, and delete saved HTML apps
-- Automatic `<title>` extraction
-- Remote or embedded favicon detection when available
-- Unique six-character app IDs
-- Deep links using `htmlapp://open?id=123456`
-- Context-menu actions for HTML, IDs, URL schemes, source refresh, duplication, and deletion
-- Search ranking by name, description, visible body text, then raw HTML
-- Persistent local JSON library
-- Full-screen `WKWebView` runner with interactive dismissal disabled
-- Onboarding and settings screens
-- Per-app media permission prompt foundation
-- Static external-source discovery and three-day cache refresh foundation
-- iPhone-only target with iOS 16.0 minimum deployment
-- Unsigned IPA build on every push to `main`
+- Forge AI app generation, edits, style previews, and per-app timing history
+- Local Library with folders, favorites, search, import/export, and guarded backups
+- HTML/CSS/JavaScript runtime using WKWebView and native permission bridges
+- Nearby sharing without transferring stored personal data
+- Home Screen installation guidance, native widget snapshots, and Live Activities
+- Siri/Shortcuts entry points, debug history, and an onboarding walkthrough
+- Manual-only device IPA builds; app and widget version metadata is validated before packaging
 
 ## Building
 
-GitHub Actions generates the Xcode project with XcodeGen, builds an unsigned device app, packages it as `HTMLApp-unsigned.ipa`, and uploads it as a workflow artifact.
+The active XcodeGen project is `project.yml`. It compiles `HTMLAppV3/`, `HTMLAppShared/`, `HTMLApp/WebClipSupport.swift`, widget sources, and app icon assets. The older app entry points were removed because they were not part of the target.
 
-An unsigned IPA must be signed by the installation method before iOS will install it.
+**GitHub Actions does not run on push.** Start the `Build HTMLApp IPA` workflow manually, or use your own macOS/Xcode build process. The workflow reads the release identity from `HTMLAppV3/HTMLAppWhatsNewView.swift`, verifies that the built app and widget Info.plists contain that version/build, and checks the packaged IPA with `scripts/verify-ipa.py`.
 
-## Development notes
+The workflow packages an unsigned app and then produces a TrollStore-oriented IPA using `ldid`. Other installation methods may require different signing profiles and authorized App Group entitlements. Building successfully does not prove that an IPA is installable under every signing method.
 
-The current source-cache implementation downloads discoverable static HTTP/HTTPS resources and preserves stale copies when refreshing fails. Rewriting HTML and CSS references to guaranteed local cached URLs, nested CSS dependency traversal, persistent per-ID permission choices, location bridging, import/export, and permission management remain active development work.
+## Safety and testing
 
-This repository uses only its default `main` branch for development.
+A Library load failure preserves the damaged file and blocks empty-library overwrites; a rolling backup supports recovery. Native clipboard reads require per-app permission; WebView native bridge messages from subframes are rejected. External source caching limits file sizes and budgets.
+
+Forge performs local WebKit smoke tests. Advisory findings (for example, preview-only network failures) do not automatically launch expensive model repairs. Blocking defects can receive one targeted AI patch. Real iPhone/iPad testing remains necessary.
+
+The repository includes widget tests and a packaged IPA verification script. The debug log is stored locally and may contain user prompts or generated app code; review logs before sharing them.
+
+## Security note
+
+Store Discord webhook URLs as GitHub Actions secrets. The current build and delivery scripts contact Discord directly, not a proxy. Rotate any webhook URL previously sent to an untrusted intermediary.
