@@ -6,11 +6,14 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var showAISetup = false
     @State private var showMenuExample = false
+    @AppStorage("htmlapp.dictationEngine") private var dictationEngine = "apple"
+    @StateObject private var dictationTest = ForgeDictation()
+    @State private var dictationTestPressed = false
 
     @State private var demoStage = -1
     @State private var demoEdit = ""
     @StateObject private var demoDictation = ForgeDictation()
-    private let numberOfSteps = 12
+    private let numberOfSteps = 13
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,7 +134,8 @@ struct OnboardingView: View {
         case 7: return "Permissions and widgets"
         case 8: return "Sharing and backups"
         case 9: return "Settings and help"
-        case 10: return "Practice making a calculator"
+        case 10: return "Test your microphone"
+        case 11: return "Practice making a calculator"
         default: return "Optional permissions"
         }
     }
@@ -148,7 +152,8 @@ struct OnboardingView: View {
         case 7: return "Control what an app may access. Some apps can publish Home Screen widgets."
         case 8: return "Send apps nearby, export code, back up personal data, or add an app to Home Screen."
         case 9: return "Adjust your preferences, read debug logs, or replay this tutorial whenever you want."
-        case 10: return "Try a safe sample AI generation, play with a real calculator, and practice asking for edits. This lesson does not use your API or save an app."
+        case 10: return "Hold the microphone and say a short sentence. If Apple cannot transcribe it, try the free Whisper offline fallback."
+        case 11: return "Try a safe sample AI generation, play with a real calculator, and practice asking for edits. This lesson does not use your API or save an app."
         default: return "Choose optional iOS permissions. Each can be skipped and changed later."
         }
     }
@@ -165,7 +170,8 @@ struct OnboardingView: View {
         case 7: return "square.grid.2x2"
         case 8: return "square.and.arrow.up"
         case 9: return "gearshape.2"
-        case 10: return "plus.forwardslash.minus"
+        case 10: return "mic.circle.fill"
+        case 11: return "plus.forwardslash.minus"
         default: return "hand.raised"
         }
     }
@@ -280,6 +286,54 @@ struct OnboardingView: View {
             tutorialRow("2", "Read debug logs", "Developer Mode shows AI logs and timings. Review private information before sharing logs.", symbol: "ladybug", tint: .blue)
             tutorialRow("3", "Learn again", "Select Replay Tutorial in Settings whenever you need help.", symbol: "arrow.counterclockwise", tint: .blue)
         case 10:
+            VStack(spacing: 16) {
+                Text("1. Try Apple's dictation first").font(.headline)
+                Text("Hold the microphone, speak clearly, then release. Check the words below.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Image(systemName: dictationTest.recording ? "mic.fill" : "mic.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(dictationTest.recording ? Color.white : Color.accentColor)
+                    .frame(width: 112, height: 112)
+                    .background(dictationTest.recording ? Color.red : Color.accentColor.opacity(0.12),
+                                in: Circle())
+                    .accessibilityLabel("Hold to dictate, release to transcribe")
+                    .onLongPressGesture(minimumDuration: 0.1, pressing: { pressing in
+                        if pressing && !dictationTestPressed {
+                            dictationTestPressed = true
+                            Task { await dictationTest.start() }
+                        } else if !pressing && dictationTestPressed {
+                            dictationTestPressed = false
+                            dictationTest.stop()
+                        }
+                    }, perform: {})
+                Text(dictationTest.status).font(.caption).foregroundStyle(.secondary)
+                Text(dictationTest.transcript.isEmpty ? "Your words will appear here…" : dictationTest.transcript)
+                    .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+                    .padding()
+                    .background(Color(uiColor: .secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 16))
+                if dictationTest.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Nothing appeared? Apple's speech recognition may not work on this device. Try Whisper.")
+                        .font(.subheadline)
+                    Button("Try Whisper Offline Instead") {
+                        dictationTest.stop()
+                        dictationEngine = "whisper"
+                        dictationTest.transcript = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Label("Words appeared! You can keep this dictation engine or try the other one.", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                Picker("Dictation engine", selection: $dictationEngine) {
+                    Text("Apple").tag("apple")
+                    Text("Whisper Offline").tag("whisper")
+                }
+                .pickerStyle(.segmented)
+                Text("Whisper downloads a model on first use. No account, API key, or speech-recognition charge is required. Audio stays on your device.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case 11:
             if AISettingsStore.configuration.isConfigured {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Practice prompt: Make a simple calculator")
@@ -417,6 +471,7 @@ struct SettingsView: View {
     @AppStorage("htmlapp.previousOpenedVersion") private var previousOpenedVersion = ""
     @State private var showWhatsNew = false
     @State private var working = false
+    @AppStorage("htmlapp.dictationEngine") private var dictationEngine = "apple"
 
     private var selectedSortMode: LibrarySortMode {
         LibrarySortMode(rawValue: librarySortModeRaw) ?? .alphabeticalAZ
@@ -442,6 +497,21 @@ struct SettingsView: View {
                     Text("Need a hand?")
                 } footer: {
                     Text("The guide explains every major feature. You can skip any step and come back later.")
+                }
+                Section {
+                    Picker("Dictation Engine", selection: $dictationEngine) {
+                        Label("Apple Speech", systemImage: "mic").tag("apple")
+                        Label("Whisper Offline", systemImage: "waveform").tag("whisper")
+                    }
+                    .pickerStyle(.navigationLink)
+                    Label(dictationEngine == "whisper"
+                          ? "Whisper records first, then transcribes when you release the mic."
+                          : "Apple transcribes as you speak.", systemImage: "info.circle")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } header: {
+                    Text("Voice Dictation")
+                } footer: {
+                    Text("Whisper is free and requires no API key. First use downloads an on-device model; allow microphone access and storage space.")
                 }
                 Section("Home View") {
                     Picker("Layout", selection: $libraryLayout) {
