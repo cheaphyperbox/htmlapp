@@ -77,11 +77,10 @@ struct HTMLAppMain: App {
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
                     HTMLAppHomeScreenGuide(appName: app.name, profileURL: store.pendingWebClipProfileURL)
                 }
-                .alert("Library recovery needed", isPresented: Binding(
-                    get: { store.libraryLoadBlocked },
-                    set: { _ in }
-                )) {
-                    Button("Keep Library Protected", role: .cancel) {}
+                .alert("Library recovery needed", isPresented: $store.showLibraryRecoveryAlert) {
+                    Button("Keep Library Protected", role: .cancel) {
+                        store.showLibraryRecoveryAlert = false
+                    }
                     if store.libraryCorruptCopyName != nil {
                         Button("Start Empty Library", role: .destructive) {
                             store.allowNewLibraryAfterRecoveryCopy()
@@ -192,6 +191,7 @@ final class AppStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var notice: String?
     @Published private(set) var libraryLoadBlocked = false
+    @Published var showLibraryRecoveryAlert = false
     @Published private(set) var libraryCorruptCopyName: String?
 
     private let libraryURL: URL
@@ -210,10 +210,12 @@ final class AppStore: ObservableObject {
         libraryURL = base.appendingPathComponent("library.json")
         load()
         loadFoldersAndMigrate()
-        FolderAppLinkStore.shared.prune(
-            validAppIDs: Set(apps.map(\.id)),
-            validFolderIDs: Set(folders.map(\.id))
-        )
+        if !libraryLoadBlocked {
+            FolderAppLinkStore.shared.prune(
+                validAppIDs: Set(apps.map(\.id)),
+                validFolderIDs: Set(folders.map(\.id))
+            )
+        }
     }
 
     func prepareNewItemDestination(_ folderID: String?) {
@@ -1077,6 +1079,7 @@ final class AppStore: ObservableObject {
                 libraryCorruptCopyName = name
             } catch {
                 libraryLoadBlocked = true
+                showLibraryRecoveryAlert = true
                 errorMessage = "Your Library couldn't be read or safely copied. Saving is blocked to protect your apps."
                 return
             }
@@ -1088,10 +1091,12 @@ final class AppStore: ObservableObject {
                     notice = "Library recovered from its last valid backup. The damaged original was preserved as \(name)."
                 } catch {
                     libraryLoadBlocked = true
+                    showLibraryRecoveryAlert = true
                     errorMessage = "A backup was found, but restoration failed. Saving is blocked; your Library files are preserved."
                 }
             } else {
                 libraryLoadBlocked = true
+                showLibraryRecoveryAlert = true
                 errorMessage = "Your Library couldn't be read. Its damaged data was saved as \(name). Saving is blocked until you choose how to recover."
             }
         }
@@ -1101,7 +1106,14 @@ final class AppStore: ObservableObject {
     /// array is empty. The user must explicitly acknowledge this recovery risk.
     func allowNewLibraryAfterRecoveryCopy() {
         guard libraryLoadBlocked, libraryCorruptCopyName != nil else { return }
+        do {
+            try FileManager.default.removeItem(at: libraryURL)
+        } catch {
+            errorMessage = "The damaged Library couldn't be moved out of the way. Saving remains blocked."
+            return
+        }
         libraryLoadBlocked = false
+        showLibraryRecoveryAlert = false
         notice = "Starting a fresh Library. Your original library copy remains available for recovery."
         save()
     }
