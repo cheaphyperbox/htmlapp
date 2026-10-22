@@ -14,7 +14,7 @@ struct HTMLAppVoiceCreateView: View {
             Spacer()
             Image(systemName: dictation.recording ? "waveform.circle.fill" : "mic.circle.fill")
                 .font(.system(size: 92, weight: .ultraLight))
-                .foregroundStyle(dictation.recording ? .red : .tint)
+                .foregroundStyle(dictation.recording ? Color.red : Color.accentColor)
                 .symbolEffect(.pulse, options: .repeating, value: dictation.recording)
                 .accessibilityLabel(dictation.recording ? "Recording your idea" : "Microphone")
             Text("Create an app by voice")
