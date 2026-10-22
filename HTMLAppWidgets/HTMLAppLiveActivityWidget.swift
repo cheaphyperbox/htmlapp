@@ -17,7 +17,7 @@ struct HTMLAppLiveActivityWidget: Widget {
                     if !context.state.value.isEmpty {
                         Group {
                             if let deadline = context.state.primaryDeadline {
-                                Text(timerInterval: Date.distantPast...deadline, countsDown: true)
+                                Text(deadline, style: .timer)
                             } else {
                                 Text(context.state.value)
                             }
