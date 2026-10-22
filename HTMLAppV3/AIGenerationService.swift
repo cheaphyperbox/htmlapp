@@ -2715,6 +2715,25 @@ enum HTMLQualityChecks {
     }
 }
 
+actor HTMLAppPublicAPICatalogCache {
+    static let shared = HTMLAppPublicAPICatalogCache()
+    private var text: String?
+    private var fetchedAt = Date.distantPast
+
+    func read(_ url: URL) async -> String? {
+        if let text, Date().timeIntervalSince(fetchedAt) < 86_400 { return text }
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 12)
+        request.setValue("HTMLApp/1.6", forHTTPHeaderField: "User-Agent")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode,
+              data.count < 3_000_000,
+              let decoded = String(data: data, encoding: .utf8) else { return text }
+        text = decoded
+        fetchedAt = Date()
+        return decoded
+    }
+}
+
 enum SafePublicAPIResearch {
     private static let publicAPIsURL = URL(string: "https://raw.githubusercontent.com/public-apis/public-apis/master/README.md")!
     private static let excluded = ["gambling", "betting", "casino", "alcohol", "beer", "wine", "weapon", "firearm", "drug", "porn", "adult", "malware"]
@@ -2751,8 +2770,7 @@ enum SafePublicAPIResearch {
     }
 
     private static func fetchText(_ url: URL) async -> String? {
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-        return String(data: data, encoding: .utf8)
+        await HTMLAppPublicAPICatalogCache.shared.read(url)
     }
 
     private static func searchTerms(_ query: String) -> [String] {
