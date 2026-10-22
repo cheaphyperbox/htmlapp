@@ -42,6 +42,20 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         switch method {
         case "device.info":
             deviceInfo(id: id)
+        case "symbols.search":
+            let query = (args["query"] as? String ?? "").lowercased()
+            let names = HTMLAppSymbolCatalog.names.filter { query.isEmpty || $0.contains(query) }
+            resolve(id, value: ["names": Array(names.prefix(100))])
+        case "symbols.render":
+            let name = args["name"] as? String ?? ""
+            guard HTMLAppSymbolCatalog.names.contains(name),
+                  let image = UIImage(systemName: name)?.withTintColor(.black, renderingMode: .alwaysOriginal),
+                  let data = image.pngData() else {
+                reject(id, code: "unsupported_symbol", message: "This SF Symbol is unavailable on this iOS version.")
+                return
+            }
+            resolve(id, value: ["dataURL": "data:image/png;base64," + data.base64EncodedString()])
+
         case "device.keepAwake":
             withPermission(.displayControl, id: id) { [weak self] in
                 guard let self else { return }
@@ -1521,6 +1535,10 @@ enum HTMLNativeAPIScript {
 
       const api = {
         call,
+        symbols: {
+          search: (query = '') => call('symbols.search', { query: String(query) }),
+          render: (name) => call('symbols.render', { name: String(name || '') })
+        },
         device: {
           info: () => call('device.info'),
           keepAwake: (enabled = true) => call('device.keepAwake', { enabled: !!enabled })
@@ -1634,4 +1652,27 @@ enum HTMLNativeAPIScript {
       });
     })();
     """#
+}
+
+
+// Curated, stable iOS 16-compatible catalog; avoid claiming the system can
+// enumerate all SF Symbols, which UIKit does not publicly expose.
+enum HTMLAppSymbolCatalog {
+    static let names: [String] = """
+house house.fill gearshape gearshape.fill plus plus.circle plus.circle.fill minus minus.circle checkmark checkmark.circle checkmark.circle.fill xmark xmark.circle
+star star.fill heart heart.fill bell bell.fill calendar clock stopwatch timer hourglass magnifyingglass line.3.horizontal slider.horizontal.3
+square.grid.2x2 square.grid.2x2.fill list.bullet folder folder.fill doc doc.text doc.on.doc square.and.arrow.up arrow.down.doc
+arrow.clockwise arrow.counterclockwise arrow.left arrow.right arrow.up arrow.down chevron.left chevron.right chevron.up chevron.down
+trash trash.fill pencil pencil.circle paintbrush paintpalette scissors paperclip link lock lock.fill lock.open shield checkmark.shield
+person person.fill person.crop.circle person.2 person.3 figure.walk figure.run figure.strengthtraining.traditional
+bolt bolt.fill flame flame.fill leaf leaf.fill drop drop.fill sun.max sun.max.fill moon moon.fill cloud cloud.fill cloud.rain cloud.sun
+wifi antenna.radiowaves.left.and.right airplane car bicycle bus tram map map.fill mappin location location.fill globe
+camera camera.fill photo photo.fill video video.fill mic mic.fill speaker.wave.2 headphones play play.fill pause pause.fill stop stop.fill
+backward.fill forward.fill music.note waveform chart.bar chart.bar.fill chart.line.uptrend.xyaxis chart.pie gauge speedometer
+battery.100percent battery.50percent iphone ipad desktopcomputer laptopcomputer keyboard printer externaldrive
+book book.fill bookmark bookmark.fill text.alignleft textformat text.cursor rectangle.stack square.stack cube.box shippingbox
+fork.knife cup.and.saucer cart cart.fill bag bag.fill creditcard dollar signpost.right gift gift.fill
+questionmark.circle info.circle exclamationmark.triangle hand.tap hand.raised eye eye.slash wrench screwdriver hammer
+square.on.square rectangle.portrait.on.rectangle.portrait app.badge apps.iphone square.grid.3x3.fill
+""".split(whereSeparator: \.isWhitespace).map(String.init)
 }
