@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.4.0"
-    static let compiledBuild = "5"
+    static let compiledVersion = "1.5.0"
+    static let compiledBuild = "6"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.5" || version.hasPrefix("1.5.") {
+            return [Entry(id: "version", title: "Reliable version tracking", description: "The app and packaged IPA display the same release and build numbers, checked before packaging.", symbol: "checkmark.seal", tint: .blue)]
+        }
         if version == "1.4" || version.hasPrefix("1.4.") {
             return [
                 Entry(id: "verified-build", title: "Check exactly which build you're running",
