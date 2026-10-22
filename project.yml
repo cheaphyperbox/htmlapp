@@ -72,7 +72,6 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: HTMLApp/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: HTMLApp
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UIRequiredDeviceCapabilities: arm64
     info:
@@ -81,6 +80,10 @@ targets:
         CFBundleDisplayName: HTMLApp
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # A launch screen is required for native-resolution iPhone rendering.
+        # Without it, iOS can run the entire SwiftUI/WKWebView app in a
+        # legacy 320-point compatibility viewport with black letterboxing.
+        UILaunchScreen: {}
         NSSpeechRecognitionUsageDescription: Dictate an app idea. Speech may be processed by Apple when on-device recognition is unavailable.
         NSBonjourServices:
           - _htmlapp-share._tcp
