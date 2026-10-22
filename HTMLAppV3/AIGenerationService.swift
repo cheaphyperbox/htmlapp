@@ -29,6 +29,21 @@ struct AIPlanningResult {
     var research: AIResearchPlan
 }
 
+enum ForgeTestMode: String, CaseIterable, Identifiable {
+    case skip, fast, balanced
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .skip: return "Skip tests (fastest)"
+        case .fast: return "Fast checks"
+        case .balanced: return "Balanced checks + repair"
+        }
+    }
+    static var selected: ForgeTestMode {
+        ForgeTestMode(rawValue: UserDefaults.standard.string(forKey: "forgeTestMode") ?? "fast") ?? .fast
+    }
+}
+
 enum AIGenerationError: LocalizedError {
     case notConfigured, invalidEndpoint, missingHTML, invalidPatch, missingIcon, brokenJavaScript
     case provider(String)
@@ -937,7 +952,15 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             AIDebugTraceStore.shared.append("LOCAL AUTOFIX", "Added missing doctype or viewport metadata without using AI.")
         }
         let structural = HTMLQualityChecks.issues(in: streamedHTML)
-        let runtime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+        let testMode = ForgeTestMode.selected
+        if testMode == .skip {
+            // Keep inexpensive structural warnings visible, but do not pretend to
+            // have executed JavaScript or checked any live button.
+            verificationReport = "Tests skipped at your request. App behavior and buttons have NOT been verified. " + structural.joined(separator: " ")
+            AIDebugTraceStore.shared.append("QA SKIPPED", verificationReport)
+            return
+        }
+        let runtime = await HTMLRuntimeVerifier.verify(html: streamedHTML, timeout: testMode == .fast ? 3 : 6)
 
         // Offline preview intentionally blocks some native/device features.
         // Warnings about CSS conventions, remote resources, timeouts,
@@ -956,6 +979,12 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         AIDebugTraceStore.shared.append("QA CLASSIFICATION",
             "Blocking: \(blocking.count); Advisory: \(advisory.count)\n" +
             (blocking + advisory).joined(separator: "\n"))
+        if testMode == .fast {
+            verificationReport = blocking.isEmpty
+                ? "Fast local smoke checks passed (not every button was exercised). " + advisory.joined(separator: " ")
+                : "Fast checks found problems; AI repair skipped to save time: " + blocking.joined(separator: " ")
+            return
+        }
         if blocking.isEmpty {
             verificationReport = advisory.isEmpty
                 ? "Local JavaScript, layout and interaction smoke tests passed."
