@@ -12,6 +12,10 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    from: "0.9.0"
 targets:
   HTMLApp:
     type: application
@@ -124,6 +128,7 @@ targets:
         UIBackgroundModes:
           - fetch
     dependencies:
+      - package: WhisperKit
       - target: HTMLAppWidgets
         embed: true
 
