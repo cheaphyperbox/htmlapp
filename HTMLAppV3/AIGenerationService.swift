@@ -1005,6 +1005,14 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
     private func refineGeneratedAssets(_ assets: [AIGeneratedAsset]) async -> [AIGeneratedAsset] {
         guard !assets.isEmpty else { return [] }
+        // Render valid draft assets immediately. Calling a second AI artist for
+        // every small decorative image adds significant generation latency.
+        // Keep optional specialist refinement for users who configured one.
+        guard AISettingsStore.usesSpecialistProvider(for: .icon) else {
+            AIDebugTraceStore.shared.append("ASSET FAST PATH",
+                "Used coding-agent asset drafts directly; skipped redundant artwork model request.")
+            return assets
+        }
         phase = "Refining generated artwork"
         do {
             let refined = try await AIHTMLAgent.refineAssetScripts(
@@ -1546,8 +1554,14 @@ Draw a distinctive, purpose-specific 1024px icon in IconScript. Use a crisp iOS-
 
     static func canSkipPreflight(for prompt: String) -> Bool {
         let clean = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !clean.isEmpty, clean.count <= 180,
+        guard !clean.isEmpty, clean.count <= 600,
               !needsWebResearch(for: clean) else { return false }
+        // Explicitly offline, local-only apps do not need another planning
+        // round trip when no iOS device integration is requested.
+        if (clean.contains("offline") || clean.contains("local-only") ||
+            clean.contains("no internet")) && !needsCapabilityResearch(for: clean) {
+            return true
+        }
         if clean.contains("habit tracker") || clean.contains("habit tracking") {
             // Notifications are covered by the built-in native API catalog;
             // a second planning model call is unnecessary for ordinary trackers.
