@@ -100,7 +100,7 @@ actor SourceCache {
                 if type.hasPrefix("video/") || type.hasPrefix("audio/") ||
                    type.contains("zip") || type.contains("pdf") { continue }
                 guard http.expectedContentLength < 0 ||
-                      http.expectedContentLength <= maxFileBytes else { continue }
+                      http.expectedContentLength <= Int64(maxFileBytes) else { continue }
                 let previousSize = (try? manager.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
                 let budget = min(maxFileBytes, maxAppBytes - totalBytes + previousSize)
                 guard budget > 0 else { break }
