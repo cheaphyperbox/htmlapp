@@ -869,7 +869,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         phase = "Repairing unresponsive app controls"
         // The original remains in memory until a candidate actually passes the
         // same offscreen JavaScript checks that detected the failure.
-        for attempt in 1...2 {
+        for attempt in 1...1 {
             do {
                 let response = try await AIProviderClient.complete(
                     config: config,
@@ -891,9 +891,9 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
 
                         Repair attempt: \(attempt). Re-check the complete JavaScript syntax before responding.
                         """)],
-                    timeout: 130,
-                    maxTokens: 16000,
-                    retryOnTransient: true
+                    timeout: 85,
+                    maxTokens: 12000,
+                    retryOnTransient: false
                 )
                 let candidate = AIHTMLAgent.parse(response).html
                 guard !candidate.trimmed.isEmpty else {
@@ -902,7 +902,15 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 }
                 let structural = HTMLQualityChecks.issues(in: candidate)
                 let runtime = await HTMLRuntimeVerifier.verify(html: candidate)
-                if structural.isEmpty && runtime.isEmpty {
+                let fatal = HTMLQualityChecks.blockingIssues(structural) +
+                    runtime.filter {
+                        $0.hasPrefix("JavaScript syntax in inline script") ||
+                        $0.hasPrefix("JavaScript did not compile") ||
+                        $0.hasPrefix("Runtime: document body rendered empty") ||
+                        $0.hasPrefix("Runtime tapability:") ||
+                        $0.hasPrefix("uncaught error:")
+                    }
+                if fatal.isEmpty {
                     streamedHTML = candidate
                     verificationReport += "\nSelf-heal succeeded: complete HTML was checked in the offscreen runtime."
                     AIDebugTraceStore.shared.append("SELF HEAL", "Attempt \(attempt): repaired HTML passed local checks.")
@@ -1007,6 +1015,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             if remaining.contains(where: {
                 $0.hasPrefix("JavaScript syntax in inline script") || $0.hasPrefix("JavaScript did not compile")
             }) {
+                if await selfHealBrokenJavaScript(config: config, issues: remaining) { return }
                 streamedHTML = baseline
                 throw AIGenerationError.brokenJavaScript
             }
@@ -1017,6 +1026,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         if blocking.contains(where: {
             $0.hasPrefix("JavaScript syntax in inline script") || $0.hasPrefix("JavaScript did not compile")
         }) {
+            if await selfHealBrokenJavaScript(config: config, issues: blocking) { return }
             throw AIGenerationError.brokenJavaScript
         }
         verificationReport = "App checks found unresolved issues: " + blocking.joined(separator: " ")
