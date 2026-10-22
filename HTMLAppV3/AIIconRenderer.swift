@@ -46,6 +46,7 @@ enum AIIconRenderer {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
 
         var drewSomething = false
+        var drewForeground = false
         let image = renderer.image { rendererContext in
             let cg = rendererContext.cgContext
             cg.setAllowsAntialiasing(true)
@@ -106,6 +107,7 @@ enum AIIconRenderer {
                     fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
                     pendingPaint = nil
                     drewSomething = true
+                    drewForeground = true
 
                 case "CIRCLE":
                     guard parts.count >= 5,
@@ -121,6 +123,7 @@ enum AIIconRenderer {
                     fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
                     pendingPaint = nil
                     drewSomething = true
+                    drewForeground = true
 
                 case "TRIANGLE":
                     guard parts.count >= 8,
@@ -136,6 +139,7 @@ enum AIIconRenderer {
                     fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
                     pendingPaint = nil
                     drewSomething = true
+                    drewForeground = true
 
                 case "LINE":
                     guard parts.count >= 7,
@@ -151,6 +155,7 @@ enum AIIconRenderer {
                     stroke(path: path, paint: pendingPaint ?? .solid(color), context: cg)
                     pendingPaint = nil
                     drewSomething = true
+                    drewForeground = true
 
                 default:
                     continue
@@ -158,8 +163,44 @@ enum AIIconRenderer {
             }
         }
 
-        guard drewSomething else { return nil }
+        // The old renderer accepted BG-only scripts and shapes fully outside
+        // the canvas, producing valid PNG data but blank-looking Home Screen icons.
+        guard drewSomething, drewForeground, isVisibleArtwork(image) else { return nil }
         return image.pngData()
+    }
+
+    @MainActor
+    private static func isVisibleArtwork(_ image: UIImage) -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+        let side = 36
+        let rowBytes = side * 4
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let canInspect = pixels.withUnsafeMutableBytes { raw -> Bool in
+            guard let ptr = raw.baseAddress,
+                  let context = CGContext(data: ptr, width: side, height: side,
+                                          bitsPerComponent: 8, bytesPerRow: rowBytes,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.interpolationQuality = .high
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard canInspect else { return false }
+        let background = Array(pixels[0..<4])
+        var changedOpaquePixels = 0
+        var nonTransparentPixels = 0
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let alpha = Int(pixels[index + 3])
+            if alpha >= 200 { nonTransparentPixels += 1 }
+            let difference = abs(Int(pixels[index]) - Int(background[0])) +
+                             abs(Int(pixels[index + 1]) - Int(background[1])) +
+                             abs(Int(pixels[index + 2]) - Int(background[2]))
+            if alpha > 160 && difference >= 52 { changedOpaquePixels += 1 }
+        }
+        // At least a small visible figure and a mostly opaque icon canvas.
+        return nonTransparentPixels >= side * side * 3 / 4 &&
+               changedOpaquePixels >= side * side / 90
     }
 
     @MainActor
