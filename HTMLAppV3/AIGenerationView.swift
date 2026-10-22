@@ -757,6 +757,16 @@ struct AIGenerationView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         } else {
                             HStack(spacing: 10) {
+                                if existingApp == nil {
+                                    Button("Regenerate from scratch") {
+                                        generationTask?.cancel()
+                                        selectedStyle = nil
+                                        showingChange = false
+                                        session.clearCheckpoint()
+                                        generateApp()
+                                    }
+                                    .disabled(session.isWorking || saving)
+                                }
                                 Button(existingApp == nil ? "Change this…" : "Ask AI to edit…") { showingChange = true }
                                     .buttonStyle(.bordered)
                                 Button(existingApp == nil ? "Save App" : "Save Changes") { saveGeneratedApp() }
