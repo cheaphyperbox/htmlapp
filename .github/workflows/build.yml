@@ -90,12 +90,33 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$PWD/DerivedData"
-          VERSION="$(sed -n 's/.*static let compiledVersion = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
-          BUILD_NUMBER="$(sed -n 's/.*static let compiledBuild = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          VERSION="$(awk -F '"' '/static let compiledVersion =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
+          BUILD_NUMBER="$(awk -F '"' '/static let compiledBuild =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
           test -n "$VERSION" && test -n "$BUILD_NUMBER"
           echo "Building source release $VERSION ($BUILD_NUMBER)"
           echo "Building HTMLApp marketing version $VERSION (source revision $BUILD_NUMBER)"
           xcodebuild             -project "HTMLApp.xcodeproj"             -scheme "HTMLApp"             -configuration Release             -sdk iphoneos             -destination "generic/platform=iOS"             -derivedDataPath "$PWD/DerivedData"             IPHONEOS_DEPLOYMENT_TARGET=16.0             TARGETED_DEVICE_FAMILY="1,2"             SUPPORTS_MACCATALYST=NO             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             MARKETING_VERSION="$VERSION"             CURRENT_PROJECT_VERSION="$BUILD_NUMBER"             SKIP_INSTALL=NO             build
+
+      - name: Repair and validate built app and widget version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$PWD/DerivedData/Build/Products/Release-iphoneos/HTMLApp.app"
+          VERSION="$(awk -F '"' '/static let compiledVersion =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
+          BUILD="$(awk -F '"' '/static let compiledBuild =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
+          test -n "$VERSION" && test -n "$BUILD"
+          for BUNDLE in "$APP_PATH" "$APP_PATH/PlugIns/HTMLAppWidgets.appex"; do
+            PLIST="$BUNDLE/Info.plist"
+            test -f "$PLIST"
+            for PAIR in "CFBundleShortVersionString:$VERSION" "CFBundleVersion:$BUILD"; do
+              KEY="${PAIR%%:*}"
+              VALUE="${PAIR#*:}"
+              /usr/libexec/PlistBuddy -c "Set :$KEY $VALUE" "$PLIST" ||
+                /usr/libexec/PlistBuddy -c "Add :$KEY string $VALUE" "$PLIST"
+              test "$(/usr/libexec/PlistBuddy -c "Print :$KEY" "$PLIST")" = "$VALUE"
+            done
+            echo "Packaged version in $BUNDLE: $VERSION ($BUILD)"
+          done
 
       - name: Verify icon and version metadata
         shell: bash
@@ -112,8 +133,8 @@ jobs:
           test "$HEIGHT" = "1024"
           VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
           BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
-          EXPECTED_VERSION="$(sed -n 's/.*static let compiledVersion = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
-          EXPECTED_BUILD="$(sed -n 's/.*static let compiledBuild = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          EXPECTED_VERSION="$(awk -F '"' '/static let compiledVersion =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
+          EXPECTED_BUILD="$(awk -F '"' '/static let compiledBuild =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
           test "$VERSION" = "$EXPECTED_VERSION"
           test "$BUILD" = "$EXPECTED_BUILD"
           echo "Verified clean 1024x1024 generated AppIcon"
