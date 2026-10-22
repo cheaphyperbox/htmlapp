@@ -797,7 +797,8 @@ struct ListAppRow: View {
                     Text(app.summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 }
                 HStack(spacing: 7) {
-                    Text(app.id).font(.caption.monospaced()).foregroundStyle(.tertiary)
+                    // IDs are available from long-press → Copy ID; don't display
+                    // technical strings in every app row.
                     if app.websiteSourceURL != nil {
                         Label("Website", systemImage: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.tertiary)
                     }
@@ -901,9 +902,9 @@ struct EmptyLibraryView: View {
         VStack(spacing: 20) {
             Image(systemName: "rectangle.stack.badge.plus").font(.system(size: 58, weight: .semibold)).foregroundStyle(.tint)
             Text("Create your first HTML app").font(.title2.bold()).multilineTextAlignment(.center)
-            Text("Generate with AI, download a website, enter HTML code, select a file, or receive one from another device.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 34)
-            Button(action: add) { Label("Add HTML App", systemImage: "plus") }
+            Text("Make an app from an idea, add an existing one, or receive one from a friend. Everything you save appears here.")
+                .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(.horizontal, 24)
+            Button(action: add) { Label("Create Your First App", systemImage: "plus") }
                 .buttonStyle(.borderedProminent).controlSize(.large)
         }
         .padding()
