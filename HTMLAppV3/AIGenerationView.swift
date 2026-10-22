@@ -751,6 +751,11 @@ struct AIGenerationView: View {
                                     .buttonStyle(.borderedProminent)
                                     .disabled(saving)
                             }
+                            if !session.lastEditSummary.isEmpty {
+                                Text(session.lastEditSummary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text("Save the current app now, or apply another AI change first.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
