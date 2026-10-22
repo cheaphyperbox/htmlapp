@@ -184,7 +184,10 @@ struct LibraryView: View {
         }
         .fileImporter(
             isPresented: $importingFile,
-            allowedContentTypes: [.html, .plainText],
+            // Some Files providers label .html/.htm as generic data instead
+            // of public.html, so type-restricted picking can disable the file.
+            // Accept Files items, then inspect the selected extension ourselves.
+            allowedContentTypes: [.item],
             allowsMultipleSelection: false,
             onCompletion: importFile
         )
@@ -328,9 +331,6 @@ struct LibraryView: View {
                         showNewFolder = true
                     } label: {
                         Label("Create Folder", systemImage: "folder.badge.plus")
-                    }
-                    Button { showSettings = true } label: {
-                        Label("Settings", systemImage: "gearshape")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -515,17 +515,46 @@ struct LibraryView: View {
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            let data = try Data(contentsOf: url)
-            let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
-            guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                store.errorMessage = "The selected file was empty."
+            let ext = url.pathExtension.lowercased()
+            guard ["html", "htm", "xhtml", "txt"].contains(ext) else {
+                store.errorMessage = "Choose an HTML file (.html or .htm). A .txt file containing HTML also works."
                 return
             }
-            pendingImport = HTMLFileImportPayload(fileName: url.lastPathComponent, html: html)
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+            // Coordinated reading supports iCloud and third-party Files
+            // providers while the document is being downloaded/materialized.
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            var coordinationError: NSError?
+            var readResult: Result<Data, Error>?
+            coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { readableURL in
+                readResult = Result { try Data(contentsOf: readableURL) }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let readResult else {
+                store.errorMessage = "The file isn't ready yet. Download it in Files, then choose it again."
+                return
+            }
+            let data = try readResult.get()
+            guard data.count <= 12_000_000 else {
+                store.errorMessage = "This HTML file is larger than 12 MB. Try a smaller file."
+                return
+            }
+            let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+            guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                store.errorMessage = "The selected file is empty."
+                return
+            }
+            let payload = HTMLFileImportPayload(fileName: url.lastPathComponent, html: html)
+            // Allow the Files picker to dismiss before presenting the app's
+            // destination picker; simultaneous sheets can drop the tap.
+            Task { @MainActor in
+                await Task.yield()
+                pendingImport = payload
+            }
         } catch {
-            store.errorMessage = "The selected HTML file could not be opened."
+            store.errorMessage = "Couldn't open the selected file: \(error.localizedDescription)"
         }
     }
 
