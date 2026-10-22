@@ -5,7 +5,7 @@ import SwiftUI
 /// UTF-8 source bytes; token counts are deliberately described as estimates.
 struct ForgeWorkSlice: Codable, Identifiable {
     enum Stage: String, Codable, CaseIterable {
-        case prompt, research, search, css, body, script, polish, icon, qa, other
+        case prompt, research, search, css, body, script, polish, icon, qa, repair, other
 
         var label: String {
             switch self {
@@ -18,6 +18,7 @@ struct ForgeWorkSlice: Codable, Identifiable {
             case .polish: return "UI redesign"
             case .icon: return "App icon"
             case .qa: return "App tests"
+            case .repair: return "AI repairs"
             case .other: return "Other work"
             }
         }
@@ -33,6 +34,7 @@ struct ForgeWorkSlice: Codable, Identifiable {
             case .polish: return .pink
             case .icon: return .purple
             case .qa: return .green
+            case .repair: return Color(red: 0.94, green: 0.36, blue: 0.23)
             case .other: return .teal
             }
         }
@@ -114,8 +116,15 @@ final class ForgeWorkTracker: ObservableObject {
 
     func updateVolume(_ bytes: Int, stage: ForgeWorkSlice.Stage? = nil) {
         guard var run = current, !run.slices.isEmpty else { return }
-        let index = stage.flatMap { target in run.slices.lastIndex(where: { $0.stage == target }) }
-            ?? run.slices.count - 1
+        // Never attribute coding output to a QA, icon, or polish slice just
+        // because that happens to be the currently visible phase.
+        let index: Int
+        if let stage {
+            guard let matched = run.slices.lastIndex(where: { $0.stage == stage }) else { return }
+            index = matched
+        } else {
+            index = run.slices.count - 1
+        }
         guard bytes > run.slices[index].sourceBytes else { return }
         run.slices[index].sourceBytes = bytes
         current = run
@@ -135,8 +144,10 @@ final class ForgeWorkTracker: ObservableObject {
             stage = .polish
         } else if phrase.contains("icon") || phrase.contains("artwork") {
             stage = .icon
+        } else if phrase.contains("repair") || phrase.contains("retest") || phrase.contains("fixing") {
+            stage = phrase.contains("retest") ? .qa : .repair
         } else if phrase.contains("check") || phrase.contains("review") ||
-                    phrase.contains("verif") || phrase.contains("repair") {
+                    phrase.contains("verif") || phrase.contains("test") {
             stage = .qa
         } else if phrase.contains("generat") || phrase.contains("coding") ||
                     phrase.contains("patch") || phrase.contains("writing") {
