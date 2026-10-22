@@ -50,8 +50,16 @@ private extension String {
 actor SourceCache {
     static let shared = SourceCache()
     private let root: URL
+    private let session: URLSession
+    private let maxFileBytes = 3 * 1_024 * 1_024
+    private let maxAppBytes = 24 * 1_024 * 1_024
 
     private init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 20
+        configuration.urlCache = nil
+        session = URLSession(configuration: configuration)
         root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("HTMLApp/SourceCache", isDirectory: true)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -71,21 +79,47 @@ actor SourceCache {
         let days = configured == 0 ? 3 : configured
         let maximumAge = TimeInterval(days * 86_400)
 
-        for url in HTMLTools.externalURLs(in: app.html) {
+        let manager = FileManager.default
+        let existingURLs = (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        var totalBytes = existingURLs.reduce(0) {
+            $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        for url in HTMLTools.externalURLs(in: app.html).prefix(24) {
+            guard totalBytes < maxAppBytes, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { break }
             let destination = folder.appendingPathComponent(filename(for: url))
             if !force,
-               let attributes = try? FileManager.default.attributesOfItem(atPath: destination.path),
+               let attributes = try? manager.attributesOfItem(atPath: destination.path),
                let modified = attributes[.modificationDate] as? Date,
                Date().timeIntervalSince(modified) < maximumAge { continue }
-
             do {
-                var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
-                request.setValue("HTMLApp/1.0", forHTTPHeaderField: "User-Agent")
-                let (data, response) = try await URLSession.shared.data(for: request)
+                var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+                request.setValue("HTMLApp/1.5", forHTTPHeaderField: "User-Agent")
+                let (bytes, response) = try await session.bytes(for: request)
                 guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { continue }
+                let type = (http.mimeType ?? "").lowercased()
+                if type.hasPrefix("video/") || type.hasPrefix("audio/") ||
+                   type.contains("zip") || type.contains("pdf") { continue }
+                guard http.expectedContentLength < 0 ||
+                      http.expectedContentLength <= maxFileBytes else { continue }
+                let previousSize = (try? manager.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? 0
+                let budget = min(maxFileBytes, maxAppBytes - totalBytes + previousSize)
+                guard budget > 0 else { break }
+                var data = Data()
+                data.reserveCapacity(min(budget, 32_768))
+                var exceeded = false
+                for try await byte in bytes {
+                    if data.count >= budget {
+                        exceeded = true
+                        break
+                    }
+                    data.append(byte)
+                }
+                guard !exceeded, !data.isEmpty else { continue }
                 try data.write(to: destination, options: .atomic)
+                totalBytes += data.count - previousSize
             } catch {
-                // Keep the previous cached file when offline or refreshing fails.
+                // An interrupted or oversized transfer never replaces existing
+                // valid cached data.
             }
         }
     }
