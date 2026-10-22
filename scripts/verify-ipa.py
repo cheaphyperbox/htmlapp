@@ -9,6 +9,8 @@ for archive in sys.argv[1:]:
         for bundle,expected in [(app,'com.mekabrine.htmlapp'),(app/'PlugIns/HTMLAppWidgets.appex','com.mekabrine.htmlapp.widgets')]:
             info=plistlib.loads((bundle/'Info.plist').read_bytes())
             assert info['CFBundleIdentifier']==expected
+            assert info['CFBundleShortVersionString']=='1.4.0', f"{bundle.name} version mismatch: {info.get('CFBundleShortVersionString')}"
+            assert str(info['CFBundleVersion'])=='5', f"{bundle.name} build mismatch: {info.get('CFBundleVersion')}"
             assert float(info['MinimumOSVersion'])<=16.0
             assert set(info['UIDeviceFamily'])=={1,2}
             binary=bundle/info['CFBundleExecutable']
