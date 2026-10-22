@@ -143,8 +143,15 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             appendIssue("Runtime: could not inspect the generated DOM at 390pt width.")
         }
 
-        // One viewport is the fast default. Tablet checks can be run separately
-        // in developer QA rather than blocking every new app generation.
+        // A quick cross-device resize catches phone/tablet breakpoint issues
+        // without a second WebView launch or additional remote AI calls.
+        for (width, height) in [(CGFloat(320), CGFloat(700)), (CGFloat(820), CGFloat(900))] {
+            if let layout = await snapshot(webView, width: width, height: height) {
+                if layout.horizontalOverflow {
+                    appendIssue("Runtime: page overflows horizontally at \(Int(width))pt. Make card widths, buttons, and font sizes responsive.")
+                }
+            }
+        }
 
         // Keep this bounded: only safe navigation, not broad destructive UI tests.
         // The dedicated debugging screen can perform more exhaustive checking.
