@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.5.0"
-    static let compiledBuild = "6"
+    static let compiledVersion = "1.6.0"
+    static let compiledBuild = "7"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,23 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6" || version.hasPrefix("1.6.") {
+            return [
+                Entry(id: "safe-library", title: "Safer saved apps",
+                      description: "HTMLApp protects your Library if stored data cannot be read, preserves a damaged copy, and keeps a rolling recovery backup.",
+                      symbol: "externaldrive.badge.checkmark", tint: .blue),
+                Entry(id: "quick-tests", title: "Faster AI app testing",
+                      description: "Forge distinguishes blocking failures from advice, fixes simple document problems locally, and limits expensive AI repair retries.",
+                      symbol: "bolt.fill", tint: .orange),
+                Entry(id: "qa-timeline", title: "More accurate AI work history",
+                      description: "A separate AI repair segment shows where time went without counting the same HTML bytes as tests or icons.",
+                      symbol: "chart.pie.fill", tint: .purple),
+                Entry(id: "package-version", title: "Verified IPA versions",
+                      description: "Build metadata now includes the app and widget versions, with validation of the final packaged IPA.",
+                      symbol: "checkmark.shield", tint: .green)
+            ]
+        }
+
         if version == "1.5" || version.hasPrefix("1.5.") {
             return [Entry(id: "version", title: "Reliable version tracking", description: "The app and packaged IPA display the same release and build numbers, checked before packaging.", symbol: "checkmark.seal", tint: .blue)]
         }
