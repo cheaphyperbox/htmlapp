@@ -87,8 +87,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$PWD/DerivedData"
-          BUILD_NUMBER="6"
-          VERSION="1.5.0"
+          VERSION="$(sed -n 's/.*static let compiledVersion = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          BUILD_NUMBER="$(sed -n 's/.*static let compiledBuild = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          test -n "$VERSION" && test -n "$BUILD_NUMBER"
+          echo "Building source release $VERSION ($BUILD_NUMBER)"
           echo "Building HTMLApp marketing version $VERSION (source revision $BUILD_NUMBER)"
           xcodebuild             -project "HTMLApp.xcodeproj"             -scheme "HTMLApp"             -configuration Release             -sdk iphoneos             -destination "generic/platform=iOS"             -derivedDataPath "$PWD/DerivedData"             IPHONEOS_DEPLOYMENT_TARGET=16.0             TARGETED_DEVICE_FAMILY="1,2"             SUPPORTS_MACCATALYST=NO             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             MARKETING_VERSION="$VERSION"             CURRENT_PROJECT_VERSION="$BUILD_NUMBER"             SKIP_INSTALL=NO             build
 
@@ -107,8 +109,10 @@ jobs:
           test "$HEIGHT" = "1024"
           VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
           BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
-          test "$VERSION" = "1.5.0"
-          test "$BUILD" = "6"
+          EXPECTED_VERSION="$(sed -n 's/.*static let compiledVersion = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          EXPECTED_BUILD="$(sed -n 's/.*static let compiledBuild = "\\([^"]*\\)".*/\\1/p' HTMLAppV3/HTMLAppWhatsNewView.swift | head -n 1)"
+          test "$VERSION" = "$EXPECTED_VERSION"
+          test "$BUILD" = "$EXPECTED_BUILD"
           echo "Verified clean 1024x1024 generated AppIcon"
           echo "Verified HTMLApp version $VERSION ($BUILD)"
           echo "Verified compiled asset catalog: $APP_PATH/Assets.car"
