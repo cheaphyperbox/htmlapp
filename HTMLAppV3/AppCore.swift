@@ -357,6 +357,73 @@ final class AppStore: ObservableObject {
         notice = "Downloaded \(name)."
     }
 
+    // Full-source checkpoints are stored separately from library.json. This
+    // intentionally survives app restarts and does not modify app user data.
+    struct AIEditCheckpoint: Codable, Identifiable {
+        var id: UUID
+        var created: Date
+        var html: String
+        var summary: String
+        var note: String
+    }
+
+    private func editHistoryURL(for id: String) -> URL {
+        let safeID = id.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+        let folder = libraryURL.deletingLastPathComponent().appendingPathComponent("AIEditHistory", isDirectory: true)
+        return folder.appendingPathComponent(safeID + ".json")
+    }
+
+    func editHistory(for app: SavedHTMLApp) -> [AIEditCheckpoint] {
+        guard let data = try? Data(contentsOf: editHistoryURL(for: app.id)),
+              let records = try? JSONDecoder().decode([AIEditCheckpoint].self, from: data) else { return [] }
+        return records
+    }
+
+    func updateFromAI(_ app: SavedHTMLApp, html: String, summary: String, note: String) async {
+        guard let current = apps.first(where: { $0.id == app.id }), current.html != html else {
+            await update(app, html: html, summary: summary)
+            return
+        }
+        var history = editHistory(for: app)
+        history.append(AIEditCheckpoint(id: UUID(), created: Date(), html: current.html,
+                                        summary: current.summary, note: note))
+        let url = editHistoryURL(for: app.id)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(history)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            errorMessage = "Could not save the previous edit version. The AI edit was not applied."
+            return
+        }
+        await update(app, html: html, summary: summary)
+    }
+
+    func restoreAIEdit(_ app: SavedHTMLApp, checkpointID: UUID) async {
+        guard let current = apps.first(where: { $0.id == app.id }) else { return }
+        var history = editHistory(for: app)
+        guard let chosen = history.first(where: { $0.id == checkpointID }) else { return }
+        history.append(AIEditCheckpoint(id: UUID(), created: Date(), html: current.html,
+                                        summary: current.summary, note: "Before restore"))
+        let url = editHistoryURL(for: app.id)
+        do {
+            try JSONEncoder().encode(history).write(to: url, options: .atomic)
+        } catch {
+            errorMessage = "Could not preserve current version; restore canceled."
+            return
+        }
+        await update(current, html: chosen.html, summary: chosen.summary)
+        notice = "Restored earlier HTML version."
+    }
+
+    func clearAIEditHistory(for app: SavedHTMLApp) {
+        let url = editHistoryURL(for: app.id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do { try FileManager.default.removeItem(at: url) }
+        catch { errorMessage = "Could not clear old AI edit history." }
+    }
+
     func update(_ app: SavedHTMLApp, html: String, summary: String) async {
         guard let index = apps.firstIndex(where: { $0.id == app.id }) else { return }
         let name = HTMLTools.title(in: html) ?? app.name
