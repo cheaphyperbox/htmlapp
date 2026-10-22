@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.1"
-    static let compiledBuild = "8"
+    static let compiledVersion = "1.6.2"
+    static let compiledBuild = "9"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.2" { return [
+            Entry(id: "offline-whisper", title: "Whisper offline dictation", description: "Switch between Apple Speech and local Whisper speech recognition in Settings.", symbol: "waveform", tint: .blue),
+            Entry(id: "dictation-guide", title: "Test your microphone", description: "Try Apple dictation during onboarding and choose Whisper if your words do not appear.", symbol: "mic.circle", tint: .purple)
+        ] }
         if version == "1.6.1" { return [
             Entry(id: "edit-history", title: "Restore AI edits", description: "Revisit saved AI edit versions from the Library and restore the HTML you want.", symbol: "clock.arrow.circlepath", tint: .blue),
             Entry(id: "regenerate-draft", title: "Start a fresh draft", description: "Regenerate an unsaved app from its original prompt.", symbol: "arrow.clockwise", tint: .purple),
