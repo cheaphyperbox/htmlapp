@@ -56,4 +56,9 @@ assert "Regenerate from scratch" in source("HTMLAppV3/AIGenerationView.swift")
 assert "symbols.search" in native and "symbols.render" in native
 assert "lastEditSummary" in ai
 
+assert 'WhisperKit' in project and 'package: WhisperKit' in project
+assert 'htmlapp.dictationEngine' in source("HTMLAppV3/ForgeDictation.swift")
+assert 'HTMLAppOfflineSpeech.shared.transcribe' in source("HTMLAppV3/ForgeDictation.swift")
+assert 'Try Whisper Offline Instead' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'Picker("Dictation Engine"' in source("HTMLAppV3/OnboardingSettings.swift")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
