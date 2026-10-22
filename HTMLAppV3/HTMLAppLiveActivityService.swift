@@ -51,7 +51,14 @@ enum HTMLAppLiveActivityService {
             accentHex: goodHex ? hex : (previous?.accentHex ?? "#3576D3"),
             secondaryLabel: args["secondaryLabel"] == nil ? previous?.secondaryLabel : clip(args["secondaryLabel"], max: 36),
             secondaryValue: args["secondaryValue"] == nil ? previous?.secondaryValue : clip(args["secondaryValue"], max: 28),
-            footer: args["footer"] == nil ? previous?.footer : clip(args["footer"], max: 90)
+            footer: args["footer"] == nil ? previous?.footer : clip(args["footer"], max: 90),
+            backgroundHex: {
+                let candidate = clip(args["backgroundHex"], max: 7)
+                return candidate.range(of: #"^#[0-9A-Fa-f]{6}$"#, options: .regularExpression) != nil
+                    ? candidate : previous?.backgroundHex
+            }(),
+            compactLabel: args["compactLabel"] == nil ? previous?.compactLabel
+                : clip(args["compactLabel"], max: 10)
         )
     }
 
@@ -72,6 +79,8 @@ enum HTMLAppLiveActivityService {
                  "secondaryLabel": $0.content.state.secondaryLabel ?? "",
                  "secondaryValue": $0.content.state.secondaryValue ?? "",
                  "footer": $0.content.state.footer ?? "",
+                 "backgroundHex": $0.content.state.backgroundHex ?? "",
+                 "compactLabel": $0.content.state.compactLabel ?? "",
                  "state": String(describing: $0.activityState)]
             }
     }
