@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.0"
-    static let compiledBuild = "7"
+    static let compiledVersion = "1.6.1"
+    static let compiledBuild = "8"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.1" { return [
+            Entry(id: "edit-history", title: "Restore AI edits", description: "Revisit saved AI edit versions from the Library and restore the HTML you want.", symbol: "clock.arrow.circlepath", tint: .blue),
+            Entry(id: "regenerate-draft", title: "Start a fresh draft", description: "Regenerate an unsaved app from its original prompt.", symbol: "arrow.clockwise", tint: .purple),
+            Entry(id: "edit-summary", title: "Explain each AI edit", description: "Forge records a short description of AI changes.", symbol: "text.bubble", tint: .green)
+        ] }
         if version == "1.6" || version.hasPrefix("1.6.") {
             return [
                 Entry(id: "safe-library", title: "Safer saved apps",
