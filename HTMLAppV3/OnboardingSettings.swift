@@ -425,8 +425,14 @@ struct SettingsView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("HTMLApp version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
-                    LabeledContent("Build number", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")
+                    LabeledContent("App code version", value: HTMLAppReleaseNotes.compiledVersion)
+                    LabeledContent("App code build", value: HTMLAppReleaseNotes.compiledBuild)
+                    LabeledContent("IPA installed version", value: HTMLAppReleaseNotes.packagedVersion)
+                    LabeledContent("IPA installed build", value: HTMLAppReleaseNotes.packagedBuild)
+                    if !HTMLAppReleaseNotes.packagingMatchesCode {
+                        Label("The installed IPA metadata does not match the compiled app. Rebuild using the 1.4.0 packaging settings.", systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
                     if !previousOpenedVersion.isEmpty {
                         LabeledContent("Updated from", value: previousOpenedVersion)
                     }
