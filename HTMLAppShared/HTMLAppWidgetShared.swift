@@ -42,6 +42,7 @@ struct HTMLAppWidgetItem: Codable, Hashable, Identifiable {
 
 struct HTMLAppWidgetSnapshot: Codable, Hashable {
     var layout: String?
+    var deadlineMs: Double? = nil
     var eyebrow: String?
     var title: String?
     var subtitle: String?
