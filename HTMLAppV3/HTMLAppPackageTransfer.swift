@@ -39,7 +39,8 @@ enum HTMLAppPackageTransfer {
     static func createArchive(
         apps: [SavedHTMLApp],
         folders: [LibraryFolder],
-        links: [LibraryAppLink]
+        links: [LibraryAppLink],
+        includePersonalData: Bool = true
     ) throws -> URL {
         let appIDs = Set(apps.map(\.id))
         // Permission grants are deliberately not transferred. A received HTMLApp
@@ -55,15 +56,15 @@ enum HTMLAppPackageTransfer {
             links: links.filter { appIDs.contains($0.appID) },
             permissionChoices: permissionChoices,
             sensorChoices: sensorChoices,
-            appData: Dictionary(uniqueKeysWithValues: apps.map {
+            appData: includePersonalData ? Dictionary(uniqueKeysWithValues: apps.map {
                 ($0.id, HTMLAppPortableDataStore.all(appID: $0.id))
-            }),
-            websiteStates: Dictionary(uniqueKeysWithValues: apps.compactMap { app in
+            }) : nil,
+            websiteStates: includePersonalData ? Dictionary(uniqueKeysWithValues: apps.compactMap { app in
                 guard app.websiteSourceURL != nil else { return nil }
                 return (app.id, WebsiteArchiveManager.shared.portableState(appID: app.id))
-            }),
-            widgetDefinitions: HTMLAppWidgetStore.all().filter { appIDs.contains($0.appID) },
-            backgroundJobs: HTMLAppBackgroundJobStore.all().filter { appIDs.contains($0.appID) }
+            }) : nil,
+            widgetDefinitions: includePersonalData ? HTMLAppWidgetStore.all().filter { appIDs.contains($0.appID) } : nil,
+            backgroundJobs: includePersonalData ? HTMLAppBackgroundJobStore.all().filter { appIDs.contains($0.appID) } : nil
         )
 
         let encoder = JSONEncoder()
@@ -74,6 +75,7 @@ enum HTMLAppPackageTransfer {
             .init(path: manifestName, data: try encoder.encode(bundle))
         ]
 
+        if includePersonalData {
         for app in apps {
             let root = SourceCache.shared.baseURL(appID: app.id)
             if FileManager.default.fileExists(atPath: root.path) {
@@ -84,6 +86,8 @@ enum HTMLAppPackageTransfer {
                     entries.append(.init(path: "cache/\(app.id)/\(relative)", data: data))
                 }
             }
+        }
+
         }
 
         let safeBase: String
