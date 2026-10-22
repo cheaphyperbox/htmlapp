@@ -78,7 +78,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 self?.runShortcut(id: id, args: args)
             }
         case "files.pick":
-            pickFiles(id: id, args: args)
+            withPermission(.files, id: id) { [weak self] in self?.pickFiles(id: id, args: args) }
         case "contacts.pick":
             withPermission(.contacts, id: id) { [weak self] in self?.pickContact(id: id) }
         case "contacts.list":
