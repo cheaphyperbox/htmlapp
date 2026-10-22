@@ -70,6 +70,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: HTMLApp/HTMLApp.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: HTMLApp/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: HTMLApp
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
@@ -140,6 +141,7 @@ targets:
         SKIP_INSTALL: YES
         CODE_SIGN_ENTITLEMENTS: HTMLAppWidgets/HTMLAppWidgets.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: HTMLAppWidgets/Info.plist
     info:
       path: HTMLAppWidgets/Info.plist
       properties:
