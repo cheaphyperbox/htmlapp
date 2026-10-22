@@ -1835,7 +1835,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
 HTMLAPP LIVE ACTIVITY COUNTDOWNS AND WIDGETS:
 - For any Live Activity representing a timer or deadline, include primaryDeadlineMs and optionally secondaryDeadlineMs as absolute Unix milliseconds in liveActivities.start/update. Native WidgetKit displays these with Text(date, style: .timer), so they continue counting while HTMLApp is suspended. Do NOT rely on one-minute JavaScript calls to refresh strings in the Lock Screen.
 - Continue to send strings for fallback content; use liveActivities.update when plans/deadlines actually change, rather than on every second or minute.
-- Published widgets are snapshot-based and iOS controls refresh budgets; never promise second-by-second or exact 15-minute background reloads. Where a countdown widget is needed, prefer native date-driven timer presentation, not frozen text.
+- Published widgets are snapshot-based and iOS controls refresh budgets; never promise second-by-second or exact 15-minute background reloads. For countdown widgets, set snapshot.deadlineMs to the absolute Unix timestamp in milliseconds. WidgetKit will display its value with Text(date, style: .timer), even while the extension is inactive. Keep value as readable fallback text.
 
 HTMLAPP SF SYMBOLS:
 - Generated apps may call await HTMLAppNative.symbols.search("heart") to find supported curated system-symbol names, and await HTMLAppNative.symbols.render("heart.fill") to receive {dataURL} for an <img>. SF Symbols are not a web font: do not pretend arbitrary symbol names work directly in CSS or HTML.
