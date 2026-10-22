@@ -62,6 +62,9 @@ jobs:
             --data-binary "$(jq -nc --arg content "$MESSAGE" '{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}')" \
             "$DISCORD_WEBHOOK_URL"
 
+      - name: Check source release and safety invariants
+        run: python3 scripts/test-source-invariants.py
+
       - name: Test JavaScript widget rejection diagnostics
         run: node scripts/test-widget-bridge.js
 
