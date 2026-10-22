@@ -75,7 +75,7 @@ struct HTMLAppMain: App {
                     }
                 }
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
-                    HTMLAppHomeScreenGuide(appName: app.name)
+                    HTMLAppHomeScreenGuide(appName: app.name, profileURL: store.pendingWebClipProfileURL)
                 }
                 .onOpenURL(perform: store.openDeepLink)
                 .onReceive(NotificationCenter.default.publisher(for: .htmlAppNotificationOpened)) { notification in
@@ -174,6 +174,7 @@ final class AppStore: ObservableObject {
     @Published var runningApp: SavedHTMLApp?
     @Published var pendingSwitchApp: SavedHTMLApp?
     @Published var pendingWebClipGuideApp: SavedHTMLApp?
+    @Published var pendingWebClipProfileURL: URL?
     @Published var pendingWebsiteUpdate: SavedHTMLApp?
     @Published var errorMessage: String?
     @Published var notice: String?
@@ -864,13 +865,13 @@ final class AppStore: ObservableObject {
     }
 
     func installWebClip(for app: SavedHTMLApp) {
-        WebClipInstaller.shared.install(app: app) { [weak self] result in
+        LocalProfileDownload.shared.start(profile: WebClipProfile.mobileConfigData(for: app)) { [weak self] result in
             switch result {
-            case .success:
-                self?.notice = "Profile opened in Safari. Complete the installation in iOS Settings."
+            case .success(let url):
+                self?.pendingWebClipProfileURL = url
                 self?.pendingWebClipGuideApp = app
             case .failure(let error):
-                self?.errorMessage = error.localizedDescription
+                self?.errorMessage = "Could not prepare the Home Screen profile: \(error.localizedDescription)"
             }
         }
     }
