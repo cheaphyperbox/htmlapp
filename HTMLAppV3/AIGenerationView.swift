@@ -312,24 +312,30 @@ struct AIGenerationView: View {
                 }
                 .padding(.vertical, 7)
             } header: {
-                Text("What do you want to make?")
+                Text("Step 1 · Describe your app")
             } footer: {
-                Text("Describe the result you want. Forge keeps a local recovery draft and runs isolated runtime checks before save.")
+                Text("Tell Forge what your app should do. You can type or hold the gray microphone to speak.")
             }
 
             Section {
-                HStack {
-                    Label(AISettingsStore.configuration.model, systemImage: "cpu")
-                        .lineLimit(1)
-                    Spacer()
-                    Text(AISettingsStore.isUIOverhaulEnabled ? "UI polish on" : "UI polish off")
-                        .foregroundStyle(.secondary)
+                if developerMode {
+                    HStack {
+                        Label(AISettingsStore.configuration.model, systemImage: "cpu")
+                            .lineLimit(1)
+                        Spacer()
+                        Text(AISettingsStore.isUIOverhaulEnabled ? "UI polish on" : "UI polish off")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
                 }
-                .font(.caption)
 
                 if existingApp == nil {
-                    Toggle("Preview 3 different styles first", isOn: $stylePickerEnabled)
+                    Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
+                    Text(stylePickerEnabled
+                         ? "Forge will show a few designs you can tap and try before making the app."
+                         : "Forge will start building right away.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 Button {
@@ -340,7 +346,7 @@ struct AIGenerationView: View {
                         generateApp()
                     }
                 } label: {
-                    Label(existingApp == nil && stylePickerEnabled ? "Explore App Styles" : "Generate HTML App", systemImage: "sparkles")
+                    Label(existingApp == nil && stylePickerEnabled ? "Choose a Look" : "Make My App", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -350,7 +356,7 @@ struct AIGenerationView: View {
 
             if !AISettingsStore.configuration.isConfigured {
                 Section {
-                    Label("Set an AI API URL and model in Settings before generating.", systemImage: "exclamationmark.triangle")
+                    Label("Connect your AI in Settings to start making apps.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.secondary)
                 }
             }
