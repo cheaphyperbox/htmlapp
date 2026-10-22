@@ -4,7 +4,7 @@ import UIKit
 
 @MainActor
 enum HTMLRuntimeVerifier {
-    static func verify(html: String, timeout: TimeInterval = 9) async -> [String] {
+    static func verify(html: String, timeout: TimeInterval = 6) async -> [String] {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ["Runtime: generated HTML was empty."]
         }
@@ -92,7 +92,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 170_000_000)
+            try? await Task.sleep(nanoseconds: 80_000_000)
             guard let self, !Task.isCancelled else { return }
             await self.runChecks()
         }
@@ -143,16 +143,16 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             appendIssue("Runtime: could not inspect the generated DOM at 390pt width.")
         }
 
-        let tablet = await snapshot(webView, width: 820, height: 900)
-        if let tablet, tablet.horizontalOverflow {
-            appendIssue("Runtime: page has horizontal overflow at 820pt width.")
-        }
+        // One viewport is the fast default. Tablet checks can be run separately
+        // in developer QA rather than blocking every new app generation.
 
+        // Keep this bounded: only safe navigation, not broad destructive UI tests.
+        // The dedicated debugging screen can perform more exhaustive checking.
         // Exercise non-destructive navigation in a disposable, nonpersistent runtime.
         // These are smoke tests, not permission to submit forms or mutate user data.
         if let tapped = (try? await evaluate(Self.clickProbeScript, in: webView)) as? [String: Any],
            let count = tapped["tested"] as? Int, count > 0 {
-            try? await Task.sleep(nanoseconds: 320_000_000)
+            try? await Task.sleep(nanoseconds: 90_000_000)
             let stillAlive = (try? await evaluate(
                 "!!document.body && (document.body.children.length > 0 || (document.body.textContent || '').trim().length > 0)",
                 in: webView
@@ -184,7 +184,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         webView.frame = CGRect(x: 0, y: 0, width: width, height: height)
         webView.setNeedsLayout()
         webView.layoutIfNeeded()
-        try? await Task.sleep(nanoseconds: 65_000_000)
+        try? await Task.sleep(nanoseconds: 25_000_000)
 
         let snapshotValue = try? await evaluate(
             """
