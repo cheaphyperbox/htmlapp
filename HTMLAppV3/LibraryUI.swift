@@ -39,6 +39,7 @@ struct LibraryView: View {
     @State private var showAddOptions = false
     @State private var showGenerator = false
     @State private var shortcutPrompt = ""
+    @State private var shortcutGenerationNonce = 0
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
     @State private var importingFile = false
@@ -87,7 +88,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
         .fullScreenCover(isPresented: $showGenerator) {
-            AIGenerationView(initialPrompt: shortcutPrompt).environmentObject(store).interactiveDismissDisabled(true)
+            AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce).environmentObject(store).interactiveDismissDisabled(true)
         }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
@@ -274,6 +275,7 @@ struct LibraryView: View {
         if let idea = UserDefaults.standard.string(forKey: "htmlapp.shortcut.createPrompt") {
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.createPrompt")
             shortcutPrompt = idea
+            shortcutGenerationNonce += 1
             showGenerator = true
         }
     }
