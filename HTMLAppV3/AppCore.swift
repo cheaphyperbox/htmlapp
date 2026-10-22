@@ -927,6 +927,11 @@ final class AppStore: ObservableObject {
     }
 
     func openDeepLink(_ url: URL) {
+        if url.scheme?.lowercased() == "htmlapp",
+           url.host?.lowercased() == "voice-create" {
+            NotificationCenter.default.post(name: Notification.Name("HTMLAppVoiceCreateRequested"), object: nil)
+            return
+        }
         guard url.scheme?.lowercased() == "htmlapp",
               url.host?.lowercased() == "open",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
