@@ -126,6 +126,15 @@ struct HTMLAppWidgetView: View {
     let entry: HTMLAppWidgetEntry
 
     private var snapshot: HTMLAppWidgetSnapshot { entry.definition.snapshot }
+    @ViewBuilder
+    private var dynamicValue: some View {
+        if let milliseconds = snapshot.deadlineMs,
+           milliseconds.isFinite, milliseconds > 0 {
+            Text(Date(timeIntervalSince1970: milliseconds / 1000), style: .timer)
+        } else {
+            Text(snapshot.value ?? "—")
+        }
+    }
 
     var body: some View {
         Group {
@@ -192,7 +201,7 @@ struct HTMLAppWidgetView: View {
                 Image(systemName: symbol)
             }
             if let value = snapshot.value, !value.isEmpty {
-                Text(value).font(.caption2.bold()).lineLimit(1)
+                dynamicValue.font(.caption2.bold()).lineLimit(1)
             }
         }
     }
@@ -208,7 +217,7 @@ struct HTMLAppWidgetView: View {
                     .lineLimit(1)
             }
             if let value = snapshot.value, !value.isEmpty {
-                Text(value)
+                dynamicValue
                     .font(.headline)
                     .lineLimit(1)
             }
@@ -275,7 +284,7 @@ struct HTMLAppWidgetView: View {
                         .stroke(accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     if let value = snapshot.value {
-                        Text(value).font(.title3.bold()).lineLimit(1)
+                        dynamicValue.font(.title3.bold()).lineLimit(1)
                     }
                 }
                 .frame(width: 110, height: 110)
@@ -337,7 +346,7 @@ struct HTMLAppWidgetView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if let value = snapshot.value, !value.isEmpty {
-                    Text(value)
+                    dynamicValue
                         .font(.system(size: family == .systemSmall ? 30 : 36, weight: .bold, design: .rounded))
                         .minimumScaleFactor(0.55)
                         .lineLimit(1)
