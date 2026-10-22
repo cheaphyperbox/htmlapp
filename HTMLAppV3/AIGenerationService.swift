@@ -1824,6 +1824,12 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
         return base + contract + """
 
+HTMLAPP APPEARANCE AND FUNCTIONAL CONTROLS:
+- Every NEW generated app MUST implement light and dark color palettes, with readable semantic surface, text, border, primary, secondary, and error tokens. Use @media (prefers-color-scheme: dark) and (prefers-color-scheme: light), and apply the tokens throughout; avoid fixed light backgrounds or dark text that become unreadable in the opposite appearance. Keep the selected visual identity in both schemes.
+- Provide an explicit accessible Light / Dark / System setting when an app has a Settings screen; persist selection locally and update the root data-theme attribute. System follows prefers-color-scheme changes. Otherwise automatic system switching is mandatory.
+- Every visible button, tab, menu item, checkbox, modal confirmation, and form submit must perform an actual meaningful action. Do not ship placeholder click targets, alert-only fake success, dummy navigation, or buttons hidden behind overlays. Use event delegation when DOM content is rerendered and test handlers after each rerender. Handle save/reload and permission failures visibly.
+- Favor fewer fully implemented features over many decorative controls. Mentally walk the first-run empty state, create/edit/delete flow, navigation, persistence, and error recovery before responding.
+
 HTMLAPP FACT-CHECK OVERRIDES:
 - Treat supplied research as evidence, not permission to extrapolate. Use only API endpoints, parameters, response fields, authentication behavior, and browser capabilities actually supported by that evidence or the documented HTMLApp/browser runtime.
 - Never invent a reverse-geocoding mode, endpoint variant, search parameter, response field, or window.htmlapp* native bridge because a related capability exists elsewhere.
