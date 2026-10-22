@@ -427,26 +427,6 @@ struct HTMLAppPrimaryWidget: Widget {
     }
 }
 
-@available(iOS 17.0, *)
-struct HTMLAppConfiguredWidget: Widget {
-    let kind = "HTMLAppGeneratedWidget"
-
-    var body: some WidgetConfiguration {
-        AppIntentConfiguration(
-            kind: kind,
-            intent: HTMLAppWidgetConfigurationIntent.self,
-            provider: HTMLAppConfiguredWidgetProvider()
-        ) { entry in
-            HTMLAppWidgetView(entry: entry)
-        }
-        .configurationDisplayName("HTMLApp Widget")
-        .description("Choose any widget published by your saved HTMLApps.")
-        .supportedFamilies([
-            .systemSmall, .systemMedium, .systemLarge,
-            .accessoryInline, .accessoryCircular, .accessoryRectangular
-        ])
-    }
-}
 
 #if !WIDGET_TESTING
 @main
@@ -454,9 +434,8 @@ struct HTMLAppWidgetsBundle: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
         HTMLAppPrimaryWidget()
-        if #available(iOS 17.0, *) {
-            HTMLAppConfiguredWidget()
-        }
+        // Removed broken picker-based widget variants. The primary widget
+        // always displays the latest snapshot and needs no manual app selection.
         if #available(iOS 16.2, *) {
             HTMLAppLiveActivityWidget()
         }
