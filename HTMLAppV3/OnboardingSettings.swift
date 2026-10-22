@@ -7,7 +7,7 @@ struct OnboardingView: View {
     @State private var showAISetup = false
     @State private var showMenuExample = false
 
-    private let numberOfSteps = 6
+    private let numberOfSteps = 11
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +39,11 @@ struct OnboardingView: View {
                 .padding(.bottom, 10)
 
             if step == numberOfSteps - 1 {
-                HTMLAppFirstRunPermissionsView(onFinished: { complete = true })
+                VStack {
+                    HTMLAppFirstRunPermissionsView(onFinished: { complete = true })
+                    Button("Skip This Step") { complete = true }
+                        .padding(.vertical, 12)
+                }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -118,7 +122,13 @@ struct OnboardingView: View {
         case 1: return "Your app Library"
         case 2: return "Make an app with AI"
         case 3: return "Change anything later"
-        default: return "Share and add to Home Screen"
+        case 4: return "Find and organize apps"
+        case 5: return "Make apps without AI"
+        case 6: return "Test and fix your app"
+        case 7: return "Permissions and widgets"
+        case 8: return "Sharing and backups"
+        case 9: return "Settings and help"
+        default: return "Optional permissions"
         }
     }
 
@@ -128,7 +138,13 @@ struct OnboardingView: View {
         case 1: return "All your saved apps live here. Choose the way you want to see them."
         case 2: return "Describe what you want. Forge can design a few looks and create the app for you. Connecting an AI provider is optional until you want to generate."
         case 3: return "Press and hold a saved app to see its shortcuts. You can also edit its code or ask AI to make changes."
-        default: return "Send apps to another device or put a saved app on your Home Screen. iOS may ask you to approve a profile."
+        case 4: return "Search for your creations, make folders, choose list or grid, and sort your Library."
+        case 5: return "Import an HTML file, write code yourself, or save a website. No AI account needed."
+        case 6: return "Try your app before saving. Choose Skip, Fast, or Balanced testing and fix broken buttons."
+        case 7: return "Control what an app may access. Some apps can publish Home Screen widgets."
+        case 8: return "Send apps nearby, export code, back up personal data, or add an app to Home Screen."
+        case 9: return "Adjust your preferences, read debug logs, or replay this tutorial whenever you want."
+        default: return "Choose optional iOS permissions. Each can be skipped and changed later."
         }
     }
 
@@ -138,7 +154,13 @@ struct OnboardingView: View {
         case 1: return "square.grid.2x2.fill"
         case 2: return "sparkles"
         case 3: return "hand.tap.fill"
-        default: return "iphone.gen3.radiowaves.left.and.right"
+        case 4: return "magnifyingglass"
+        case 5: return "chevron.left.forwardslash.chevron.right"
+        case 6: return "checkmark.shield"
+        case 7: return "square.grid.2x2"
+        case 8: return "square.and.arrow.up"
+        case 9: return "gearshape.2"
+        default: return "hand.raised"
         }
     }
 
@@ -227,6 +249,30 @@ struct OnboardingView: View {
                 Text("This is just a tutorial example; it won't change your real apps.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        case 4:
+            tutorialRow("1", "Find an app", "Use Search in the Library and type the name, then tap the matching app.", symbol: "magnifyingglass", tint: .blue)
+            tutorialRow("2", "Make folders", "Use More to make folders; long-press an app and choose Move To.", symbol: "folder", tint: .blue)
+            tutorialRow("3", "Change layouts", "Open Settings to switch list/grid, sorting and favorites.", symbol: "square.grid.2x2", tint: .blue)
+        case 5:
+            tutorialRow("1", "Create without AI", "Tap + and choose Write HTML Code, Import an HTML File, or Save a Website.", symbol: "plus.circle", tint: .blue)
+            tutorialRow("2", "Edit source", "Long-press an app, choose Edit Raw Code, make your changes, and save.", symbol: "chevron.left.forwardslash.chevron.right", tint: .blue)
+            tutorialRow("3", "Try your app", "Tap it in the Library to launch it.", symbol: "play.fill", tint: .blue)
+        case 6:
+            tutorialRow("1", "Try the preview", "Tap all important controls. Make sure your data remains after reopening.", symbol: "eye", tint: .blue)
+            tutorialRow("2", "Choose testing speed", "Skip runs no tests; Fast checks briefly; Balanced checks and can repair errors.", symbol: "speedometer", tint: .blue)
+            tutorialRow("3", "Fix a problem", "Long-press the app, choose Edit with AI, and say which button is broken.", symbol: "wrench", tint: .blue)
+        case 7:
+            tutorialRow("1", "Set permissions", "Long-press an app and choose Permissions. Allow only the access it needs.", symbol: "hand.raised", tint: .blue)
+            tutorialRow("2", "Use widgets", "Apps that support widgets can publish them for the iOS Home Screen widget picker.", symbol: "square.grid.2x2", tint: .blue)
+            tutorialRow("3", "Explore device tools", "Some apps support notifications, reminders, widgets and sharing.", symbol: "bell", tint: .blue)
+        case 8:
+            tutorialRow("1", "Share nearby", "Choose Share with Nearby Devices. The receiving device chooses Receive, then accepts.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
+            tutorialRow("2", "Export code", "Export Raw Code sends source; a separate full Library backup can include your saved data.", symbol: "square.and.arrow.up", tint: .blue)
+            tutorialRow("3", "Use Home Screen", "Long-press an app and choose Add to Home Screen, then follow the iOS setup guide.", symbol: "apps.iphone", tint: .blue)
+        case 9:
+            tutorialRow("1", "Find Settings", "Tap the gear to change layout and configure your AI provider.", symbol: "gearshape", tint: .blue)
+            tutorialRow("2", "Read debug logs", "Developer Mode shows AI logs and timings. Review private information before sharing logs.", symbol: "ladybug", tint: .blue)
+            tutorialRow("3", "Learn again", "Select Replay Tutorial in Settings whenever you need help.", symbol: "arrow.counterclockwise", tint: .blue)
         default:
             tutorialRow("1", "Send to a friend", "Open Share with Nearby Devices on the sending device. The other device chooses Receive. Accept the connection and the app imports automatically.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
             tutorialRow("2", "Add to Home Screen", "Long-press an app and choose Add to Home Screen. HTMLApp shows the steps to approve its profile in iOS Settings.", symbol: "apps.iphone", tint: .orange)
