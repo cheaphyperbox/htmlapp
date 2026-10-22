@@ -30,7 +30,7 @@ enum ForgeStylePreviewService {
     }
 
     /// A single small request produces three alternate, deliberately shallow HTML sketches.
-    static func generate(for request: String) async throws -> [ForgeStyleConcept] {
+    static func generate(for request: String, feedback: String = "") async throws -> [ForgeStyleConcept] {
         let config = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
@@ -43,13 +43,14 @@ enum ForgeStylePreviewService {
         "direction": 90–170 words of actionable visual specifications covering palette (give approximate hex colors), typography, layout, surfaces, primary navigation, interactive motion, and icon direction. Describe the visual identity so another AI can build the FULL app from it;
         "html": a self-contained <!DOCTYPE html><html> ... </html> miniature UI sketch with inline CSS and at most tiny vanilla JavaScript.
         
+        If user feedback is provided, create ALL THREE sketches again using it as a shared constraint. Preserve the user's main app goal while addressing the criticism. Do not return the old mockups with cosmetic recoloring.
         The three sketches must look MEANINGFULLY DIFFERENT, not recolored copies. Choose distinct themes, compositions, hierarchy, and visual density based on the app's purpose. Respect the user's optional visual taste, but do not force every app to look the same.
         Sketches show one believable phone-sized screen each, at most 2–3 small interactive elements (e.g. a tab selector, simple toggle, or popup), with clearly visible press and easing transitions, and concise illustrative placeholder copy. They are NOT feature-complete, and should not pretend to fetch data, request device access or persist anything.
         Use absolutely NO network requests, remote fonts, images, iframes, CDNs, storage, permissions, native APIs, alerts, trackers, or external links. Use only inlined CSS/JS and simple SVG/CSS shapes if useful.
         Include viewport meta, body width responsiveness, safe-area spacing, and prefers-reduced-motion handling. Target about 500–900 words TOTAL across all three HTML sketches, compact CSS, no giant code or functional algorithms.
         No Markdown fences or commentary. Output parseable JSON strings; escape newlines and quotation marks properly.
         """
-        let user = "APP IDEA:\n\(String(request.prefix(3500)))\n\nVISUAL PREFERENCE:\n\(AISettingsStore.creativeDirection)"
+        let user = "APP IDEA:\n\(String(request.prefix(3500)))\n\nFEEDBACK FOR ALL 3 PREVIEWS:\n\(feedback.isEmpty ? "None — create three original directions." : String(feedback.prefix(1500)))\n\nVISUAL PREFERENCE:\n\(AISettingsStore.creativeDirection)"
         let raw = try await AIProviderClient.complete(
             config: config,
             system: system,
