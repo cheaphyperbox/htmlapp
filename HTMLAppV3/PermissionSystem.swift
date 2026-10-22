@@ -18,6 +18,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case biometrics
     case localNetwork
     case clipboard
+    case externalApps
+    case displayControl
 
     var id: String { rawValue }
 
@@ -35,6 +37,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .biometrics: return "Biometrics"
         case .localNetwork: return "Local Network"
         case .clipboard: return "Clipboard"
+        case .externalApps: return "Open Other Apps"
+        case .displayControl: return "Keep Screen Awake"
         }
     }
 
@@ -51,7 +55,9 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .reminders: return "Allows this HTML app to read and create reminders through EventKit."
         case .biometrics: return "Allows this HTML app to request Face ID, Touch ID, or device authentication."
         case .localNetwork: return "Allows this HTML app to connect to devices and servers on your private Wi-Fi or LAN."
-        case .clipboard: return "Allows this HTML app to read text you copied from other apps."
+        case .clipboard: return "Allows this HTML app to read and write text on your device clipboard."
+        case .externalApps: return "Allows this HTML app to open links or other installed apps outside HTMLApp."
+        case .displayControl: return "Allows this HTML app to keep your screen from sleeping."
         }
     }
 
@@ -69,6 +75,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .biometrics: return "faceid"
         case .localNetwork: return "network"
         case .clipboard: return "doc.on.clipboard"
+        case .externalApps: return "arrow.up.forward.app"
+        case .displayControl: return "sun.max"
         }
     }
 }
