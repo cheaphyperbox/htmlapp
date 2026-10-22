@@ -38,6 +38,7 @@ struct LibraryView: View {
     @State private var showAllApps = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
+    @State private var showVoiceCreate = false
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
     @State private var aiEditorApp: SavedHTMLApp?
@@ -88,6 +89,17 @@ struct LibraryView: View {
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
+        .fullScreenCover(isPresented: $showVoiceCreate) {
+            HTMLAppVoiceCreateView(cancel: {
+                showVoiceCreate = false
+            }, generate: { idea in
+                shortcutPrompt = idea
+                showVoiceCreate = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    showGenerator = true
+                }
+            })
+        }
         .fullScreenCover(isPresented: $showGenerator) {
             AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce).environmentObject(store).interactiveDismissDisabled(true)
         }
@@ -137,6 +149,9 @@ struct LibraryView: View {
                         }
                     }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppVoiceCreateRequested"))) { _ in
+            showVoiceCreate = true
         }
         .onAppear(perform: handlePendingShortcut)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
