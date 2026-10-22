@@ -15,10 +15,23 @@ struct HTMLAppLiveActivityWidget: Widget {
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     if !context.state.value.isEmpty {
-                        Text(context.state.value).font(.headline.monospacedDigit())
+                        Group {
+                            if let deadline = context.state.primaryDeadline {
+                                Text(timerInterval: Date.distantPast...deadline, countsDown: true)
+                            } else {
+                                Text(context.state.value)
+                            }
+                        }.font(.headline.monospacedDigit())
                     }
                 }
-                Text(context.state.subtitle)
+                Group {
+                    if let deadline = context.state.primaryDeadline {
+                        HStack(spacing: 5) {
+                            Text("Start in")
+                            Text(deadline, style: .timer)
+                        }
+                    } else { Text(context.state.subtitle) }
+                }
                     .font(.subheadline)
                     .lineLimit(2)
                 if let second = context.state.secondaryValue, !second.isEmpty {
@@ -26,7 +39,11 @@ struct HTMLAppLiveActivityWidget: Widget {
                         Text(context.state.secondaryLabel ?? "Details")
                             .font(.caption).foregroundStyle(.secondary)
                         Spacer(minLength: 0)
-                        Text(second).font(.caption.weight(.semibold)).lineLimit(1)
+                        Group {
+                            if let deadline = context.state.secondaryDeadline {
+                                Text(deadline, style: .timer)
+                            } else { Text(second) }
+                        }.font(.caption.weight(.semibold)).lineLimit(1)
                     }
                 }
                 if let progress = context.state.progress {
@@ -51,7 +68,11 @@ struct HTMLAppLiveActivityWidget: Widget {
                     Text(context.attributes.title).font(.headline).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.value).font(.headline.monospacedDigit()).lineLimit(1)
+                    Group {
+                        if let deadline = context.state.primaryDeadline {
+                            Text(deadline, style: .timer)
+                        } else { Text(context.state.value) }
+                    }.font(.headline.monospacedDigit()).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -64,7 +85,11 @@ struct HTMLAppLiveActivityWidget: Widget {
                             HStack(spacing: 6) {
                                 Text(context.state.secondaryLabel ?? "Details").foregroundStyle(.secondary)
                                 Spacer(minLength: 0)
-                                Text(secondary).fontWeight(.semibold)
+                                Group {
+                                    if let deadline = context.state.secondaryDeadline {
+                                        Text(deadline, style: .timer)
+                                    } else { Text(secondary) }
+                                }.fontWeight(.semibold)
                             }
                             .font(.caption)
                         }
@@ -78,7 +103,13 @@ struct HTMLAppLiveActivityWidget: Widget {
                 Image(systemName: context.attributes.systemSymbol)
                     .foregroundStyle(activityAccent(context.state.accentHex))
             } compactTrailing: {
-                Text((context.state.compactLabel?.isEmpty == false ? context.state.compactLabel : nil) ?? (context.state.value.isEmpty ? "•" : context.state.value))
+                Group {
+                    if let deadline = context.state.primaryDeadline {
+                        Text(deadline, style: .timer)
+                    } else {
+                        Text((context.state.compactLabel?.isEmpty == false ? context.state.compactLabel : nil) ?? (context.state.value.isEmpty ? "•" : context.state.value))
+                    }
+                }
                     .font(.caption2.monospacedDigit())
                     .lineLimit(1)
             } minimal: {
