@@ -41,6 +41,7 @@ struct AIGenerationView: View {
     @State private var didLoadExisting = false
     @State private var showDebug = false
     @State private var showDetails = false
+    @State private var showRunHistory = false
     @State private var recoverableDraft: ForgeDraftCheckpoint?
     @State private var showDraftRecovery = false
     @State private var lastFailedChange: String?
@@ -142,6 +143,24 @@ struct AIGenerationView: View {
             } message: {
                 if let draft = recoverableDraft {
                     Text("A local draft from \(draft.savedAt.formatted(date: .abbreviated, time: .shortened)) is available. Resuming restores the saved preview and plan; it does not restart AI work automatically.")
+                }
+            }
+            .sheet(isPresented: $showRunHistory) {
+                NavigationStack {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForgeWorkRing(runs: workTracker.recentRuns,
+                                          active: session.isWorking || browserResearch.isBrowsing)
+                            ForgeRunBreakdown(runs: workTracker.recentRuns)
+                        }
+                        .padding(18)
+                    }
+                    .navigationTitle("AI Work History")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showRunHistory = false }
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showDetails) {
@@ -640,6 +659,11 @@ struct AIGenerationView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
+                    Button { showRunHistory = true } label: {
+                        Image(systemName: "chart.pie")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("AI task timings and text output history")
                     Button { showDetails = true } label: {
                         Image(systemName: "doc.text.magnifyingglass")
                     }
