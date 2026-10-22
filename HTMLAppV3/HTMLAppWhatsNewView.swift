@@ -33,7 +33,9 @@ enum HTMLAppReleaseNotes {
         if version == "1.6.1" { return [
             Entry(id: "edit-history", title: "Restore AI edits", description: "Revisit saved AI edit versions from the Library and restore the HTML you want.", symbol: "clock.arrow.circlepath", tint: .blue),
             Entry(id: "regenerate-draft", title: "Start a fresh draft", description: "Regenerate an unsaved app from its original prompt.", symbol: "arrow.clockwise", tint: .purple),
-            Entry(id: "edit-summary", title: "Explain each AI edit", description: "Forge records a short description of AI changes.", symbol: "text.bubble", tint: .green)
+            Entry(id: "edit-summary", title: "Explain each AI edit", description: "Forge records a short description of AI changes.", symbol: "text.bubble", tint: .green),
+            Entry(id: "symbols", title: "SF Symbols in HTML", description: "Generated apps can search a curated native SF Symbols catalog and render supported symbols.", symbol: "star.square", tint: .orange),
+            Entry(id: "onboarding-demo", title: "Calculator tutorial", description: "Practice a simulated AI build, calculator controls, and spoken edit ideas during onboarding.", symbol: "plus.forwardslash.minus", tint: .purple)
         ] }
         if version == "1.6" || version.hasPrefix("1.6.") {
             return [
