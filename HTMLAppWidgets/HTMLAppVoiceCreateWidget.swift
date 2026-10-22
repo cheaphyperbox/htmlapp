@@ -43,7 +43,17 @@ struct HTMLAppVoiceCreateWidget: Widget {
                 }
             }
             .widgetURL(URL(string: "htmlapp://voice-create"))
-            .containerBackground(for: .widget) { Color.clear }
+            .modifier(VoiceWidgetBackground())
+        }
+    }
+}
+
+private struct VoiceWidgetBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.containerBackground(for: .widget) { Color.clear }
+        } else {
+            content
         }
     }
 }
