@@ -63,7 +63,7 @@ enum HTMLAppPortableDataStore {
     }
 
     private static func load(appID: String) -> [String: String] {
-        guard let data = try? Data(contentsOf: url(appID: appID)),
+        guard let data = try? Data(contentsOf: fileURL(appID: appID)),
               let values = try? JSONDecoder().decode([String: String].self, from: data) else {
             return [:]
         }
@@ -71,7 +71,7 @@ enum HTMLAppPortableDataStore {
     }
 
     private static func persist(_ values: [String: String], appID: String) {
-        let destination = url(appID: appID)
+        let destination = fileURL(appID: appID)
         if values.isEmpty {
             try? FileManager.default.removeItem(at: destination)
             return
