@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.10"
-    static let compiledBuild = "17"
+    static let compiledVersion = "1.6.11"
+    static let compiledBuild = "18"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.11" { return [
+            Entry(id: "statusbar", title: "Choose the system status bar", description: "HTMLApps show the real status bar by default; immersive apps can request to hide it.", symbol: "iphone", tint: .blue),
+            Entry(id: "default-prompt", title: "Simpler AI settings", description: "Forge always uses maintained built-in instructions instead of editable system prompts.", symbol: "wand.and.stars", tint: .purple),
+            Entry(id: "widget-families", title: "Complete widget sizes", description: "AI generation and edits now request all three Home Screen or Lock Screen widget sizes when widgets are appropriate.", symbol: "square.grid.2x2", tint: .green)
+        ] }
         if version == "1.6.10" { return [
             Entry(id: "native-tabs-mounted", title: "More reliable native tabs", description: "The iOS tab controller waits for its HTMLApp window before mounting, with native UIKit tab destinations.", symbol: "square.split.2x1", tint: .blue),
             Entry(id: "tips", title: "Helpful first-time tips", description: "Short, dismissible hints explain Library, AI generation, gestures, sharing and editing after onboarding.", symbol: "lightbulb", tint: .orange),
