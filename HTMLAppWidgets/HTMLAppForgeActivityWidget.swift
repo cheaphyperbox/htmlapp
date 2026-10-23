@@ -11,6 +11,7 @@ struct HTMLAppForgeActivityWidget: Widget {
                 Label(context.attributes.isEdit ? "HTMLApp AI Edit" : "HTMLApp AI Generation", systemImage: "exclamationmark.triangle.fill")
                     .font(.headline)
                 Text(warning).font(.subheadline.weight(.bold)).fixedSize(horizontal: false, vertical: true)
+                Text("Return to HTMLApp to keep the AI working").font(.caption.weight(.semibold))
                 Text(context.state.phase).font(.caption).opacity(0.94)
                 ProgressView(value: context.state.progress).tint(.white)
             }
@@ -31,6 +32,7 @@ struct HTMLAppForgeActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(warning).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                        Text("Return to HTMLApp").font(.caption.weight(.bold))
                         Text(context.state.phase).font(.caption)
                         ProgressView(value: context.state.progress).tint(.red)
                     }
