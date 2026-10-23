@@ -125,7 +125,14 @@ final class ForgeDictation: ObservableObject {
             offlineURL = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             guard let url else { return }
-            status = "Transcribing offline… The first use downloads a speech model."
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let bytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+            guard bytes > 1024 else {
+                status = "No microphone audio was recorded. Check microphone access and hold the mic longer."
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
+            status = "Recorded \(bytes / 1024) KB. Loading Whisper and transcribing offline…"
             Task {
                 defer { try? FileManager.default.removeItem(at: url) }
                 do {
