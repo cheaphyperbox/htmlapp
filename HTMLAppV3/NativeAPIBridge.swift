@@ -29,6 +29,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let pedometer = CMPedometer()
+    private var nativeTabBar: HTMLAppNativeTabBar?
 
     init(webView: WKWebView, appID: String, permissionCoordinator: NativePermissionCoordinator?) {
         self.webView = webView
@@ -45,11 +46,46 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         switch method {
         case "device.info":
             deviceInfo(id: id)
+        case "tabs.configure":
+            guard appID != "PREVIEW" else {
+                reject(id, code: "preview_restricted", message: "Native tabs are unavailable in preview.")
+                return
+            }
+            guard let entries = args["items"] as? [[String: Any]], (2...5).contains(entries.count) else {
+                reject(id, code: "invalid_tabs", message: "Provide 2–5 native tabs.")
+                return
+            }
+            let labels = entries.compactMap { entry -> HTMLAppNativeTabBar.Tab? in
+                guard let id = entry["id"] as? String,
+                      id.range(of: #"^[A-Za-z][A-Za-z0-9_-]{0,31}$"#, options: .regularExpression) != nil,
+                      let label = entry["title"] as? String, !label.isEmpty, label.count <= 24 else { return nil }
+                let symbol = entry["symbol"] as? String ?? "square"
+                return .init(id: id, title: label, symbol: HTMLAppSymbolCatalog.names.contains(symbol) ? symbol : "square")
+            }
+            guard labels.count == entries.count, Set(labels.map(\.id)).count == labels.count else {
+                reject(id, code: "invalid_tabs", message: "Every native tab needs a unique, valid ID and title.")
+                return
+            }
+            if nativeTabBar == nil, let webView {
+                nativeTabBar = HTMLAppNativeTabBar(webView: webView)
+            }
+            nativeTabBar?.configure(tabs: labels)
+            resolve(id, value: ["enabled": nativeTabBar != nil, "count": labels.count])
+        case "tabs.select":
+            guard let tab = args["id"] as? String, nativeTabBar?.select(id: tab) == true else {
+                reject(id, code: "unknown_tab", message: "Configure this native tab first.")
+                return
+            }
+            resolve(id, value: ["selected": tab])
+        case "tabs.remove":
+            nativeTabBar?.remove()
+            nativeTabBar = nil
+            resolve(id, value: ["removed": true])
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer",
+                    "motion.pedometer", "tabs.configure", "tabs.select", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -1637,6 +1673,12 @@ enum HTMLNativeAPIScript {
         capabilities: () => call('capabilities.list'),
         motion: {
           pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) })
+        },
+        tabs: {
+          configure: (items) => call('tabs.configure', { items }),
+          select: (id) => call('tabs.select', { id: String(id || '') }),
+          remove: () => call('tabs.remove'),
+          onSelect: (handler) => window.addEventListener('htmlapp:native-tab-select', e => handler(e.detail.id))
         },
         symbols: {
           search: (query = '') => call('symbols.search', { query: String(query) }),
