@@ -160,25 +160,57 @@ enum ForgeStylePreviewService {
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
+        let isRoute = ["nearest", "mcdonald", "directions", "map", "route", "restaurant"].contains { request.lowercased().contains($0) }
+        let destination = request.lowercased().contains("mcdonald") ? "McDonald's" : "nearest place"
+        let content: String
+        switch variant {
+        case 0:
+            content = isRoute ? """
+            <div class="map"><div class="pin">⌖ You</div><div class="destination">\(destination)</div></div>
+            <section class="floating"><small>YOUR NEAREST STOP</small><h2>\(destination)</h2>
+            <div class="metrics"><b>— miles</b><b>— min</b></div><button>Find driving route</button>
+            <p>Allow location to see the map and directions.</p></section>
+            """ : "<div class='map'><h1>\(escaped)</h1></div><section class='floating'><h2>Explore</h2><button>Open workspace</button></section>"
+        case 1:
+            content = isRoute ? """
+            <section class="hero"><small>LET'S GET MOVING</small><h1>Craving \(destination)?</h1>
+            <p>One tap to find the nearest location and start your trip.</p><button>Find near me →</button></section>
+            <div class="tiles"><div><small>DRIVING DISTANCE</small><h2>— mi</h2></div>
+            <div><small>AT 50 MPH</small><h2>— min</h2></div></div>
+            <section class="card"><h2>Next turns</h2><p>Your directions appear here.</p></section>
+            """ : "<section class='hero'><h1>\(escaped)</h1><button>Get started →</button></section><div class='tiles'><div>My tasks</div><div>Discover</div></div>"
+        default:
+            content = isRoute ? """
+            <header><small>ROUTES / NEARBY</small><h1>Find \(destination)</h1>
+            <p>Accurate driving distance and step-by-step directions.</p></header>
+            <div class="search">⌖ &nbsp; Locate nearest place →</div>
+            <section class="list"><h2>Closest location</h2>
+            <div class="item"><b>01</b><div><strong>\(destination)</strong><p>Waiting for location</p></div><span>— mi</span></div>
+            <h2>Directions</h2><div class="item"><b>02</b><p>Your first turn will appear here.</p></div>
+            <div class="item"><b>03</b><p>Arrival time at 50 mph: —</p></div></section>
+            """ : "<header><h1>\(escaped)</h1></header><div class='search'>Search →</div><section class='list'><div class='item'>01 — Your items</div><div class='item'>02 — Actions</div></section>"
+        }
         return """
-        <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>:root{--bg:\(background);--card:\(card);--ink:\(ink);--accent:\(accent)}
-        *{box-sizing:border-box}body{margin:0;padding:26px 20px;font-family:-apple-system,system-ui,sans-serif;
-        color:var(--ink);background:var(--bg)}main{max-width:580px;margin:auto}
-        h1{font-size:32px;letter-spacing:-.05em;line-height:1.12}
-        .card{background:var(--card);border-radius:\(variant == 1 ? "28" : "16")px;
-        padding:22px;margin:18px 0;border:1px solid #8883}
-        .button{background:var(--accent);color:white;border:0;border-radius:15px;padding:15px 23px;font-weight:700}
-        .muted{opacity:.7;line-height:1.5}.row{display:flex;justify-content:space-between;gap:12px}
-        .pill{background:var(--accent);border-radius:999px;padding:8px 13px;color:white}
-        </style></head><body><main><p class="muted">YOUR SPACE</p><h1>\(escaped)</h1>
-        <div class="card"><div class="row"><strong>Overview</strong><span class="pill">Today</span></div>
-        <h2>Make progress your way</h2><p class="muted">Everything in one welcoming place.</p>
-        <button class="button">Get started</button></div>
-        <div class="card"><strong>Recent activity</strong><p class="muted">Your next steps will appear here.</p></div>
-        <nav class="row"><span>Home</span><span>Activity</span><span>Settings</span></nav>
-        </main></body></html>
+        <!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>*{box-sizing:border-box}body{margin:0;padding:16px;font-family:-apple-system,system-ui,sans-serif;
+        background:var(--bg);color:var(--ink)}:root{--bg:\(background);--card:\(card);--ink:\(ink);--accent:\(accent)}
+        h1{font-size:clamp(28px,6vw,48px);letter-spacing:-.05em;line-height:1.08}h2{font-size:22px}
+        small{font-size:12px;letter-spacing:.12em;font-weight:800;opacity:.7}p{line-height:1.5;opacity:.75}
+        button,.search{background:var(--accent);color:white;border:0;border-radius:15px;padding:16px;font-weight:800}
+        .map{min-height:65vh;position:relative;border-radius:27px;overflow:hidden;background:repeating-linear-gradient(32deg,#d1e2d6 0 25px,#c0d7cf 26px 58px,#ecede3 60px 90px)}
+        .map:after{content:"";position:absolute;left:0;right:0;top:42%;height:24px;background:#fafafa;transform:rotate(-14deg)}
+        .pin,.destination{position:absolute;z-index:2;background:#122d32;color:white;border-radius:32px;padding:12px;font-weight:800}
+        .pin{top:35%;left:10%}.destination{bottom:23%;right:8%}
+        .floating{position:relative;margin:-75px 13px 0;padding:24px;background:var(--card);border-radius:28px;box-shadow:0 15px 30px #0002}
+        .metrics{display:flex;justify-content:space-between;font-size:25px;margin:20px 0}
+        .hero{padding:35px 24px;background:var(--card);border-radius:36px;min-height:380px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center}
+        .hero button{margin-top:18px}.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+        .tiles>div,.card,.list{background:var(--card);border-radius:23px;padding:23px}
+        header{padding:25px 0 12px;border-bottom:3px solid var(--accent)}
+        .search{margin:20px 0;border-radius:11px}.list{border-radius:9px}
+        .item{display:flex;gap:16px;align-items:center;padding:17px 0;border-top:1px solid #8884}
+        .item b{color:var(--accent)}.item span{margin-left:auto;font-weight:800}
+        </style></head><body><main>\(content)</main></body></html>
         """
     }
 
