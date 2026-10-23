@@ -249,7 +249,7 @@ enum HTMLAppWidgetStore {
     static func definitions(appID: String) -> [HTMLAppWidgetDefinition] { all().filter { $0.appID == appID } }
     static func updateFromPortableData(appID: String, key: String, value: String?) {
         report {
-            try repository().mutate { widgets in
+            _ = try repository().mutate { widgets in
                 for index in widgets.indices where widgets[index].appID == appID {
                     guard let bindings = widgets[index].dataBindings, !bindings.isEmpty else { continue }
                     // The generated HTMLApp opts into these specific fields/keys.
