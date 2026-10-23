@@ -936,6 +936,12 @@ final class AppStore: ObservableObject {
 
     func openDeepLink(_ url: URL) {
         if url.scheme?.lowercased() == "htmlapp",
+           url.host?.lowercased() == "forge" {
+            // The Live Activity is a return-to-app action. Existing Forge
+            // presentations remain open; startup recovery handles a killed job.
+            return
+        }
+        if url.scheme?.lowercased() == "htmlapp",
            url.host?.lowercased() == "voice-create" {
             UserDefaults.standard.set(true, forKey: "htmlapp.voiceCreatePending")
             NotificationCenter.default.post(name: Notification.Name("HTMLAppVoiceCreateRequested"), object: nil)
