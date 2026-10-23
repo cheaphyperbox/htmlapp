@@ -1036,7 +1036,10 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         // Warnings about CSS conventions, remote resources, timeouts,
         // placeholder prose and console noise should not trigger 120-second
         // remote review requests or a chain of full-source rewrites.
+        // Missing primary user-requested behavior should receive the same
+        // focused repair opportunity as broken JavaScript in balanced QA.
         let blocking = HTMLQualityChecks.blockingIssues(structural) +
+            (testMode == .balanced ? functional.filter { $0.hasPrefix("Core workflow:") } : []) +
             runtime.filter { issue in
                 issue.hasPrefix("JavaScript syntax in inline script") ||
                 issue.hasPrefix("JavaScript did not compile") ||
