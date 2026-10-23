@@ -5,6 +5,7 @@ struct OnboardingView: View {
     @AppStorage("libraryLayout") private var libraryLayout = "list"
     @State private var step = 0
     @State private var showAISetup = false
+    @State private var showForgePractice = false
     @State private var showMenuExample = false
     @AppStorage("htmlapp.dictationEngine") private var dictationEngine = "apple"
     @StateObject private var dictationTest = ForgeDictation()
@@ -334,46 +335,13 @@ struct OnboardingView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         case 11:
-            if AISettingsStore.configuration.isConfigured {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Practice prompt: Make a simple calculator")
-                        .font(.headline)
-                    if demoStage == -1 {
-                        Button("Start practice generation") { startCalculatorDemo() }
-                            .buttonStyle(.borderedProminent)
-                    } else if demoStage < 8 {
-                        ProgressView(value: Double(demoStage + 1), total: 8)
-                        Text(["Reading your request", "Planning the calculator", "Designing the screen",
-                              "Writing the buttons", "Adding calculator logic", "Preparing preview",
-                              "Checking the app", "Finishing the practice app"][max(0, demoStage)])
-                            .font(.headline)
-                        Text("This is a prebuilt teaching example, not an AI request.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("Try the calculator's buttons below, then describe what you would change.")
-                            .font(.subheadline)
-                        HTMLWebView(html: Self.calculatorDemoHTML, appID: "PREVIEW")
-                            .frame(height: 320)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                        TextField("Example: Make the buttons blue", text: $demoEdit)
-                            .textFieldStyle(.roundedBorder)
-                        Button(demoDictation.recording ? "Stop recording" : "Try the edit microphone") {
-                            if demoDictation.recording { demoDictation.stop() }
-                            else { Task { await demoDictation.start() } }
-                        }
-                        .buttonStyle(.bordered)
-                        Text(demoDictation.status).font(.caption).foregroundStyle(.secondary)
-                        if !demoEdit.isEmpty {
-                            Text("In the real Forge editor, tap Apply Change to ask AI to make this edit.")
-                                .font(.subheadline)
-                        }
-                        Button("Replay practice generation") { startCalculatorDemo() }
-                            .buttonStyle(.bordered)
-                    }
-                }
-                .onChange(of: demoDictation.transcript) { demoEdit = $0 }
-            } else {
-                tutorialRow("1", "Set up AI first", "Return to the Make an app with AI lesson to add a provider, then replay this tutorial to practice.", symbol: "key.fill", tint: .blue)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Try the real Forge generation and editing screens with a sample calculator.")
+                    .font(.headline)
+                Text("This is a demonstration: the example app is prebuilt, no AI requests are made, and practice edits do not alter your Library.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Open Practice Generation & Editing") { showForgePractice = true }
+                    .buttonStyle(.borderedProminent)
             }
         default:
             tutorialRow("1", "Send to a friend", "Open Share with Nearby Devices on the sending device. The other device chooses Receive. Accept the connection and the app imports automatically.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
@@ -416,7 +384,7 @@ struct OnboardingView: View {
         }
     }
 
-    private static let calculatorDemoHTML = """
+    static let calculatorDemoHTML = """
     <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>body{font:20px -apple-system;margin:0;padding:16px;background:#f4f4f7;color:#17171a}
     #screen{text-align:right;font-size:30px;background:white;border-radius:10px;padding:12px;margin-bottom:10px}
