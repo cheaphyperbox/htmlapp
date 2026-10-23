@@ -6,6 +6,7 @@ import AVFoundation
 final class ForgeDictation: ObservableObject {
     @Published var recording = false
     @Published var requestingPermission = false
+    @Published var transcribingOffline = false
     @Published var transcript = ""
     @Published var status = "Dictate your idea. Review the text before generating."
     private let engine = AVAudioEngine()
@@ -115,6 +116,22 @@ final class ForgeDictation: ObservableObject {
         }
     }
 
+    func cancel() {
+        // Explicit cancellation discards a captured recording instead of
+        // launching an expensive Whisper decode outside the drop target.
+        if offlineMode {
+            offlineRecorder?.stop()
+            offlineRecorder = nil
+            offlineMode = false
+            recording = false
+            if let offlineURL { try? FileManager.default.removeItem(at: offlineURL) }
+            offlineURL = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            return
+        }
+        stop()
+    }
+
     func stop() {
         if offlineMode {
             offlineRecorder?.stop()
@@ -133,8 +150,12 @@ final class ForgeDictation: ObservableObject {
                 return
             }
             status = "Recorded \(bytes / 1024) KB. Loading Whisper and transcribing offline…"
+            transcribingOffline = true
             Task {
-                defer { try? FileManager.default.removeItem(at: url) }
+                defer {
+                    transcribingOffline = false
+                    try? FileManager.default.removeItem(at: url)
+                }
                 do {
                     let result = try await HTMLAppOfflineSpeech.shared.transcribe(fileURL: url)
                     transcript = result.trimmingCharacters(in: .whitespacesAndNewlines)
