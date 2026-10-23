@@ -66,53 +66,126 @@ enum ForgeStylePreviewService {
         }
     }
 
-    /// Generate one independent sketch so malformed output does not discard peers.
+    /// Standalone HTML avoids fragile JSON-escaping of markup, CSS and scripts.
+    /// Each slot gets a fast attempt plus one compact retry. The deterministic
+    /// fallback keeps all three distinct choices available if a provider fails.
     static func generateSingle(for request: String, feedback: String = "", index: Int) async throws -> ForgeStyleConcept {
         let config = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
-        let system = """
-        You design ONE compact phone UI style sketch, not a complete app.
-        Return a JSON object with string keys name, summary, direction, html.
-        The html value is self-contained HTML with inline CSS; no outside URLs or APIs.
-        Keep HTML below 9000 characters. Include <html>, <head> and </html>.
-        Use a deliberately distinct direction numbered \(index + 1) of 3:
-        1 = quiet editorial, 2 = playful vivid, 3 = utilitarian high-contrast.
-        Never include a fake phone status bar, 9:41 clock, notch, Dynamic Island, battery, signal indicators, iPhone frame or home indicator. The real iOS host provides its own chrome.\n        Escape all quotes and newlines correctly. No Markdown fences.
+        let directions = [
+            ("Editorial", "Quiet, spacious editorial design", "elegant typography, generous whitespace, softly rounded cards, restrained indigo accents"),
+            ("Playful", "Bright, expressive and friendly design", "bold type, purple and coral accents, pill controls, vibrant cards, playful proportions"),
+            ("Focus", "Crisp, practical high-contrast design", "high contrast surfaces, grid alignment, compact organized sections, blue action accents")
+        ]
+        let variant = directions[max(0, min(index, directions.count - 1))]
+        let user = """
+        App idea: \(String(request.prefix(2300)))
+        Requested changes: \(String(feedback.prefix(650)))
+        Design: \(variant.0) — \(variant.2).
+        Make a recognizable UI for this specific idea, not a generic landing page.
         """
-        let user = "APP IDEA: \(String(request.prefix(2800)))\nFEEDBACK: \(String(feedback.prefix(900)))"
-        let raw = try await AIProviderClient.complete(
-            config: config, system: system, messages: [("user", user)],
-            timeout: 90, maxTokens: 4200, retryOnTransient: true
-        )
+        let system = """
+        Return ONLY a complete standalone HTML document starting with <!DOCTYPE html>.
+        Build a compact visual mockup, not a functioning app. Include inline CSS
+        and realistic labels from the app idea. Keep output under 5000 characters.
+        Use responsive mobile-first styling, with clear navigation and content.
+        No external resources, external CSS, scripts, JSON, explanation or Markdown.
+        No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island
+        or home indicator. The iOS host already provides system chrome.
+        """
+        for attempt in 0..<2 {
+            try Task.checkCancellation()
+            do {
+                let raw = try await AIProviderClient.complete(
+                    config: config, system: system, messages: [("user", user)],
+                    timeout: attempt == 0 ? 45 : 35,
+                    maxTokens: attempt == 0 ? 2400 : 1800,
+                    retryOnTransient: false
+                )
+                if let html = extractHTML(raw) {
+                    return ForgeStyleConcept(id: index, name: variant.0,
+                        summary: variant.1, direction: variant.2, previewHTML: html)
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Retry only this failed slot; successful slots are never regenerated.
+            }
+        }
         try Task.checkCancellation()
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}"),
-              let bytes = String(trimmed[start...end]).data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any]
-        else { throw PreviewError.invalidResponse }
-        let html = (json["html"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard html.range(of: "<html", options: .caseInsensitive) != nil,
-              html.range(of: "</html>", options: .caseInsensitive) != nil,
-              html.count <= 35_000 else { throw PreviewError.invalidResponse }
-        return ForgeStyleConcept(
-            id: index,
-            name: String((json["name"] as? String ?? "Style \(index + 1)").prefix(48)),
-            summary: String((json["summary"] as? String ?? "Alternate visual direction").prefix(240)),
-            direction: String((json["direction"] as? String ?? "Create a distinctive, usable interface.").prefix(1600)),
-            previewHTML: html
-        )
+        return ForgeStyleConcept(id: index, name: variant.0,
+            summary: variant.1 + " (offline preview)",
+            direction: variant.2, previewHTML: offlinePreview(request: request, variant: index))
+    }
+
+    private static func extractHTML(_ raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Accept both direct HTML and the older JSON envelope so existing
+        // providers/settings continue working without a migration.
+        if text.hasPrefix("{"), let data = text.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let embedded = json["html"] as? String {
+            text = embedded
+        }
+        guard let begin = text.range(of: "<html", options: .caseInsensitive),
+              let end = text.range(of: "</html>", options: .caseInsensitive),
+              begin.lowerBound < end.lowerBound else { return nil }
+        // Handle leading markdown fences, preamble, and trailing commentary.
+        let html = String(text[begin.lowerBound..<end.upperBound])
+        guard html.count >= 150, html.count <= 35_000,
+              html.range(of: "<body", options: .caseInsensitive) != nil
+        else { return nil }
+        return "<!DOCTYPE html>\n" + html
+    }
+
+    private static func offlinePreview(request: String, variant: Int) -> String {
+        let palettes: [(String,String,String,String)] = [
+            ("#f7f5f2", "#ffffff", "#272433", "#6755a4"),
+            ("#292038", "#493064", "#fff5fd", "#ff7294"),
+            ("#111d2d", "#26364c", "#ffffff", "#49b5e8")
+        ]
+        let (background, card, ink, accent) = palettes[max(0, min(variant, 2))]
+        let escaped = String(request.prefix(100))
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+        return """
+        <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>:root{--bg:\(background);--card:\(card);--ink:\(ink);--accent:\(accent)}
+        *{box-sizing:border-box}body{margin:0;padding:26px 20px;font-family:-apple-system,system-ui,sans-serif;
+        color:var(--ink);background:var(--bg)}main{max-width:580px;margin:auto}
+        h1{font-size:32px;letter-spacing:-.05em;line-height:1.12}
+        .card{background:var(--card);border-radius:\(variant == 1 ? "28" : "16")px;
+        padding:22px;margin:18px 0;border:1px solid #8883}
+        .button{background:var(--accent);color:white;border:0;border-radius:15px;padding:15px 23px;font-weight:700}
+        .muted{opacity:.7;line-height:1.5}.row{display:flex;justify-content:space-between;gap:12px}
+        .pill{background:var(--accent);border-radius:999px;padding:8px 13px;color:white}
+        </style></head><body><main><p class="muted">YOUR SPACE</p><h1>\(escaped)</h1>
+        <div class="card"><div class="row"><strong>Overview</strong><span class="pill">Today</span></div>
+        <h2>Make progress your way</h2><p class="muted">Everything in one welcoming place.</p>
+        <button class="button">Get started</button></div>
+        <div class="card"><strong>Recent activity</strong><p class="muted">Your next steps will appear here.</p></div>
+        <nav class="row"><span>Home</span><span>Activity</span><span>Settings</span></nav>
+        </main></body></html>
+        """
     }
 
     static func generate(for request: String, feedback: String = "") async throws -> [ForgeStyleConcept] {
-        var previews: [ForgeStyleConcept] = []
-        for index in 0..<3 {
-            if let result = try? await generateSingle(for: request, feedback: feedback, index: index) {
-                previews.append(result)
+        await withTaskGroup(of: ForgeStyleConcept?.self) { group in
+            for index in 0..<3 {
+                group.addTask {
+                    try? await generateSingle(for: request, feedback: feedback, index: index)
+                }
             }
+            var results: [ForgeStyleConcept] = []
+            for await option in group {
+                if let option { results.append(option) }
+            }
+            return results.sorted { $0.id < $1.id }
         }
-        guard !previews.isEmpty else { throw PreviewError.invalidResponse }
-        return previews
     }
 
 }
