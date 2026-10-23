@@ -12,6 +12,7 @@ import LocalAuthentication
 import UniformTypeIdentifiers
 import AVFoundation
 import ActivityKit
+import CoreMotion
 import Security
 import WidgetKit
 import SwiftUI
@@ -27,6 +28,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private var filePickerCallbackID: String?
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
+    private let pedometer = CMPedometer()
 
     init(webView: WKWebView, appID: String, permissionCoordinator: NativePermissionCoordinator?) {
         self.webView = webView
@@ -47,6 +49,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.keepAwake", "device.brightness", "device.torch",
+                    "motion.pedometer",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -78,6 +81,38 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     UIScreen.main.brightness = CGFloat(max(0, min(1, level.doubleValue)))
                 }
                 self.resolve(id, value: ["level": Double(UIScreen.main.brightness)])
+            }
+        case "motion.pedometer":
+            withPermission(.motion, id: id) { [weak self] in
+                guard let self else { return }
+                guard CMPedometer.isStepCountingAvailable() else {
+                    self.reject(id, code: "pedometer_unavailable",
+                                message: "This device does not support step-count history.")
+                    return
+                }
+                let days = min(7, max(1, (args["days"] as? NSNumber)?.intValue ?? 1))
+                let today = Calendar.current.startOfDay(for: Date())
+                guard let start = Calendar.current.date(byAdding: .day, value: 1 - days, to: today) else {
+                    self.reject(id, code: "invalid_date", message: "Could not calculate the date range.")
+                    return
+                }
+                self.pedometer.queryPedometerData(from: start, to: Date()) { [weak self] data, error in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        if error != nil || data == nil {
+                            self.reject(id, code: "motion_denied",
+                                message: "Steps were unavailable; allow Motion & Fitness in iOS Settings.")
+                            return
+                        }
+                        guard let data else { return }
+                        self.resolve(id, value: [
+                            "steps": data.numberOfSteps.intValue,
+                            "distanceMeters": data.distance?.doubleValue as Any? ?? NSNull(),
+                            "floorsAscended": data.floorsAscended?.intValue as Any? ?? NSNull(),
+                            "days": days
+                        ])
+                    }
+                }
             }
         case "device.torch":
             withPermission(.camera, id: id) { [weak self] in
@@ -1600,6 +1635,9 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        motion: {
+          pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) })
+        },
         symbols: {
           search: (query = '') => call('symbols.search', { query: String(query) }),
           render: (name) => call('symbols.render', { name: String(name || '') })
