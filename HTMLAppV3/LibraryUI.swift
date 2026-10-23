@@ -263,22 +263,11 @@ struct LibraryView: View {
             allowsMultipleSelection: false,
             onCompletion: importFile
         )
-        .confirmationDialog(
-            "Install Home Screen Web Clip?",
-            isPresented: Binding(get: { profileApp != nil }, set: { if !$0 { profileApp = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Open Profile in Safari") {
-                if let app = profileApp { store.installWebClip(for: app) }
+        .sheet(item: $profileApp) { app in
+            HTMLAppHomeScreenGuide(appName: app.name, profileURL: nil) {
+                store.installWebClip(for: app)
                 profileApp = nil
             }
-            Button("Export .mobileconfig") {
-                if let app = profileApp { store.exportProfile(for: app) }
-                profileApp = nil
-            }
-            Button("Cancel", role: .cancel) { profileApp = nil }
-        } message: {
-            Text("A temporary download on this device opens in your browser. Allow the profile download in Safari, then open Settings → Profile Downloaded to install it. If the download expires, return here and retry. You can also export the profile.")
         }
         .confirmationDialog(
             "Delete \(pendingDelete?.name ?? "this app")?",
