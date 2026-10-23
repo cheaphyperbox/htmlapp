@@ -85,6 +85,7 @@ struct LibraryView: View {
         }
         // Present from the navigation container, not the root page. This keeps
         // dialogs/sheets active while a nested folder destination is on screen.
+        .htmlAppFirstUseToasts()
         .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
         .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
         .sheet(item: $websiteSourcesApp) { WebsiteSourcesView(app: $0).environmentObject(store) }
@@ -203,7 +204,7 @@ struct LibraryView: View {
             .environmentObject(store)
         }
         .confirmationDialog("What would you like to do?", isPresented: $showAddOptions, titleVisibility: .visible) {
-            Button("Make an App with AI") { showGenerator = true }
+            Button("Make an App with AI") { HTMLAppFirstUseTips.show("firstAI"); showGenerator = true }
             Button("Save a Website") { showWebsiteImporter = true }
             Button("Write HTML Code") { editor = .new }
             Button("Import an HTML File") { importingFile = true }
@@ -432,7 +433,7 @@ struct LibraryView: View {
                     .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
 
                 case .app(let app):
-                    Button { store.launch(app) } label: {
+                    Button { HTMLAppFirstUseTips.show("open"); store.launch(app) } label: {
                         ListAppRow(app: app, refreshing: refreshingID == app.id)
                     }
                     .buttonStyle(.plain)
@@ -479,20 +480,22 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
+        Button { HTMLAppFirstUseTips.show("context") } label: { Label("Menu Guide", systemImage: "lightbulb") }
         Button { store.toggleFavorite(app) } label: { Label(app.isFavorite == true ? "Remove Favorite" : "Favorite", systemImage: "star.fill") }
         Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: { Label("Move To", systemImage: "folder") }
         Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
         Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
-        Button { editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
-        Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
+        Button { HTMLAppFirstUseTips.show("restore"); editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
+        Button { HTMLAppFirstUseTips.show("icon"); aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
         Divider()
-        Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
+        Button { HTMLAppFirstUseTips.show("nearby"); nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
         Button { store.installWebClip(for: app) } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
         Button { store.exportHTML(app) } label: { Label("Export Raw Code", systemImage: "doc.text") }
         Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
-        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)" } label: { Label("Copy Link to Open App", systemImage: "link") }
+        Button { HTMLAppFirstUseTips.show("restore"); editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
+        Button { UIPasteboard.general.string = "htmlapp://open?id=\(app.id)"; HTMLAppFirstUseTips.show("copyLink", appName: app.name) } label: { Label("Copy Link to Open App", systemImage: "link") }
         Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
         Button {} label: { Label("Last Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock") }.disabled(true)
         Divider()
