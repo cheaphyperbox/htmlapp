@@ -611,24 +611,38 @@ struct AIGenerationView: View {
         styleFailure = nil
         selectedStyle = nil
         generationTask = Task {
+            let started = Date()
+            let feedback = styleFeedback
             var errors: [String] = []
-            for index in 0..<3 {
-                if Task.isCancelled { return }
-                do {
-                    let option = try await ForgeStylePreviewService.generateSingle(for: idea, feedback: styleFeedback, index: index)
-                    try Task.checkCancellation()
-                    styleOptions.append(option)
-                } catch is CancellationError {
-                    return
-                } catch {
-                    errors.append(error.localizedDescription)
+            await withTaskGroup(of: (Int, ForgeStyleConcept?, String?).self) { group in
+                for index in 0..<3 {
+                    group.addTask {
+                        do {
+                            let result = try await ForgeStylePreviewService.generateSingle(
+                                for: idea, feedback: feedback, index: index
+                            )
+                            return (index, result, nil)
+                        } catch {
+                            return (index, nil, error.localizedDescription)
+                        }
+                    }
+                }
+                for await (index, option, failure) in group {
+                    if Task.isCancelled { group.cancelAll(); break }
+                    if let option {
+                        styleOptions.append(option)
+                        styleOptions.sort { $0.id < $1.id }
+                        selectedStyleIndex = 0
+                    } else if let failure { errors.append("Style \(index + 1): \(failure)") }
+                    if debugTrace.isActive {
+                        AIDebugTraceStore.shared.append("STYLE MOCKUP", "Completed slot \(index + 1) at \(String(format: "%.1f", Date().timeIntervalSince(started)))s.")
+                    }
                 }
             }
+            if Task.isCancelled { return }
             exploringStyles = false
             if styleOptions.isEmpty {
                 styleFailure = errors.first ?? "No previews could be generated."
-            } else {
-                selectedStyleIndex = 0
             }
         }
     }
