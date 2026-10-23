@@ -9,6 +9,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case camera
     case microphone
     case location
+    case motion
     case notifications
     case liveActivities
     case contacts
@@ -29,6 +30,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "Camera"
         case .microphone: return "Microphone"
         case .location: return "Location"
+        case .motion: return "Motion & Steps"
         case .notifications: return "Notifications"
         case .liveActivities: return "Live Activities"
         case .contacts: return "Contacts"
@@ -49,6 +51,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
+        case .motion: return "Allows this HTML app to read motion and walking-step history after iOS permission."
         case .notifications: return "Allows this HTML app to send native iOS notifications."
         case .liveActivities: return "Allows this HTML app to show a running status on the Lock Screen and Dynamic Island."
         case .contacts: return "Allows this HTML app to select or read contacts through the native Contacts framework."
@@ -69,6 +72,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "camera.fill"
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
+        case .motion: return "figure.walk"
         case .notifications: return "bell.fill"
         case .liveActivities: return "timer"
         case .contacts: return "person.crop.circle.badge.checkmark"
