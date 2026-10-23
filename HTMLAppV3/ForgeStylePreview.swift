@@ -2,12 +2,36 @@ import Foundation
 import SwiftUI
 import WebKit
 
-struct ForgeStyleConcept: Identifiable, Equatable {
+struct ForgeStyleConcept: Identifiable, Equatable, Codable {
     let id: Int
     let name: String
     let summary: String
     let direction: String
     let previewHTML: String
+
+    static func designTokens(_ html: String) -> String {
+        // Compact style summary doubles as a cheap consistency check after generation.
+        let patterns = [#"--[a-zA-Z0-9-]+\\s*:\\s*[^;}]{1,90}"#,
+                        #"font-family\\s*:\\s*[^;}]{1,100}"#,
+                        #"border-radius\\s*:\\s*[^;}]{1,55}"#]
+        let ns = html as NSString
+        var found: [String] = []
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
+            for match in regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).prefix(24) {
+                let value = ns.substring(with: match.range).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !found.contains(value) { found.append(value) }
+            }
+        }
+        return found.prefix(36).joined(separator: "; ")
+    }
+
+    var missingVisualTokens: [String] {
+        let regex = try? NSRegularExpression(pattern: #"--[a-zA-Z0-9-]+\\s*:\\s*([^;}]+)"#)
+        let ns = previewHTML as NSString
+        return (regex?.matches(in: previewHTML, range: NSRange(location: 0, length: ns.length)) ?? [])
+            .prefix(16).map { ns.substring(with: $0.range).trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
 
     var buildInstruction: String {
         """
@@ -15,8 +39,21 @@ struct ForgeStyleConcept: Identifiable, Equatable {
         Name: \(name)
         Impression: \(summary)
         Design specification: \(direction)
-        Preserve the chosen preview's visual identity, layout principles, palette, typography, and interaction character.
-        The preview was deliberately a nonfunctional sketch. Build a complete real application with working controls, real persistence and robust states; never copy dummy content as real data.
+        MANDATORY VISUAL REFERENCE: Match this mockup nearly pixel-for-pixel.
+        Preserve the SAME colors, typography, font sizes, spacing, padding, corner radii,
+        shadows, borders, layout, navigation, icons, component shapes and positions.
+        REUSE its CSS custom properties and class structure where practical.
+        Only introduce new elements for real features and responsive layouts, in
+        precisely the same design language. Replace demo data with real working data.
+        Do NOT redesign this mockup or replace it with a generic layout.
+        EXTRACTED STYLE TOKENS:
+        \(Self.designTokens(previewHTML))
+
+        AUTHORITATIVE MOCKUP HTML:
+        <selected_mockup_html>
+        \(previewHTML)
+        </selected_mockup_html>
+        This is a nonfunctional sketch: implement actual working controls/persistence.
         """
     }
 }
