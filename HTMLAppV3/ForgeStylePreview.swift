@@ -11,9 +11,9 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable {
 
     static func designTokens(_ html: String) -> String {
         // Compact style summary doubles as a cheap consistency check after generation.
-        let patterns = [#"--[a-zA-Z0-9-]+\\s*:\\s*[^;}]{1,90}"#,
-                        #"font-family\\s*:\\s*[^;}]{1,100}"#,
-                        #"border-radius\\s*:\\s*[^;}]{1,55}"#]
+        let patterns = [#"--[a-zA-Z0-9-]+\s*:\s*[^;}]{1,90}"#,
+                        #"font-family\s*:\s*[^;}]{1,100}"#,
+                        #"border-radius\s*:\s*[^;}]{1,55}"#]
         let ns = html as NSString
         var found: [String] = []
         for pattern in patterns {
@@ -26,8 +26,8 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable {
         return found.prefix(36).joined(separator: "; ")
     }
 
-    var missingVisualTokens: [String] {
-        let regex = try? NSRegularExpression(pattern: #"--[a-zA-Z0-9-]+\\s*:\\s*([^;}]+)"#)
+    var visualTokenDeclarations: [String] {
+        let regex = try? NSRegularExpression(pattern: #"--[a-zA-Z0-9-]+\s*:\s*([^;}]+)"#)
         let ns = previewHTML as NSString
         return (regex?.matches(in: previewHTML, range: NSRange(location: 0, length: ns.length)) ?? [])
             .prefix(16).map { ns.substring(with: $0.range).trimmingCharacters(in: .whitespacesAndNewlines) }
