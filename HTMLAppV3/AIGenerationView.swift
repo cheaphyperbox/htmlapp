@@ -200,6 +200,10 @@ struct AIGenerationView: View {
             acceptShortcutRequest(nonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? activeShortcutPrompt)
         }
         .interactiveDismissDisabled(true)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppForgeBackgroundExpired"))) { _ in
+            session.persistCheckpoint()
+            generationTask?.cancel()
+        }
         .onDisappear {
             microphoneRecordingTask?.cancel(); dictation.stop()
             // Do not cancel the generation merely because the view disappears.
@@ -279,6 +283,11 @@ struct AIGenerationView: View {
             }
         }
         .onChange(of: session.phase) { phase in
+            #if compiler(>=6.2)
+            if #available(iOS 26.0, *) {
+                HTMLAppForgeContinuedProcessing.update(phase: phase)
+            }
+            #endif
             if let job = forgeActivityJobID {
                 if #available(iOS 16.2, *) {
                     Task { await HTMLAppForgeActivityService.update(job: job, phase: phase) }
@@ -954,6 +963,11 @@ struct AIGenerationView: View {
     }
 
     private func startForgeActivity(edit: Bool) {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            HTMLAppForgeContinuedProcessing.begin(edit: edit)
+        }
+        #endif
         let job = UUID().uuidString
         forgeActivityJobID = job
         if #available(iOS 16.2, *) {
@@ -962,6 +976,11 @@ struct AIGenerationView: View {
     }
 
     private func endForgeActivity() {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            HTMLAppForgeContinuedProcessing.finish(success: session.errorMessage == nil)
+        }
+        #endif
         guard let job = forgeActivityJobID else { return }
         forgeActivityJobID = nil
         if #available(iOS 16.2, *) {
