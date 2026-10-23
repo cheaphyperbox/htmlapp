@@ -40,7 +40,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
             NSLayoutConstraint.activate([
                 created.view.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
                 created.view.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
-                created.view.topAnchor.constraint(equalTo: webView.topAnchor),
+                created.view.heightAnchor.constraint(equalToConstant: 84),
                 created.view.bottomAnchor.constraint(equalTo: webView.bottomAnchor)
             ])
             created.didMove(toParent: host)
