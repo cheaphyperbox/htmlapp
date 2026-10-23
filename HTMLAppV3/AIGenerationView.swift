@@ -958,6 +958,9 @@ struct AIGenerationView: View {
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             await runOptionalUIPolish(originalPrompt: designBrief)
+            if session.errorMessage == nil && !Task.isCancelled {
+                await HTMLAppForgeCompletionFeedback.announce(edit: false)
+            }
         }
     }
 
@@ -1009,6 +1012,9 @@ Requested edit:
                 await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
             } else {
                 uiPolishNotice = "This was a focused edit; no additional UI redesign was needed."
+            }
+            if session.errorMessage == nil && !Task.isCancelled {
+                await HTMLAppForgeCompletionFeedback.announce(edit: true)
             }
         }
     }
