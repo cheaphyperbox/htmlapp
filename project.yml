@@ -84,6 +84,10 @@ targets:
         CFBundleDisplayName: HTMLApp
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSUbiquitousContainers:
+          iCloud.com.mekabrine.htmlapp:
+            NSUbiquitousContainerIsDocumentScopePublic: false
+            NSUbiquitousContainerName: HTMLApp
         # A launch screen is required for native-resolution iPhone rendering.
         # Without it, iOS can run the entire SwiftUI/WKWebView app in a
         # legacy 320-point compatibility viewport with black letterboxing.
