@@ -30,6 +30,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let pedometer = CMPedometer()
     private var nativeTabBar: HTMLAppNativeTabBar?
+    private let bluetoothDiscovery = HTMLAppBluetoothDiscovery()
 
     init(webView: WKWebView, appID: String, permissionCoordinator: NativePermissionCoordinator?) {
         self.webView = webView
@@ -46,6 +47,19 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         switch method {
         case "device.info":
             deviceInfo(id: id)
+        case "bluetooth.scan":
+            withPermission(.bluetooth, id: id) { [weak self] in
+                guard let self else { return }
+                let seconds = (args["seconds"] as? NSNumber)?.doubleValue ?? 6
+                self.bluetoothDiscovery.scan(seconds: seconds) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let devices): self.resolve(id, value: ["devices": devices])
+                    case .failure: self.reject(id, code: "bluetooth_unavailable",
+                                                message: "Bluetooth discovery is unavailable. Check iOS permission and Bluetooth Settings.")
+                    }
+                }
+            }
         case "tabs.configure":
             guard appID != "PREVIEW" else {
                 reject(id, code: "preview_restricted", message: "Native tabs are unavailable in preview.")
@@ -85,7 +99,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "tabs.configure", "tabs.select", "tabs.remove",
+                    "motion.pedometer", "bluetooth.scan", "tabs.configure", "tabs.select", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -1673,6 +1687,9 @@ enum HTMLNativeAPIScript {
         capabilities: () => call('capabilities.list'),
         motion: {
           pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) })
+        },
+        bluetooth: {
+          scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) })
         },
         tabs: {
           configure: (items) => call('tabs.configure', { items }),
