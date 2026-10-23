@@ -970,6 +970,42 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
         return false
     }
 
+    /// Deterministic red flags that the actual requested workflow is missing.
+    /// This cannot prove live APIs work, so these are explicitly advisory,
+    /// never reported as a verified network/location success.
+    private static func coreWorkflowWarnings(prompt: String, html: String) -> [String] {
+        let goal = prompt.lowercased()
+        let code = html.lowercased()
+        var warnings: [String] = []
+        let routeIntent = (goal.contains("nearest") || goal.contains("nearby")) &&
+            (goal.contains("direction") || goal.contains("route"))
+        if routeIntent {
+            if !code.contains("getcurrentposition") && !code.contains("watchposition") {
+                warnings.append("Core workflow: no foreground location request was found.")
+            }
+            if !code.contains("fetch(") && !code.contains("maps.apple.com") {
+                warnings.append("Core workflow: no real nearby-search or map handoff data path was found.")
+            }
+            if !code.contains("route/v1") && !code.contains("directions") && !code.contains("mapkit") {
+                warnings.append("Core workflow: no driving route or directions implementation was found.")
+            }
+            if !code.contains("miles") && !code.contains("distance") {
+                warnings.append("Core workflow: requested distance display is missing.")
+            }
+        }
+        let networkOrLocation = code.contains("fetch(") ||
+            code.contains("getcurrentposition") || code.contains("watchposition")
+        if networkOrLocation && !code.contains("loading") &&
+            !code.contains("finding") && !code.contains("calculating") &&
+            !code.contains("progress") {
+            warnings.append("Loading UX: no meaningful async loading status found.")
+        }
+        if networkOrLocation && !code.contains("finally") {
+            warnings.append("Loading UX: async cleanup path is missing; a failed request could leave the app busy.")
+        }
+        return warnings
+    }
+
     private func verifyAndRepair(config: AIProviderConfiguration) async throws {
         try Task.checkCancellation()
         phase = "Testing the app"
@@ -982,11 +1018,15 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             AIDebugTraceStore.shared.append("LOCAL AUTOFIX", "Added missing doctype or viewport metadata without using AI.")
         }
         let structural = HTMLQualityChecks.issues(in: streamedHTML)
+        let functional = Self.coreWorkflowWarnings(prompt: originalPrompt, html: streamedHTML)
+        if !functional.isEmpty {
+            AIDebugTraceStore.shared.append("CORE WORKFLOW AUDIT", functional.joined(separator: "\n"))
+        }
         let testMode = ForgeTestMode.selected
         if testMode == .skip {
             // Keep inexpensive structural warnings visible, but do not pretend to
             // have executed JavaScript or checked any live button.
-            verificationReport = "Tests skipped at your request. App behavior and buttons have NOT been verified. " + structural.joined(separator: " ")
+            verificationReport = "Tests skipped at your request. App behavior and buttons have NOT been verified. " + (structural + functional).joined(separator: " ")
             AIDebugTraceStore.shared.append("QA SKIPPED", verificationReport)
             return
         }
@@ -1005,7 +1045,7 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 issue.hasPrefix("uncaught error:") ||
                 issue.hasPrefix("Runtime: document became blank")
             }
-        let advisory = (structural + runtime).filter { !blocking.contains($0) }
+        let advisory = (structural + runtime + functional).filter { !blocking.contains($0) }
         AIDebugTraceStore.shared.append("QA CLASSIFICATION",
             "Blocking: \(blocking.count); Advisory: \(advisory.count)\n" +
             (blocking + advisory).joined(separator: "\n"))
