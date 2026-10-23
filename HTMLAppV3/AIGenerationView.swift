@@ -10,6 +10,7 @@ struct AIGenerationView: View {
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
     @State private var forgeActivityJobID: String?
+    @State private var forgeActivityStartTask: Task<Void, Never>?
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @StateObject private var milestones = ForgeBuildMilestones()
@@ -1031,7 +1032,7 @@ struct AIGenerationView: View {
         let job = UUID().uuidString
         forgeActivityJobID = job
         if #available(iOS 16.2, *) {
-            Task { await HTMLAppForgeActivityService.start(job: job, edit: edit, phase: "Preparing") }
+            forgeActivityStartTask = Task { await HTMLAppForgeActivityService.start(job: job, edit: edit, phase: "Preparing") }
         }
     }
 
@@ -1044,7 +1045,12 @@ struct AIGenerationView: View {
         #endif
         forgeActivityJobID = nil
         if #available(iOS 16.2, *) {
-            Task { await HTMLAppForgeActivityService.finish(job: job) }
+            let starting = forgeActivityStartTask
+            forgeActivityStartTask = nil
+            Task {
+                await starting?.value
+                await HTMLAppForgeActivityService.finish(job: job)
+            }
         }
     }
 
