@@ -248,6 +248,7 @@ enum HTMLAppWidgetStore {
     static func all() -> [HTMLAppWidgetDefinition] { (try? readAll()) ?? [] }
     static func definitions(appID: String) -> [HTMLAppWidgetDefinition] { all().filter { $0.appID == appID } }
     static func updateFromPortableData(appID: String, key: String, value: String?) {
+        guard definitions(appID: appID).contains(where: { $0.dataBindings?.values.contains(key) == true }) else { return }
         report {
             _ = try repository().mutate { widgets in
                 for index in widgets.indices where widgets[index].appID == appID {
