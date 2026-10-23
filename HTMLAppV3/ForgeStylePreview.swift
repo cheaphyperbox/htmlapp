@@ -74,22 +74,31 @@ enum ForgeStylePreviewService {
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
         let directions = [
-            ("Editorial", "Quiet, spacious editorial design", "elegant typography, generous whitespace, softly rounded cards, restrained indigo accents"),
-            ("Playful", "Bright, expressive and friendly design", "bold type, purple and coral accents, pill controls, vibrant cards, playful proportions"),
-            ("Focus", "Crisp, practical high-contrast design", "high contrast surfaces, grid alignment, compact organized sections, blue action accents")
+            ("Map First", "Location-first immersive layout", "Dominant map taking most of screen, overlaid route controls and floating destination sheet; minimize card stacks"),
+            ("Action First", "Bold guided action layout", "Huge primary locate/search action with playful asymmetric result tiles, strong type and short inline steps; no large map hero"),
+            ("List First", "Compact information-first layout", "Dense clear destination list, numbered directions and a small map thumbnail; precision over decoration")
         ]
         let variant = directions[max(0, min(index, directions.count - 1))]
         let user = """
         App idea: \(String(request.prefix(2300)))
         Requested changes: \(String(feedback.prefix(650)))
         Design: \(variant.0) — \(variant.2).
-        Make a recognizable UI for this specific idea, not a generic landing page.
+        Every visible element MUST be relevant to the described app.
+        For nearby-place apps, show a map/destination, distance, driving time,
+        location action, and route steps, arranged according to your layout.
+        Never put the entire prompt into the title. No generic "Your Space",
+        "Overview", "Make progress your way", "Recent activity" or fake tabs.
+        Style \(index + 1) must differ in layout, section order, hierarchy,
+        map prominence, button placement and navigation — not merely colors.
+        The selected layout archetype is mandatory.
         """
         let system = """
         Return ONLY a complete standalone HTML document starting with <!DOCTYPE html>.
         Build a compact visual mockup, not a functioning app. Include inline CSS
         and realistic labels from the app idea. Keep output under 5000 characters.
-        Use responsive mobile-first styling, with clear navigation and content.
+        Use responsive mobile-first styling. Design a visually complete
+        preview with domain-relevant content, different shapes and hierarchy.
+        Three styles share the objective but must not share a template.
         No external resources, external CSS, scripts, JSON, explanation or Markdown.
         No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island
         or home indicator. The iOS host already provides system chrome.
