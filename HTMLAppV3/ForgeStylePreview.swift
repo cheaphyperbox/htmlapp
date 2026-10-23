@@ -29,66 +29,55 @@ enum ForgeStylePreviewService {
         }
     }
 
-    /// A single small request produces three alternate, deliberately shallow HTML sketches.
-    static func generate(for request: String, feedback: String = "") async throws -> [ForgeStyleConcept] {
+    /// Generate one independent sketch so malformed output does not discard peers.
+    static func generateSingle(for request: String, feedback: String = "", index: Int) async throws -> ForgeStyleConcept {
         let config = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
         let system = """
-        You are a mobile app art director producing QUICK INTERACTIVE STYLE MOCKUPS, not functioning applications.
-        Return ONLY one valid JSON object with a "styles" array of exactly THREE different style options.
-        Each style object has four string fields:
-        "name": 1–3 word evocative design name;
-        "summary": one sentence of what differentiates this visual direction;
-        "direction": 90–170 words of actionable visual specifications covering palette (give approximate hex colors), typography, layout, surfaces, primary navigation, interactive motion, and icon direction. Describe the visual identity so another AI can build the FULL app from it;
-        "html": a self-contained <!DOCTYPE html><html> ... </html> miniature UI sketch with inline CSS and at most tiny vanilla JavaScript.
-        
-        If user feedback is provided, create ALL THREE sketches again using it as a shared constraint. Preserve the user's main app goal while addressing the criticism. Do not return the old mockups with cosmetic recoloring.
-        The three sketches must look MEANINGFULLY DIFFERENT, not recolored copies. Choose distinct themes, compositions, hierarchy, and visual density based on the app's purpose. Respect the user's optional visual taste, but do not force every app to look the same.
-        Sketches show one believable phone-sized screen each, at most 2–3 small interactive elements (e.g. a tab selector, simple toggle, or popup), with clearly visible press and easing transitions, and concise illustrative placeholder copy. They are NOT feature-complete, and should not pretend to fetch data, request device access or persist anything.
-        Use absolutely NO network requests, remote fonts, images, iframes, CDNs, storage, permissions, native APIs, alerts, trackers, or external links. Use only inlined CSS/JS and simple SVG/CSS shapes if useful.
-        Include viewport meta, body width responsiveness, safe-area spacing, and prefers-reduced-motion handling. Target about 500–900 words TOTAL across all three HTML sketches, compact CSS, no giant code or functional algorithms.
-        No Markdown fences or commentary. Output parseable JSON strings; escape newlines and quotation marks properly.
+        You design ONE compact phone UI style sketch, not a complete app.
+        Return a JSON object with string keys name, summary, direction, html.
+        The html value is self-contained HTML with inline CSS; no outside URLs or APIs.
+        Keep HTML below 9000 characters. Include <html>, <head> and </html>.
+        Use a deliberately distinct direction numbered \(index + 1) of 3:
+        1 = quiet editorial, 2 = playful vivid, 3 = utilitarian high-contrast.
+        Escape all quotes and newlines correctly. No Markdown fences.
         """
-        let user = "APP IDEA:\n\(String(request.prefix(3500)))\n\nFEEDBACK FOR ALL 3 PREVIEWS:\n\(feedback.isEmpty ? "None — create three original directions." : String(feedback.prefix(1500)))\n\nVISUAL PREFERENCE:\n\(AISettingsStore.creativeDirection)"
+        let user = "APP IDEA: \(String(request.prefix(2800)))\nFEEDBACK: \(String(feedback.prefix(900)))"
         let raw = try await AIProviderClient.complete(
-            config: config,
-            system: system,
-            messages: [("user", user)],
-            timeout: 90,
-            maxTokens: 7200,
-            retryOnTransient: false
+            config: config, system: system, messages: [("user", user)],
+            timeout: 90, maxTokens: 4200, retryOnTransient: true
         )
         try Task.checkCancellation()
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let start = trimmed.firstIndex(of: "{"),
-              let end = trimmed.lastIndex(of: "}"),
-              start <= end,
+        guard let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}"),
               let bytes = String(trimmed[start...end]).data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-              let entries = json["styles"] as? [[String: Any]] else {
-            throw PreviewError.invalidResponse
-        }
-        var styles: [ForgeStyleConcept] = []
-        for entry in entries.prefix(3) {
-            let name = (entry["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let summary = (entry["summary"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let direction = (entry["direction"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let html = (entry["html"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty, !direction.isEmpty,
-                  name.count <= 65, direction.count <= 1600,
-                  html.count <= 35_000,
-                  html.range(of: "<html", options: .caseInsensitive) != nil,
-                  html.range(of: "<head", options: .caseInsensitive) != nil,
-                  html.range(of: "</html>", options: .caseInsensitive) != nil
-            else { continue }
-            styles.append(.init(id: styles.count, name: String(name.prefix(48)),
-                                summary: String(summary.prefix(240)),
-                                direction: direction, previewHTML: html))
-        }
-        guard styles.count >= 2 else { throw PreviewError.invalidResponse }
-        return styles
+              let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any]
+        else { throw PreviewError.invalidResponse }
+        let html = (json["html"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard html.range(of: "<html", options: .caseInsensitive) != nil,
+              html.range(of: "</html>", options: .caseInsensitive) != nil,
+              html.count <= 35_000 else { throw PreviewError.invalidResponse }
+        return ForgeStyleConcept(
+            id: index,
+            name: String((json["name"] as? String ?? "Style \(index + 1)").prefix(48)),
+            summary: String((json["summary"] as? String ?? "Alternate visual direction").prefix(240)),
+            direction: String((json["direction"] as? String ?? "Create a distinctive, usable interface.").prefix(1600)),
+            previewHTML: html
+        )
     }
+
+    static func generate(for request: String, feedback: String = "") async throws -> [ForgeStyleConcept] {
+        var previews: [ForgeStyleConcept] = []
+        for index in 0..<3 {
+            if let result = try? await generateSingle(for: request, feedback: feedback, index: index) {
+                previews.append(result)
+            }
+        }
+        guard !previews.isEmpty else { throw PreviewError.invalidResponse }
+        return previews
+    }
+
 }
 
 /// A dedicated nonpersistent, unbridged WebView. Generated sketch code cannot
