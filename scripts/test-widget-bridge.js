@@ -6,8 +6,26 @@ const source = swift.split('static let source = #"""')[1].split('"""#')[0];
 const messages = [], nodes = new Map();
 const element = () => ({style:{},setAttribute(){},replaceChildren(){},append(...children){this.children=children},remove(){nodes.delete(this.id)}});
 const document = {getElementById:id=>nodes.get(id),createElement:element,body:{appendChild:n=>nodes.set(n.id,n)},addEventListener(){}};
-const window = {webkit:{messageHandlers:{htmlappNative:{postMessage:message=>messages.push(message)}}},addEventListener(){}};
-vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navigator:{}});
+const listeners = new Map();
+const window = {
+  webkit:{messageHandlers:{htmlappNative:{postMessage:message=>messages.push(message)}}},
+  addEventListener(type, handler) {
+    const registered = listeners.get(type) || [];
+    registered.push(handler);
+    listeners.set(type, registered);
+  },
+  dispatchEvent(event) {
+    for (const handler of listeners.get(event.type) || []) handler(event);
+    return true;
+  }
+};
+class CustomEvent {
+  constructor(type, options = {}) {
+    this.type = type;
+    this.detail = options.detail;
+  }
+}
+vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,console,navigator:{}});
 (async () => {
   const result = window.HTMLAppNative.widgets.configure({id:'focus-streak',snapshot:{value:'7'}}).catch(e=>e);
   const first = messages.shift();
@@ -40,6 +58,8 @@ vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navig
   assert.equal(brightnessCall.args.level, 0.4);
   window.__htmlappNativeResolve(brightnessCall.id, true, { level: 0.4 });
   assert.equal((await brightnessPromise).level, 0.4);
+  let selectedTab = null;
+  window.HTMLAppNative.tabs.onSelect(id => { selectedTab = id; });
   const tabs = window.HTMLAppNative.tabs.configure([
     {id:'home', title:'Home', symbol:'house.fill'},
     {id:'settings', title:'Settings', symbol:'gearshape.fill'}
@@ -49,6 +69,7 @@ vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navig
   assert.equal(configureCall.args.items.length, 2);
   window.__htmlappNativeResolve(configureCall.id, true, {enabled:true,count:2});
   assert.equal((await tabs).enabled, true);
+  assert.equal(selectedTab, 'home', 'Native tabs must select their first destination');
   const ble = window.HTMLAppNative.bluetooth.scan(5);
   const bleCall = messages.shift();
   assert.equal(bleCall.method, 'bluetooth.scan');
