@@ -5,7 +5,6 @@ import BackgroundTasks
 // finite UIApplication background task and on-disk Forge checkpoint recovery.
 #if compiler(>=6.2)
 @available(iOS 26.0, *)
-@MainActor
 enum HTMLAppForgeContinuedProcessing {
     private static let identifier = "com.mekabrine.htmlapp.forge.processing"
     private static var registered = false
@@ -64,7 +63,7 @@ enum HTMLAppForgeContinuedProcessing {
 
     static func finish(success: Bool) {
         running = false
-        currentTask?.progress.completedUnitCount = success ? 100 : currentTask?.progress.completedUnitCount ?? 0
+        if success { currentTask?.progress.completedUnitCount = 100 }
         currentTask?.setTaskCompleted(success: success)
         currentTask = nil
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
