@@ -96,6 +96,7 @@ struct AIConfigurationSettingsView: View {
             } header: {
                 Text("Performance")
             }
+            } // Developer Mode
 
             Section {
                 Button {
@@ -111,7 +112,7 @@ struct AIConfigurationSettingsView: View {
                 )
             }
         }
-.htmlAppFirstUseToasts()
+        .htmlAppFirstUseToasts()
         .onAppear { HTMLAppFirstUseTips.show("aiSettings") }
         .navigationTitle("AI & Creation")
         .navigationBarTitleDisplayMode(.inline)
