@@ -61,51 +61,56 @@ struct AIConfigurationSettingsView: View {
             }
 
             Section {
-                DisclosureGroup("Customize specialist AIs (optional)") {
+                DisclosureGroup("AI Specialists") {
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .planner)
-                } label: { Label("Thinking", systemImage: "brain") }
+                } label: { Label("Thinking", systemImage: "brain") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .planner) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .research)
-                } label: { Label("Research", systemImage: "globe") }
+                } label: { Label("Research", systemImage: "globe") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .research) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .coder)
-                } label: { Label("Programming", systemImage: "chevron.left.forwardslash.chevron.right") }
+                } label: { Label("Programming", systemImage: "chevron.left.forwardslash.chevron.right") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .coder) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                 NavigationLink {
                     AIRoleProviderSettingsView(role: .ui)
-                } label: { Label("UI Redesigning", systemImage: "paintpalette") }
+                } label: { Label("UI Redesigning", systemImage: "paintpalette") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .ui) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                 if developerMode {
                     NavigationLink {
                         AIRoleProviderSettingsView(role: .icon)
-                    } label: { Label("Icon Artist", systemImage: "app.badge") }
+                    } label: { Label("Icon Artist", systemImage: "app.badge") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .icon) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                     NavigationLink {
                         AIRoleProviderSettingsView(role: .verifier)
-                    } label: { Label("QA Reviewer", systemImage: "checkmark.shield") }
+                    } label: { Label("QA Reviewer", systemImage: "checkmark.shield") .overlay(alignment: .trailing) {
+                    if AISettingsStore.usesSpecialistProvider(for: .verifier) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                    }
+                } }
                 }
                 }
             } header: {
                 Text("AI Specialists")
             } footer: {
                 Text("Each stage can use a different provider, model and API key. Leave a specialist on Shared Provider to reuse your main connection. UI redesign is optional.")
-            }
-
-            if developerMode {
-            Section {
-                modelField("Prompt Planner", text: $plannerModel, icon: "brain",
-                           help: "Turns requests into an app plan.")
-                modelField("Research Agent", text: $researchModel, icon: "globe",
-                           help: "Used when an app needs external research.")
-                modelField("UI Overhaul", text: $uiModel, icon: "paintpalette",
-                           help: "Optional extra visual review.")
-                modelField("Icon Artist", text: $iconModel, icon: "app.badge",
-                           help: "Optional separate icon generator.")
-                modelField("QA Verifier", text: $verifierModel, icon: "checkmark.shield",
-                           help: "Checks generated app behavior.")
-            } header: {
-                Text("Advanced model names")
-            } footer: {
-                Text("Leave optional models blank to reuse your coding model.")
-            }
             }
 
             if developerMode {
