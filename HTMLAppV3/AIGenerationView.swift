@@ -9,6 +9,7 @@ struct AIGenerationView: View {
     @State private var dictationPrefix = ""
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
+    @State private var forgeActivityJobID: String?
     @StateObject private var session = AIGenerationSession()
     @StateObject private var browserResearch = AgenticBrowserResearch()
     @StateObject private var milestones = ForgeBuildMilestones()
@@ -274,6 +275,11 @@ struct AIGenerationView: View {
             }
         }
         .onChange(of: session.phase) { phase in
+            if let job = forgeActivityJobID {
+                if #available(iOS 16.2, *) {
+                    Task { await HTMLAppForgeActivityService.update(job: job, phase: phase) }
+                }
+            }
             workTracker.observe(phase: phase, isBrowsing: browserResearch.isBrowsing,
                                 browserStatus: browserResearch.status, streamSection: session.streamedSection)
             if debugTrace.isActive { AIDebugTraceStore.shared.append("PHASE", phase) }
@@ -932,7 +938,24 @@ struct AIGenerationView: View {
         }
     }
 
+    private func startForgeActivity(edit: Bool) {
+        let job = UUID().uuidString
+        forgeActivityJobID = job
+        if #available(iOS 16.2, *) {
+            Task { await HTMLAppForgeActivityService.start(job: job, edit: edit, phase: "Preparing") }
+        }
+    }
+
+    private func endForgeActivity() {
+        guard let job = forgeActivityJobID else { return }
+        forgeActivityJobID = nil
+        if #available(iOS 16.2, *) {
+            Task { await HTMLAppForgeActivityService.finish(job: job) }
+        }
+    }
+
     private func generateApp() {
+        startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
         workTracker.updateVolume(prompt.utf8.count)
@@ -950,6 +973,7 @@ struct AIGenerationView: View {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
                 workTracker.finish(outcome: outcome)
+                endForgeActivity()
                 if backgroundTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskID)
                     backgroundTaskID = .invalid
@@ -1003,6 +1027,7 @@ struct AIGenerationView: View {
 
     private func applyAIChange() {
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
+        startForgeActivity(edit: true)
         milestones.reset()
         workTracker.begin(kind: "AI edit", appKey: existingApp?.id ?? draftWorkID)
         workTracker.updateVolume(changePrompt.utf8.count)
@@ -1017,6 +1042,7 @@ struct AIGenerationView: View {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
                 workTracker.finish(outcome: outcome)
+                endForgeActivity()
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let researchRequest = """
@@ -1116,6 +1142,7 @@ Requested edit:
     }
 
     private func stopKeepingDraft() {
+        endForgeActivity()
         session.keepCurrentPartialDraft()
         generationTask?.cancel()
         workTracker.finish(outcome: "Stopped")
