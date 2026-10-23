@@ -20,6 +20,7 @@ enum HTMLAppPortableDataStore {
             values[key] = value
             persist(values, appID: appID)
         }
+        HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: value)
         HTMLAppWidgetReloadCoordinator.request()
     }
 
@@ -37,6 +38,9 @@ enum HTMLAppPortableDataStore {
 
     static func replace(appID: String, values: [String: String]) {
         queue.sync { persist(values, appID: appID) }
+        for (key, value) in values {
+            HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: value)
+        }
         HTMLAppWidgetReloadCoordinator.request()
     }
 
