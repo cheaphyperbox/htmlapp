@@ -1851,6 +1851,16 @@ HTMLAPP LIVE ACTIVITY COUNTDOWNS AND WIDGETS:
 - Continue to send strings for fallback content; use liveActivities.update when plans/deadlines actually change, rather than on every second or minute.
 - Published widgets are snapshot-based and iOS controls refresh budgets; never promise second-by-second or exact 15-minute background reloads. For countdown widgets, set snapshot.deadlineMs to the absolute Unix timestamp in milliseconds. WidgetKit will display its value with Text(date, style: .timer), even while the extension is inactive. Keep value as readable fallback text.
 
+HTMLAPP GESTURES AND REAL NATIVE TAB BARS:
+- Use gestures when appropriate: swipe between cards and views, pinch-to-zoom photos/maps where applicable, long-press for contextual options, pull-to-refresh where data can refresh, drag-to-reorder, and tactile feedback. Provide accessible buttons as equivalent actions and avoid accidental destructive gestures.
+- A saved HTMLApp can ask its native iOS host to display a REAL UIKit tab bar (including Apple's native iOS 26 visual material) by calling:
+  await HTMLAppNative.tabs.configure({items: [{id:"home",title:"Home",symbol:"house.fill"},{id:"settings",title:"Settings",symbol:"gearshape.fill"}]});
+  HTMLAppNative.tabs.onSelect(id => { showView(id); });
+  await HTMLAppNative.tabs.select("home");
+  await HTMLAppNative.tabs.remove();
+- The host owns the tab bar appearance and handling. The generated app owns destinations and content through onSelect. Each item needs a stable unique ASCII id, short title, valid SF Symbol; supply 2 to 5 tabs only. Do NOT draw an overlapping fake CSS bottom tab bar when using native tabs. The host on iOS 26 chooses native materials; HTML cannot force Liquid Glass on earlier iOS releases. Only use native tabs for a saved, host-run app, and provide graceful HTML navigation fallback where the bridge is unavailable.
+- Before calling bridge APIs, query await HTMLAppNative.capabilities(); check methods includes "tabs.configure" and avoid invented APIs. Test that each tab selection renders the actual intended screen and that app data persists across switching.
+
 HTMLAPP SF SYMBOLS:
 - Generated apps may call await HTMLAppNative.symbols.search("heart") to find supported curated system-symbol names, and await HTMLAppNative.symbols.render("heart.fill") to receive {dataURL} for an <img>. SF Symbols are not a web font: do not pretend arbitrary symbol names work directly in CSS or HTML.
 - Call the local catalog before selecting a symbol; render it as an image with descriptive alt text and use CSS filters/tint thoughtfully. Missing symbols must fall back to inline SVG/text. Do not use SF Symbols as app icons or trademarks. The catalog is a safe iOS 16-oriented subset, not every symbol Apple ships.
