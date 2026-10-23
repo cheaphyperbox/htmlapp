@@ -1,5 +1,6 @@
 import XCTest
 import WidgetKit
+import UIKit
 
 final class WidgetTests: XCTestCase {
     var directory: URL!
@@ -128,6 +129,57 @@ final class LocalProfileResponseTests: XCTestCase {
             let result = HTMLAppLocalProfileResponse.response(request: request, path: path, profile: profile)
             XCTAssertFalse(String(decoding: result, as: UTF8.self).contains("profile-body"))
             XCTAssertTrue(String(decoding: result, as: UTF8.self).contains("404 Not Found"))
+        }
+    }
+
+    func testAIGeneratedFillCommandsRenderLocally() async throws {
+        // Three real-world examples use FILL followed by colorless shapes;
+        // before 1.6.8 the parser rejected every shape, causing the
+        // unrelated generic fallback icon to appear after each retry.
+        let scripts = [
+            """
+            SIZE 1024 1024
+            BG #26213D
+            FILL #E9E1F4
+            RECT 215 158 570 646
+            FILL #CDBBE5
+            RECT 215 158 570 150
+            FILL #5B4A7C
+            CIRCLE 340 158 38
+            FILL #83A89D
+            TRIANGLE 510 578 424 527 458 622
+            FILL #F4D78E
+            CIRCLE 554 510 42
+            """,
+            """
+            SIZE 1024 1024
+            BG #30274A
+            FILL #BDA5D3
+            CIRCLE 250 502 176
+            FILL #DCCBEA
+            TRIANGLE 500 412 760 355 666 545
+            FILL #E9DDF3
+            CIRCLE 413 520 202
+            FILL #83A89D
+            LINE 731 720 731 558 20
+            """,
+            """
+            SIZE 1024 1024
+            BG #332746
+            FILL #E9DDF3
+            RECT 182 144 640 690
+            FILL #CDB6DF
+            RECT 182 144 640 146
+            FILL #9B78B7
+            CIRCLE 289 217 22
+            FILL #A8C9BD
+            LINE 512 706 512 496 30
+            """
+        ]
+        for source in scripts {
+            let png = await AIIconRenderer.render(script: source)
+            XCTAssertNotNil(png, "FILL/inherited-color IconScript should render into a visible PNG")
+            if let png { XCTAssertNotNil(UIImage(data: png)) }
         }
     }
 }
