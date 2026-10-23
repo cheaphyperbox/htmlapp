@@ -195,7 +195,7 @@ struct AIGenerationView: View {
                 session.load(existing: existingApp)
                 selectedStyle = ForgeStyleReferenceStore.load(for: existingApp.id)
             }
-            if recoverableDraft == nil,
+            if !demoMode && recoverableDraft == nil,
                let draft = ForgeDraftCheckpointStore.load(),
                draft.existingAppID == existingApp?.id {
                 recoverableDraft = draft
@@ -211,6 +211,7 @@ struct AIGenerationView: View {
         }
         .interactiveDismissDisabled(true)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppForgeBackgroundExpired"))) { _ in
+            guard !demoMode else { return }
             session.persistCheckpoint()
             generationTask?.cancel()
         }
@@ -218,7 +219,7 @@ struct AIGenerationView: View {
             microphoneRecordingTask?.cancel(); dictation.stop()
             // Do not cancel the generation merely because the view disappears.
             // Keep a checkpoint and allow the finite iOS background grace period.
-            session.persistCheckpoint()
+            if !demoMode { session.persistCheckpoint() }
         }
         .onChange(of: scenePhase) { value in
             if value != .active {
@@ -1303,6 +1304,7 @@ Requested edit:
     }
 
     private func persistDraftForBackground() {
+        guard !demoMode else { return }
         session.persistCheckpoint()
         guard session.isWorking, backgroundTaskID == .invalid else { return }
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Forge Generation") {
