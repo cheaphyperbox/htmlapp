@@ -66,4 +66,21 @@ assert "sketches prepared" in source("HTMLAppV3/AIGenerationView.swift"), "Previ
 assert "Never auto-open an already saved app" in source("HTMLAppV3/LibraryUI.swift"), "Saved app must not be forced open"
 assert "HTMLAppForgeCompletionFeedback.announce" in source("HTMLAppV3/AIGenerationView.swift"), "Completion feedback must be called"
 assert "No microphone audio was recorded" in source("HTMLAppV3/ForgeDictation.swift"), "Whisper must diagnose empty recordings"
+assert 'shortcutSource == "widget" && stylePickerEnabled' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'shortcutSource = "widget"' in source("HTMLAppV3/LibraryUI.swift")
+assert '"Start Generating"' in source("HTMLAppV3/AIGenerationView.swift")
+assert '"Choose a Look"' not in source("HTMLAppV3/AIGenerationView.swift")
+assert 'previewHTML)' in source("HTMLAppV3/ForgeStylePreview.swift")
+assert 'ForgeStyleReferenceStore.save' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'withTaskGroup' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'HTMLAppForgeActivityWidget()' in source("HTMLAppWidgets/HTMLAppWidgets.swift")
+assert 'Do not leave HTMLApp or turn off your phone for more than 20 seconds at a time for now.' in source("HTMLAppWidgets/HTMLAppForgeActivityWidget.swift")
+assert 'HTMLAppForgeActivityService.start' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'HTMLAppForgeActivityService.finish' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'HTMLAppWidgetReloadCoordinator.request()' in source("HTMLAppV3/NativeAPIBridge.swift")
+assert 'HTMLAppWidgetReloadCoordinator.request()' in source("HTMLAppV3/PortableAppDataStore.swift")
+assert 'DragGesture(minimumDistance: 0)' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'case "capabilities.list"' in native and 'case "device.torch"' in native
+assert 'withPermission(.camera, id: id)' in native and 'withPermission(.displayControl, id: id)' in native
+assert 'NSSupportsLiveActivities: true' in project
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
