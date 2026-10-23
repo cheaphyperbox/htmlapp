@@ -71,13 +71,16 @@ Added in this release:
   Camera consent and iOS camera authorization, and a hardware torch.
 - `await HTMLAppNative.device.brightness(level?)`: requires saved-app
   Display Control consent. Apps should restore the previous brightness.
+- `await HTMLAppNative.motion.pedometer(days)`: reads 1–7 days of steps,
+  distance and floors where supported. Requires separate saved-app Motion & Steps
+  consent plus the iOS Motion & Fitness authorization dialog.
 
 Capabilities **not** implemented or advertised as working:
 HealthKit health data, HomeKit, NFC writing, Bluetooth central/peripheral,
 Nearby Interaction, geofencing/background location, Apple Pay, Wallet,
 CallKit/PushKit, critical alerts, push registration/server integration,
 StoreKit purchases, secure enclave keys, ARKit/LiDAR, background audio,
-advanced CoreMotion activity/pedometer, advanced camera/Vision capture,
+advanced CoreMotion activity classification, barometer, advanced camera/Vision capture,
 MusicKit, extensions for third-party share workflows, and Apple Intelligence
 on-device model integration. Some require extra provisioned entitlements,
 account/service configuration, suitable hardware, App Review scrutiny,
