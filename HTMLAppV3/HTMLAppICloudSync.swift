@@ -95,16 +95,21 @@ actor HTMLAppICloudSync {
         mergedFolders.append(contentsOf: incoming.folders)
         if let bytes = try? encoder.encode(mergedFolders) { write(bytes, at: foldersURL) }
         var remote: [String: SavedHTMLApp] = [:]
+        var unreadableRemoteIDs = Set<String>()
         for url in (try? fm.contentsOfDirectory(at: appRoot, includingPropertiesForKeys: nil)) ?? [] where url.pathExtension == "json" {
             if let bytes = read(url), let app = try? JSONDecoder().decode(SavedHTMLApp.self, from: bytes) {
                 remote[app.id] = app
+            } else {
+                // An iCloud file placeholder is not proof that the remote file
+                // is absent. Never overwrite it while download is pending.
+                unreadableRemoteIDs.insert(url.deletingPathExtension().lastPathComponent)
             }
         }
         for app in localApps {
             if (deletions[app.id] ?? 0) > app.updatedAt.timeIntervalSince1970 { continue }
             if let cloud = remote.removeValue(forKey: app.id), cloud.updatedAt > app.updatedAt {
                 incoming.apps.append(cloud)
-            } else if let bytes = try? encoder.encode(app) {
+            } else if !unreadableRemoteIDs.contains(app.id), let bytes = try? encoder.encode(app) {
                 // Do not overwrite newer remote app versions with stale local data.
                 write(bytes, at: appRoot.appendingPathComponent(app.id + ".json"))
             }
@@ -121,9 +126,12 @@ actor HTMLAppICloudSync {
                 let localURL = HTMLAppPortableDataStore.fileURL(appID: id)
                 let localDate = (try? fm.attributesOfItem(atPath: localURL.path)[.modificationDate]) as? Date ?? .distantPast
                 let cloudDate = (try? fm.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date ?? .distantPast
-                if cloudDate > localDate, let bytes = read(url),
-                   let decoded = try? JSONDecoder().decode([String: String].self, from: bytes) {
-                    incoming.data[id] = decoded
+                if cloudDate > localDate {
+                    if let bytes = read(url),
+                       let decoded = try? JSONDecoder().decode([String: String].self, from: bytes) {
+                        incoming.data[id] = decoded
+                    }
+                    // Do not overwrite an undownloaded iCloud document.
                 } else if !values.isEmpty, let bytes = try? encoder.encode(values) {
                     write(bytes, at: url)
                 }
