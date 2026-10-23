@@ -90,7 +90,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.8"' in release
+assert 'compiledVersion = "1.6.9"' in release
 assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "currentPaint" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "UITabBarController()" in source("HTMLAppV3/HTMLAppNativeTabBar.swift")
