@@ -547,7 +547,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             )
         }
 
-        let definition = HTMLAppWidgetDefinition(
+        var definition = HTMLAppWidgetDefinition(
             appID: appID,
             widgetID: widgetID,
             name: name,
@@ -559,6 +559,13 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastRefreshAt: existing.first(where: { $0.widgetID == widgetID })?.lastRefreshAt,
             lastError: nil
         )
+        if let requested = args["dataBindings"] as? [String: String] {
+            let allowed: Set<String> = ["title", "subtitle", "value", "footer", "eyebrow", "unit", "progress"]
+            let valid = requested.filter {
+                allowed.contains($0.key) && !$0.value.isEmpty && $0.value.count <= 200
+            }
+            definition.dataBindings = Dictionary(uniqueKeysWithValues: valid.prefix(7).map { ($0.key, $0.value) })
+        }
         if appID != "PREVIEW" && !HTMLAppSharedContainer.appGroupAvailable {
             reject(id, code: "app_group_unavailable", message: "Widget shared storage is unavailable. Open Widgets & Background to select an authorized signing group. Both app and extension require matching App Group authorization.")
             return
@@ -569,6 +576,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 // A failed probe must not misrepresent a successfully persisted publication.
                 _ = try? HTMLAppWidgetDiagnostics.begin()
                 HTMLAppWidgetReloadCoordinator.request()
+                HTMLAppBackgroundCoordinator.shared.schedule()
             } catch {
                 let failure = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_write_failed", error)
                 reject(id, code: failure.code, message: failure.message)
