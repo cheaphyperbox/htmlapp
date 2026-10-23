@@ -88,7 +88,12 @@ struct EditorView: View {
 
 struct WebRunner: View {
     let app: SavedHTMLApp
-    var body: some View { HTMLWebView(html: app.html, appID: app.id).statusBarHidden(true) }
+    var body: some View {
+        HTMLWebView(html: app.html, appID: app.id)
+            .statusBarHidden(true)
+            .htmlAppFirstUseToasts()
+            .onAppear { HTMLAppFirstUseTips.show("open") }
+    }
 }
 
 /// Applies a consistent CSS viewport on both iPhone and iPad while leaving
