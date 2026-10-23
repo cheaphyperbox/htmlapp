@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.3"
-    static let compiledBuild = "10"
+    static let compiledVersion = "1.6.4"
+    static let compiledBuild = "11"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.4" { return [
+            Entry(id: "generation-recovery", title: "Recover interrupted AI work", description: "Review an unsaved generation checkpoint after reopening HTMLApp, including elapsed work time.", symbol: "arrow.clockwise.circle", tint: .blue),
+            Entry(id: "background-grace", title: "Continue when switching apps", description: "Forge requests limited background execution time and preserves work if iOS suspends it.", symbol: "moon.stars", tint: .purple)
+        ] }
         if version == "1.6.3" { return [
             Entry(id: "timers", title: "Self-updating Live Activity timers", description: "Countdown Live Activities can now use native deadline-based timer labels even when HTMLApp is asleep.", symbol: "timer", tint: .orange),
             Entry(id: "voice-lock", title: "Voice create from Lock Screen", description: "A dedicated Lock Screen widget opens a voice-first AI creation screen.", symbol: "mic.fill", tint: .blue)
