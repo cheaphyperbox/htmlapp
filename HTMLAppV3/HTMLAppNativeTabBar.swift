@@ -1,8 +1,8 @@
 import UIKit
 import WebKit
 
-/// A real UIKit tab bar. On iOS 26 it receives the system tab-bar appearance;
-/// on older systems it uses the platform's supported native tab styling.
+/// A genuine UIKit tab bar with the platform's native material.
+/// Full floating/sidebar behavior on iOS 26 needs a UITabBarController host.
 /// Tabs are declarative: generated HTML controls content via the selection event.
 @MainActor
 final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
@@ -29,7 +29,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
             tabBar = UITabBar()
             tabBar.delegate = self
             tabBar.translatesAutoresizingMaskIntoConstraints = false
-            tabBar.backgroundColor = .secondarySystemBackground
+            // Keep UIKit's own material/background for modern OS styling.
             webView.addSubview(tabBar)
             NSLayoutConstraint.activate([
                 tabBar.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
