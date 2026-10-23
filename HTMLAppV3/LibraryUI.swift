@@ -209,7 +209,7 @@ struct LibraryView: View {
             .environmentObject(store)
         }
         .confirmationDialog("What would you like to do?", isPresented: $showAddOptions, titleVisibility: .visible) {
-            Button("Make an App with AI") { HTMLAppFirstUseTips.show("firstAI"); showGenerator = true }
+            Button("Make an App with AI") { showGenerator = true }
             Button("Save a Website") { showWebsiteImporter = true }
             Button("Write HTML Code") { editor = .new }
             Button("Import an HTML File") { importingFile = true }
@@ -438,7 +438,7 @@ struct LibraryView: View {
                     .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
 
                 case .app(let app):
-                    Button { HTMLAppFirstUseTips.show("open"); store.launch(app) } label: {
+                    Button { store.launch(app) } label: {
                         ListAppRow(app: app, refreshing: refreshingID == app.id)
                     }
                     .buttonStyle(.plain)
@@ -498,7 +498,6 @@ struct LibraryView: View {
         .onAppear { HTMLAppFirstUseTips.show("context") }
         Menu {
             Button {
-                HTMLAppFirstUseTips.show("nearby")
                 nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id])
             } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
             Button { store.installWebClip(for: app) } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
@@ -510,11 +509,9 @@ struct LibraryView: View {
         Menu {
             Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
             Button {
-                HTMLAppFirstUseTips.show("icon")
                 aiIconApp = app
             } label: { Label("Regenerate Icon", systemImage: "app.badge") }
             Button {
-                HTMLAppFirstUseTips.show("restore")
                 editHistoryApp = app
             } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
             Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
