@@ -523,13 +523,23 @@ struct AIGenerationView: View {
                                 .allowsHitTesting(!exploringStyles)
                             VStack(spacing: 10) {
                                 ForEach(styleOptions) { option in
-                                    Button("\(option.id + 1)") { selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == option.id }) ?? 0 }
+                                    Button {
+                                        selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == option.id }) ?? 0
+                                    } label: {
+                                        Text("Look \(option.id + 1)")
+                                            .font(.caption.bold())
+                                            .frame(width: 75, height: 44)
+                                            .foregroundStyle(.primary)
+                                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                                    }
+                                    .accessibilityLabel("View mockup \(option.id + 1)")
                                         .buttonStyle(.bordered)
                                         .tint(option.id == styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].id ? .accentColor : .secondary)
                                         .disabled(exploringStyles)
                                 }
                             }
-                            .frame(width: 44)
+                            .frame(width: 84)
+                            .zIndex(2)
                         }
                     } else if exploringStyles {
                         Spacer()
