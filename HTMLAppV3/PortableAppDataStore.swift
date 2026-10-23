@@ -52,7 +52,7 @@ enum HTMLAppPortableDataStore {
 
     static func clear(appID: String) {
         let keys = Array(all(appID: appID).keys)
-        queue.sync { try? FileManager.default.removeItem(at: url(appID: appID)) }
+        queue.sync { try? FileManager.default.removeItem(at: fileURL(appID: appID)) }
         for key in keys {
             HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
         }
@@ -77,7 +77,7 @@ enum HTMLAppPortableDataStore {
         try? data.write(to: destination, options: .atomic)
     }
 
-    private static func url(appID: String) -> URL {
+    static func fileURL(appID: String) -> URL {
         let safe = appID.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
         return root.appendingPathComponent(safe.isEmpty ? "invalid" : safe).appendingPathExtension("json")
     }
