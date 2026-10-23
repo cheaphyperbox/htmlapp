@@ -160,9 +160,15 @@ struct LibraryView: View {
             handlePendingShortcut()
             if !checkedInterruptedForgeThisLaunch {
                 checkedInterruptedForgeThisLaunch = true
-                if let checkpoint = ForgeDraftCheckpointStore.load(),
-                   checkpoint.existingAppID == nil, !showGenerator, !showVoiceCreate {
-                    showGenerator = true
+                if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate {
+                    if let id = checkpoint.existingAppID {
+                        // Never create or overwrite a saved app during recovery.
+                        if let saved = store.apps.first(where: { $0.id == id }) {
+                            aiEditorApp = saved
+                        }
+                    } else {
+                        showGenerator = true
+                    }
                 }
             }
         }
