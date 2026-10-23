@@ -20,6 +20,7 @@ struct AIGenerationView: View {
     @State private var microphoneCapturing = false
     @State private var promptDictationActive = false
     @State private var promptMicHeld = false
+    @State private var promptDictationAwaitingResult = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
@@ -221,7 +222,7 @@ struct AIGenerationView: View {
             guard !microphoneCapturing else { return }
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged }
-            else if promptDictationActive { prompt = merged }
+            else if promptDictationAwaitingResult && !promptMicHeld { prompt = merged }
         }
         .onChange(of: session.refinedBrief) { brief in
             if !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -331,7 +332,7 @@ struct AIGenerationView: View {
                 }
 
                 TextEditor(text: $prompt)
-                    .frame(minHeight: 150)
+                    .frame(height: 150)
                     .font(.body)
                 HStack(spacing: 14) {
                     Image(systemName: "mic.fill")
@@ -341,14 +342,13 @@ struct AIGenerationView: View {
                         .background(promptMicHeld ? Color.red : Color(.systemGray4),
                                     in: RoundedRectangle(cornerRadius: 24))
                         .contentShape(RoundedRectangle(cornerRadius: 24))
-                        .onLongPressGesture(minimumDuration: 0, maximumDistance: 90,
-                                            pressing: { held in
-                            if held {
-                                startPromptRecording()
-                            } else {
-                                stopPromptRecording()
-                            }
-                        }, perform: {})
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { _ in
+                                    if !promptMicHeld { startPromptRecording() }
+                                }
+                                .onEnded { _ in stopPromptRecording() }
+                        )
                         .accessibilityAction {
                             if dictation.recording || promptMicHeld { stopPromptRecording() }
                             else { startPromptRecording() }
@@ -361,9 +361,14 @@ struct AIGenerationView: View {
                         Text(dictation.recording ? "Release to stop recording." :
                             "Keep the gray mic pressed while you describe your app.")
                             .font(.subheadline).foregroundStyle(.secondary)
-                        Text(dictation.status).font(.caption).foregroundStyle(.secondary)
+                        Text(dictation.status)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(2).truncationMode(.tail)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 86, maxHeight: 86, alignment: .leading)
+                    .clipped()
                 }
+                .frame(height: 100)
                 .padding(.vertical, 7)
             } header: {
                 Text("Step 1 · Describe your app")
@@ -441,6 +446,8 @@ struct AIGenerationView: View {
         promptMicHeld = true
         dictationForEdit = false
         promptDictationActive = true
+        promptDictationAwaitingResult = true
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         dictationPrefix = prompt
         microphoneRecordingTask?.cancel()
         microphoneRecordingTask = Task { await dictation.start() }
@@ -451,6 +458,10 @@ struct AIGenerationView: View {
         microphoneRecordingTask?.cancel()
         microphoneRecordingTask = nil
         dictation.stop()
+        if !dictation.transcript.isEmpty {
+            prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + dictation.transcript
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         promptDictationActive = false
     }
 
