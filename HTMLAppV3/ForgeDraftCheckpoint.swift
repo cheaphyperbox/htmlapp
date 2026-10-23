@@ -1,6 +1,7 @@
 import Foundation
 
 struct ForgeDraftCheckpoint: Codable, Equatable {
+    var startedAt: Date?
     var savedAt: Date
     var originalPrompt: String
     var refinedBrief: String
