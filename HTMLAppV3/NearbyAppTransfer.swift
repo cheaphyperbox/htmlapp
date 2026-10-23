@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MultipeerConnectivity
 
 final class NearbyAppTransfer: NSObject, ObservableObject, MCSessionDelegate, MCNearbyServiceAdvertiserDelegate {
@@ -138,6 +139,19 @@ struct NearbyAppTransferView: View {
 
     var body: some View {
         List {
+            Section("Connection Setup") {
+                Label("Turn on Wi-Fi and Bluetooth on both devices", systemImage: "wifi")
+                    .font(.subheadline.weight(.semibold))
+                Text("Open Control Center or iOS Settings and enable both radios. iOS does not allow apps to turn Wi-Fi or Bluetooth on for you.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Open iOS Settings", systemImage: "gear")
+                }
+            }
             if isReceiveOnly {
                 Section {
                     VStack(alignment: .leading, spacing: 14) {
