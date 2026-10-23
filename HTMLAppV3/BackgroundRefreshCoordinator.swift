@@ -24,12 +24,14 @@ final class HTMLAppBackgroundCoordinator {
 
     func schedule() {
         let jobs = HTMLAppBackgroundJobStore.all().filter { $0.enabled }
-        guard !jobs.isEmpty else {
+        let widgetRefreshes = HTMLAppWidgetStore.all().filter { $0.refresh != nil }
+        guard !jobs.isEmpty || !widgetRefreshes.isEmpty else {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskIdentifier)
             return
         }
 
-        let minutes = max(15, jobs.map(\.intervalMinutes).min() ?? 30)
+        let intervals = jobs.map(\.intervalMinutes) + widgetRefreshes.compactMap { $0.refresh?.intervalMinutes }
+        let minutes = max(15, intervals.min() ?? 30)
         let request = BGAppRefreshTaskRequest(identifier: Self.taskIdentifier)
         request.earliestBeginDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
 
@@ -103,9 +105,26 @@ final class HTMLAppBackgroundCoordinator {
             results.append(job)
         }
 
-        if !results.isEmpty {
+        // Widget providers show the committed cached snapshot immediately;
+        // scheduled host refresh keeps public HTTPS widget content updated
+        // without blocking WidgetKit's timeline callback.
+        var refreshedWidgets = false
+        for widget in HTMLAppWidgetStore.all() where widget.refresh != nil {
+            if Task.isCancelled { break }
+            let minutes = max(15, widget.refresh?.intervalMinutes ?? 30)
+            let due = widget.lastRefreshAt.map { now.timeIntervalSince($0) >= Double(minutes * 60) } ?? true
+            guard force || due else { continue }
+            let refreshed = await HTMLAppWidgetNetwork.refreshed(widget)
+            do {
+                try HTMLAppWidgetStore.repository().refresh(refreshed, original: widget)
+                refreshedWidgets = true
+            } catch {
+                NSLog("HTMLApp widget background update failed: %@", error.localizedDescription)
+            }
+        }
+        if !results.isEmpty || refreshedWidgets {
             await MainActor.run {
-                WidgetCenter.shared.reloadAllTimelines()
+                HTMLAppWidgetReloadCoordinator.request()
             }
         }
         schedule()
