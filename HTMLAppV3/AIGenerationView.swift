@@ -114,6 +114,7 @@ struct AIGenerationView: View {
             ) {
                 Button("Discard and Close", role: .destructive) {
                     generationTask?.cancel()
+                    endForgeActivity()
                     dictation.stop()
                     AIDebugTraceStore.shared.finish(outcome: "Discarded")
                     workTracker.finish(outcome: "Discarded")
@@ -975,13 +976,13 @@ struct AIGenerationView: View {
         }
     }
 
-    private func endForgeActivity() {
+    private func endForgeActivity(onlyIf expected: String? = nil) {
+        guard let job = forgeActivityJobID, expected == nil || expected == job else { return }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            HTMLAppForgeContinuedProcessing.finish(success: session.errorMessage == nil)
+            HTMLAppForgeContinuedProcessing.finish(success: session.errorMessage == nil && session.phase == "Ready to review")
         }
         #endif
-        guard let job = forgeActivityJobID else { return }
         forgeActivityJobID = nil
         if #available(iOS 16.2, *) {
             Task { await HTMLAppForgeActivityService.finish(job: job) }
@@ -989,6 +990,7 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        guard !session.isWorking && !browserResearch.isBrowsing else { return }
         startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
@@ -1002,12 +1004,13 @@ struct AIGenerationView: View {
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.beginDraft(prompt: originalPrompt)
         session.isWorking = true
+        let activityJob = forgeActivityJobID
         generationTask = Task {
             defer {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
                 workTracker.finish(outcome: outcome)
-                endForgeActivity()
+                endForgeActivity(onlyIf: activityJob)
                 if backgroundTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskID)
                     backgroundTaskID = .invalid
@@ -1076,7 +1079,7 @@ struct AIGenerationView: View {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
                 workTracker.finish(outcome: outcome)
-                endForgeActivity()
+                endForgeActivity(onlyIf: activityJob)
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let researchRequest = """
