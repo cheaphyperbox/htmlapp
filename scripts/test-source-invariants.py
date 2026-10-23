@@ -90,4 +90,21 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
+assert 'compiledVersion = "1.6.7"' in release
+assert "transcribingOffline" in source("HTMLAppV3/ForgeDictation.swift")
+assert "pendingFloatingVoiceFeedback" in source("HTMLAppV3/AIGenerationView.swift")
+assert 'ForEach(0..<3, id: \\.self)' in source("HTMLAppV3/AIGenerationView.swift")
+assert "htmlapp.voiceCreatePending" in core and "htmlapp.voiceCreatePending" in source("HTMLAppV3/LibraryUI.swift")
+assert 'let refreshed = definition // Display committed' in source("HTMLAppWidgets/HTMLAppWidgets.swift")
+assert 'content.containerBackground(for: .widget) { Color(.secondarySystemBackground) }' in source("HTMLAppWidgets/HTMLAppVoiceCreateWidget.swift")
+assert 'case "tabs.configure"' in native and 'case "bluetooth.scan"' in native
+assert 'HTMLAppNative.tabs.configure' in ai
+assert 'NSBluetoothAlwaysUsageDescription:' in project
+assert "case bluetooth" in source("HTMLAppV3/PermissionSystem.swift")
+assert 'dataBindings' in source("HTMLAppShared/HTMLAppWidgetShared.swift")
+assert "HTMLAppWidgetStore.updateFromPortableData" in source("HTMLAppV3/PortableAppDataStore.swift")
+assert "AIGenerationView(demoMode: true)" in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'if demoMode { showPracticeEditNotice = true; return }' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'Advanced model names' not in source("HTMLAppV3/AISettingsView.swift")
+assert 'AISettingsStore.usesSpecialistProvider' in source("HTMLAppV3/AISettingsView.swift")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
