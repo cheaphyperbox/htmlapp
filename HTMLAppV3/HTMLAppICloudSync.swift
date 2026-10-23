@@ -7,6 +7,16 @@ enum HTMLAppICloudPreferences {
     static let dataKey = "htmlapp.icloud.syncData"
     static var enabled: Bool { UserDefaults.standard.bool(forKey: appsKey) }
     static var includeData: Bool { enabled && UserDefaults.standard.bool(forKey: dataKey) }
+    private static let deletedKey = "htmlapp.icloud.deleted"
+    static var deleted: [String: Double] {
+        get { UserDefaults.standard.dictionary(forKey: deletedKey) as? [String: Double] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: deletedKey) }
+    }
+    static func markDeleted(_ id: String) {
+        var items = deleted
+        items[id] = Date().timeIntervalSince1970
+        deleted = items
+    }
 }
 
 actor HTMLAppICloudSync {
@@ -17,6 +27,7 @@ actor HTMLAppICloudSync {
     struct Incoming: Sendable {
         var apps: [SavedHTMLApp] = []
         var data: [String: [String: String]] = [:]
+        var deleted: [String: Double] = [:]
     }
 
     /// FileManager's ubiquity lookup can block: never call on the main actor.
@@ -45,7 +56,7 @@ actor HTMLAppICloudSync {
         }
     }
 
-    func exchange(localApps: [SavedHTMLApp], localData: [String: [String: String]]) -> Incoming {
+    func exchange(localApps: [SavedHTMLApp], localData: [String: [String: String]], localDeleted: [String: Double]) -> Incoming {
         guard HTMLAppICloudPreferences.enabled, !syncing, let root = folder() else { return Incoming() }
         syncing = true
         defer { syncing = false }
@@ -57,6 +68,21 @@ actor HTMLAppICloudSync {
         }
         let encoder = JSONEncoder()
         var incoming = Incoming()
+        var deletions = localDeleted
+        let deleteRoot = root.appendingPathComponent("Deleted", isDirectory: true)
+        try? fm.createDirectory(at: deleteRoot, withIntermediateDirectories: true)
+        for url in (try? fm.contentsOfDirectory(at: deleteRoot, includingPropertiesForKeys: nil)) ?? [] where url.pathExtension == "json" {
+            if let bytes = read(url), let time = try? JSONDecoder().decode(Double.self, from: bytes) {
+                let id = url.deletingPathExtension().lastPathComponent
+                deletions[id] = max(deletions[id] ?? 0, time)
+            }
+        }
+        for (id, time) in deletions where (localDeleted[id] ?? 0) >= time {
+            if let bytes = try? encoder.encode(time) {
+                write(bytes, at: deleteRoot.appendingPathComponent(id + ".json"))
+            }
+        }
+        incoming.deleted = deletions
         var remote: [String: SavedHTMLApp] = [:]
         for url in (try? fm.contentsOfDirectory(at: appRoot, includingPropertiesForKeys: nil)) ?? [] where url.pathExtension == "json" {
             if let bytes = read(url), let app = try? JSONDecoder().decode(SavedHTMLApp.self, from: bytes) {
@@ -64,6 +90,7 @@ actor HTMLAppICloudSync {
             }
         }
         for app in localApps {
+            if (deletions[app.id] ?? 0) > app.updatedAt.timeIntervalSince1970 { continue }
             if let cloud = remote.removeValue(forKey: app.id), cloud.updatedAt > app.updatedAt {
                 incoming.apps.append(cloud)
             } else if let bytes = try? encoder.encode(app) {
@@ -71,12 +98,12 @@ actor HTMLAppICloudSync {
                 write(bytes, at: appRoot.appendingPathComponent(app.id + ".json"))
             }
         }
-        incoming.apps.append(contentsOf: remote.values)
+        incoming.apps.append(contentsOf: remote.values.filter { (deletions[$0.id] ?? 0) <= $0.updatedAt.timeIntervalSince1970 })
 
         if HTMLAppICloudPreferences.includeData {
             // Preserve per-app data independently and never mirror permissions,
             // tokens, app-specific Keychain items, or OS authorization decisions.
-            let ids = Set(localApps.map(\.id)).union(incoming.apps.map(\.id))
+            let ids = Set(localApps.map(\.id)).union(incoming.apps.map(\.id)).filter { deletions[$0] == nil }
             for id in ids {
                 let url = dataRoot.appendingPathComponent(id + ".json")
                 let values = localData[id] ?? [:]
