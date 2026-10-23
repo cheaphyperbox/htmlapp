@@ -89,11 +89,13 @@ final class ForgeDictation: ObservableObject {
         }
     }
     private func startOffline() async {
+        let requestedGeneration = generation
         requestingPermission = true
         defer { requestingPermission = false }
         let allowed = await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
         }
+        guard generation == requestedGeneration && !Task.isCancelled else { return }
         guard allowed else {
             status = "Allow Microphone for HTMLApp in iOS Settings. Whisper needs no Apple Speech permission."
             return
@@ -127,6 +129,7 @@ final class ForgeDictation: ObservableObject {
     }
 
     func cancel() {
+        generation = UUID()
         // Explicit cancellation discards a captured recording instead of
         // launching an expensive Whisper decode outside the drop target.
         if offlineMode {
@@ -160,6 +163,7 @@ final class ForgeDictation: ObservableObject {
                 return
             }
             status = "Recorded \(bytes / 1024) KB. Loading Whisper and transcribing offline…"
+            let transcriptionGeneration = generation
             transcribingOffline = true
             Task {
                 defer {
@@ -168,6 +172,7 @@ final class ForgeDictation: ObservableObject {
                 }
                 do {
                     let result = try await HTMLAppOfflineSpeech.shared.transcribe(fileURL: url)
+                    guard transcriptionGeneration == generation else { return }
                     transcript = result.trimmingCharacters(in: .whitespacesAndNewlines)
                     status = transcript.isEmpty ? "No speech detected. Try again or type instead." : "Whisper transcription is ready."
                 } catch {
