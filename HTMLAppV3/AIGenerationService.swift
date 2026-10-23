@@ -726,6 +726,14 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         persistCheckpoint()
     }
 
+    func showTutorialExample(_ html: String) {
+        // Onboarding must not overwrite a recoverable real generation checkpoint.
+        streamedHTML = html
+        isWorking = false
+        phase = "Ready to review — practice calculator"
+        errorMessage = nil
+    }
+
     func acceptExternalHTML(_ html: String) {
         streamedHTML = html
         verificationReport = ""
