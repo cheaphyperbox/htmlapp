@@ -1859,6 +1859,11 @@ HTMLAPP LIVE ACTIVITY COUNTDOWNS AND WIDGETS:
 - Continue to send strings for fallback content; use liveActivities.update when plans/deadlines actually change, rather than on every second or minute.
 - Published widgets are snapshot-based and iOS controls refresh budgets; never promise second-by-second or exact 15-minute background reloads. For countdown widgets, set snapshot.deadlineMs to the absolute Unix timestamp in milliseconds. WidgetKit will display its value with Text(date, style: .timer), even while the extension is inactive. Keep value as readable fallback text.
 
+DEVICE CHROME AND STATUS BAR RULES:
+- NEVER generate or draw a fake iOS status bar, time (9:41), battery indicators, cellular/Wi-Fi signals, notch, Dynamic Island, phone frame, mock iPhone bezel, home indicator, or simulated OS navigation chrome inside an app. HTMLApp runs in a real iOS WebView where the system owns those surfaces. Begin UI content directly with the app's content and respect safe-area insets.
+- Do not render a fake CSS bottom tab strip when native tabs are available. A true iOS 26 Liquid Glass tab bar requires the host's UITabBarController; it cannot be recreated reliably with CSS.
+- Do not put native status bar or Dynamic Island graphics inside previewHTML/mockups either.
+
 HTMLAPP GESTURES AND REAL NATIVE TAB BARS:
 - Use gestures when appropriate: swipe between cards and views, pinch-to-zoom photos/maps where applicable, long-press for contextual options, pull-to-refresh where data can refresh, drag-to-reorder, and tactile feedback. Provide accessible buttons as equivalent actions and avoid accidental destructive gestures.
 - A saved HTMLApp can ask its native iOS host to display a REAL UIKit tab bar (including Apple's native iOS 26 visual material) by calling:
