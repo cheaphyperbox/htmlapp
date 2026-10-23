@@ -193,7 +193,7 @@ struct AIGenerationView: View {
                 recoverableDraft = draft
                 if shortcutGenerationNonce == 0 { showDraftRecovery = true }
             }
-            acceptShortcutRequest(shortcutGenerationNonce, incoming: prompt)
+            acceptShortcutRequest(shortcutGenerationNonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? prompt)
         }
         .onChange(of: shortcutGenerationNonce) { nonce in
             // Library sends a new nonce even if this screen is already open.
@@ -990,6 +990,7 @@ struct AIGenerationView: View {
         recoverableDraft = nil
         activeShortcutPrompt = idea
         prompt = idea
+        UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.activeIdea")
         // Voice widget follows in-app mockup selection; Siri retains
         // its previously requested direct-build behavior.
         if shortcutSource == "widget" && stylePickerEnabled {
