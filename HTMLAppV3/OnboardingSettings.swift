@@ -8,8 +8,6 @@ struct OnboardingView: View {
     @State private var showForgePractice = false
     @State private var showMenuExample = false
     @AppStorage("htmlapp.dictationEngine") private var dictationEngine = "apple"
-    @AppStorage("htmlapp.icloud.syncApps") private var iCloudSyncApps = false
-    @AppStorage("htmlapp.icloud.syncData") private var iCloudSyncData = false
     @StateObject private var dictationTest = ForgeDictation()
     @State private var dictationTestPressed = false
 
@@ -442,6 +440,8 @@ struct SettingsView: View {
     @AppStorage("webClipPrecomposed") private var webClipPrecomposed = false
     @AppStorage("allowJavaScript") private var allowJavaScript = true
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("htmlapp.icloud.syncApps") private var iCloudSyncApps = false
+    @AppStorage("htmlapp.icloud.syncData") private var iCloudSyncData = false
     @AppStorage("htmlapp.previousOpenedVersion") private var previousOpenedVersion = ""
     @State private var showWhatsNew = false
     @State private var working = false
