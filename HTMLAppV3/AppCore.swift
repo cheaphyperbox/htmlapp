@@ -188,7 +188,7 @@ struct SavedHTMLApp: Identifiable, Codable, Hashable, Sendable {
     var websiteFingerprint: String?
 }
 
-struct LibraryFolder: Identifiable, Codable, Hashable {
+struct LibraryFolder: Identifiable, Codable, Hashable, Sendable {
     static let defaultTintHex = "#5B9DFF"
 
     var id: String
@@ -245,9 +245,15 @@ final class AppStore: ObservableObject {
         let portable = HTMLAppICloudPreferences.includeData
             ? Dictionary(uniqueKeysWithValues: apps.map { ($0.id, HTMLAppPortableDataStore.all(appID: $0.id)) })
             : [:]
-        let incoming = await HTMLAppICloudSync.shared.exchange(localApps: snapshot, localData: portable, localDeleted: HTMLAppICloudPreferences.deleted)
+        let incoming = await HTMLAppICloudSync.shared.exchange(localApps: snapshot, localFolders: folders, localData: portable, localDeleted: HTMLAppICloudPreferences.deleted)
         guard HTMLAppICloudPreferences.enabled, !libraryLoadBlocked else { return }
         var changed = false
+        var foldersChanged = false
+        for cloud in incoming.folders where !folders.contains(where: { $0.id == cloud.id }) {
+            folders.append(cloud)
+            foldersChanged = true
+        }
+        if foldersChanged { persistFolders() }
         var deleted = HTMLAppICloudPreferences.deleted
         for (id, time) in incoming.deleted {
             deleted[id] = max(deleted[id] ?? 0, time)
@@ -264,7 +270,11 @@ final class AppStore: ObservableObject {
                     changed = true
                 }
             } else {
-                apps.append(cloud)
+                var imported = cloud
+                if let folderID = imported.folderID, !folders.contains(where: { $0.id == folderID }) {
+                    imported.folderID = nil
+                }
+                apps.append(imported)
                 changed = true
             }
         }
