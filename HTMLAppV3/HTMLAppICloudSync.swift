@@ -85,15 +85,22 @@ actor HTMLAppICloudSync {
         }
         incoming.deleted = deletions
         let foldersURL = root.appendingPathComponent("folders.json")
-        let remoteFolders = read(foldersURL).flatMap {
+        let folderFileExists = fm.fileExists(atPath: foldersURL.path)
+        let remoteFolderBytes = folderFileExists ? read(foldersURL) : nil
+        let remoteFolders = remoteFolderBytes.flatMap {
             try? JSONDecoder().decode([LibraryFolder].self, from: $0)
-        } ?? []
-        incoming.folders = remoteFolders.filter { cloud in
-            !localFolders.contains(where: { $0.id == cloud.id })
         }
-        var mergedFolders = localFolders
-        mergedFolders.append(contentsOf: incoming.folders)
-        if let bytes = try? encoder.encode(mergedFolders) { write(bytes, at: foldersURL) }
+        if let remoteFolders {
+            incoming.folders = remoteFolders.filter { cloud in
+                !localFolders.contains(where: { $0.id == cloud.id })
+            }
+        }
+        // Do not replace a cloud folder index that has not finished downloading.
+        if !folderFileExists || remoteFolders != nil {
+            var mergedFolders = localFolders
+            mergedFolders.append(contentsOf: incoming.folders)
+            if let bytes = try? encoder.encode(mergedFolders) { write(bytes, at: foldersURL) }
+        }
         var remote: [String: SavedHTMLApp] = [:]
         var unreadableRemoteIDs = Set<String>()
         for url in (try? fm.contentsOfDirectory(at: appRoot, includingPropertiesForKeys: nil)) ?? [] where url.pathExtension == "json" {
