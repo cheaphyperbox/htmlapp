@@ -105,28 +105,27 @@ enum AIIconRenderer {
                     pendingPaint = nil
 
                 case "RECT":
-                    guard parts.count >= 4,
+                    guard parts.count >= 5,
                           let x = number(parts[1]), let y = number(parts[2]),
                           let w = number(parts[3]), let h = number(parts[4]),
                           w >= 0, h >= 0 else { continue }
                     let path = UIBezierPath(rect: CGRect(x: x, y: y, width: w, height: h))
-                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
+                    fill(path: path, paint: pendingPaint ?? (parts.count > 5 ? cssColor(parts[5]).map(Paint.solid) : nil) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
 
                 case "CIRCLE":
-                    guard parts.count >= 5,
+                    guard parts.count >= 4,
                           let cx = number(parts[1]), let cy = number(parts[2]),
-                          let radius = number(parts[3]), radius >= 0,
-                          let color = cssColor(parts[4]) else { continue }
+                          let radius = number(parts[3]), radius >= 0 else { continue }
                     let path = UIBezierPath(ovalIn: CGRect(
                         x: cx - radius,
                         y: cy - radius,
                         width: radius * 2,
                         height: radius * 2
                     ))
-                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
+                    fill(path: path, paint: pendingPaint ?? (parts.count > 4 ? cssColor(parts[4]).map(Paint.solid) : nil) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
@@ -135,14 +134,13 @@ enum AIIconRenderer {
                     guard parts.count >= 6,
                           let x1 = number(parts[1]), let y1 = number(parts[2]),
                           let x2 = number(parts[3]), let y2 = number(parts[4]),
-                          let x3 = number(parts[5]), let y3 = number(parts[6]),
-                          let color = cssColor(parts[7]) else { continue }
+                          let x3 = number(parts[5]), let y3 = number(parts[6]) else { continue }
                     let path = UIBezierPath()
                     path.move(to: CGPoint(x: x1, y: y1))
                     path.addLine(to: CGPoint(x: x2, y: y2))
                     path.addLine(to: CGPoint(x: x3, y: y3))
                     path.close()
-                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
+                    fill(path: path, paint: pendingPaint ?? (parts.count > 7 ? cssColor(parts[7]).map(Paint.solid) : nil) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
@@ -151,14 +149,13 @@ enum AIIconRenderer {
                     guard parts.count >= 7,
                           let x1 = number(parts[1]), let y1 = number(parts[2]),
                           let x2 = number(parts[3]), let y2 = number(parts[4]),
-                          let thickness = number(parts[5]), thickness > 0,
-                          let color = cssColor(parts[6]) else { continue }
+                          let thickness = number(parts[5]), thickness > 0 else { continue }
                     let path = UIBezierPath()
                     path.move(to: CGPoint(x: x1, y: y1))
                     path.addLine(to: CGPoint(x: x2, y: y2))
                     path.lineWidth = thickness
                     path.lineCapStyle = .round
-                    stroke(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
+                    stroke(path: path, paint: pendingPaint ?? (parts.count > 6 ? cssColor(parts[6]).map(Paint.solid) : nil) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
