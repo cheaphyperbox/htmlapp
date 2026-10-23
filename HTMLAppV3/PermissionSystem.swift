@@ -42,7 +42,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .clipboard: return "Clipboard"
         case .files: return "Choose Files"
         case .externalApps: return "Open Other Apps"
-        case .displayControl: return "Keep Screen Awake"
+        case .displayControl: return "Screen & Display Controls"
         }
     }
 
@@ -63,7 +63,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .clipboard: return "Allows this HTML app to read and write text on your device clipboard."
         case .files: return "Allows this HTML app to open the iOS file picker for files you explicitly select."
         case .externalApps: return "Allows this HTML app to open links or other installed apps outside HTMLApp."
-        case .displayControl: return "Allows this HTML app to keep your screen from sleeping."
+        case .displayControl: return "Allows this HTML app to keep the display awake or adjust brightness when you request it."
         }
     }
 
