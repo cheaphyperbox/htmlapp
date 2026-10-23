@@ -20,6 +20,10 @@ enum ForgeStyleReferenceStore {
         }
     }
 
+    static func clear(for appID: String) {
+        try? FileManager.default.removeItem(at: url(for: appID))
+    }
+
     static func load(for appID: String) -> ForgeStyleConcept? {
         guard let data = try? Data(contentsOf: url(for: appID)) else { return nil }
         return try? JSONDecoder().decode(ForgeStyleConcept.self, from: data)
