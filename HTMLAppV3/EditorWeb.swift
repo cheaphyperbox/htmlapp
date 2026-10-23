@@ -88,9 +88,23 @@ struct EditorView: View {
 
 struct WebRunner: View {
     let app: SavedHTMLApp
+
+    static func shouldHideStatusBar(in html: String) -> Bool {
+        // The tag may use single/double quotes and either attribute order.
+        // Match only within the meta tag, not in JS strings or app content.
+        guard let regex = try? NSRegularExpression(pattern: "<meta\\\\b[^>]*>", options: .caseInsensitive) else { return false }
+        let ns = html as NSString
+        for match in regex.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+            let value = ns.substring(with: match.range)
+            let name = value.range(of: #"(?i)\\bname\\s*=\\s*['"]htmlapp-status-bar['"]"#, options: .regularExpression) != nil
+            let hidden = value.range(of: #"(?i)\\bcontent\\s*=\\s*['"]hidden['"]"#, options: .regularExpression) != nil
+            if name && hidden { return true }
+        }
+        return false
+    }
     var body: some View {
         HTMLWebView(html: app.html, appID: app.id)
-            .statusBarHidden(app.html.localizedCaseInsensitiveContains("name=\"htmlapp-status-bar\" content=\"hidden\"") || app.html.localizedCaseInsensitiveContains("name=\'htmlapp-status-bar\' content=\'hidden\'"))
+            .statusBarHidden(Self.shouldHideStatusBar(in: app.html))
             .htmlAppFirstUseToasts()
             .onAppear { HTMLAppFirstUseTips.show("open") }
     }
