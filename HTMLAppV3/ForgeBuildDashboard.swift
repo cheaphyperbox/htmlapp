@@ -172,6 +172,19 @@ struct ForgeBuildDashboard: View {
     var body: some View {
         ScrollView {
         VStack(alignment: .leading, spacing: 13) {
+            if active {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Keep HTMLApp open and your screen on", systemImage: "exclamationmark.triangle.fill")
+                        .font(.title3.weight(.bold))
+                    Text("Leaving HTMLApp for too long or locking your device can interrupt the AI request and make generation or edits fail. Return to HTMLApp to continue.")
+                        .font(.subheadline.weight(.medium))
+                }
+                .foregroundStyle(.white)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.red, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 14)
+            }
             HStack(alignment: .top, spacing: 12) {
                 if active { ProgressView().controlSize(.regular) }
                 VStack(alignment: .leading, spacing: 7) {
