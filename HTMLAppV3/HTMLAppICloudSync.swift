@@ -14,7 +14,7 @@ actor HTMLAppICloudSync {
     private let fm = FileManager.default
     private var syncing = false
 
-    struct Incoming {
+    struct Incoming: Sendable {
         var apps: [SavedHTMLApp] = []
         var data: [String: [String: String]] = [:]
     }
@@ -40,7 +40,7 @@ actor HTMLAppICloudSync {
 
     private func write(_ data: Data, at url: URL) {
         var error: NSError?
-        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &error) { coordinated in
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: [], error: &error) { coordinated in
             try? data.write(to: coordinated, options: .atomic)
         }
     }
