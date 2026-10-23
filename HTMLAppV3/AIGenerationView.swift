@@ -60,11 +60,13 @@ struct AIGenerationView: View {
     let existingApp: SavedHTMLApp?
 
     let shortcutGenerationNonce: Int
+    let shortcutSource: String
 
     init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "",
-         shortcutGenerationNonce: Int = 0) {
+         shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri") {
         self.existingApp = existingApp
         self.shortcutGenerationNonce = shortcutGenerationNonce
+        self.shortcutSource = shortcutSource
         _prompt = State(initialValue: initialPrompt)
     }
 
@@ -389,7 +391,7 @@ struct AIGenerationView: View {
                     Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
                     Text(stylePickerEnabled
-                         ? "Forge will show a few designs you can tap and try before making the app."
+                         ? "Start Generating makes three mockups first. Choose one to build the full app."
                          : "Forge will start building right away.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -402,7 +404,7 @@ struct AIGenerationView: View {
                         generateApp()
                     }
                 } label: {
-                    Label(existingApp == nil && stylePickerEnabled ? "Choose a Look" : "Make My App", systemImage: "sparkles")
+                    Label(existingApp == nil && stylePickerEnabled ? "Start Generating" : "Make My App", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -906,8 +908,13 @@ struct AIGenerationView: View {
         recoverableDraft = nil
         activeShortcutPrompt = idea
         prompt = idea
-        // Siri explicitly requested generation: do not stop at mockup selection.
-        generateApp()
+        // Voice widget follows in-app mockup selection; Siri retains
+        // its previously requested direct-build behavior.
+        if shortcutSource == "widget" && stylePickerEnabled {
+            exploreStyleOptions()
+        } else {
+            generateApp()
+        }
     }
 
     private func generateApp() {
