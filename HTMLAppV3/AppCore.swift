@@ -24,6 +24,11 @@ struct HTMLAppMain: App {
             Task { await HTMLAppForgeActivityService.recoverStale() }
         }
         HTMLAppBackgroundCoordinator.shared.register()
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            HTMLAppForgeContinuedProcessing.register()
+        }
+        #endif
         HTMLAppBackgroundCoordinator.shared.schedule()
     }
 
