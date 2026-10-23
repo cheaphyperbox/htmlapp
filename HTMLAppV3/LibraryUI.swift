@@ -95,6 +95,7 @@ struct LibraryView: View {
         .fullScreenCover(isPresented: $showVoiceCreate, onDismiss: {
             // Only hand off after the capture cover is fully dismissed.
             // This removes the fragile fixed 350ms transition delay.
+            UserDefaults.standard.removeObject(forKey: "htmlapp.voiceCreatePending")
             guard let idea = pendingVoicePrompt else { return }
             pendingVoicePrompt = nil
             shortcutPrompt = idea
@@ -105,6 +106,7 @@ struct LibraryView: View {
         }) {
             HTMLAppVoiceCreateView(cancel: {
                 pendingVoicePrompt = nil
+                UserDefaults.standard.removeObject(forKey: "htmlapp.voiceCreatePending")
                 showVoiceCreate = false
             }, generate: { idea in
                 guard pendingVoicePrompt == nil, !idea.isEmpty else { return }
@@ -167,7 +169,7 @@ struct LibraryView: View {
         }
         .onAppear {
             handlePendingShortcut()
-            if !checkedInterruptedForgeThisLaunch {
+            if !checkedInterruptedForgeThisLaunch && !UserDefaults.standard.bool(forKey: "htmlapp.voiceCreatePending") {
                 checkedInterruptedForgeThisLaunch = true
                 if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate {
                     if checkpoint.existingAppID == nil {
