@@ -246,24 +246,14 @@ RESEARCH RESULTS
         }
     }
 
+    // Legacy prompt overrides must never replace the maintained built-in
+    // agent contract. The old UserDefaults key is ignored and cleaned up.
     static var systemPrompt: String {
-        get {
-            let stored = UserDefaults.standard.string(forKey: systemPromptKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return stored.isEmpty ? defaultSystemPrompt : stored
-        }
-        set {
-            let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if value.isEmpty || value == defaultSystemPrompt {
-                UserDefaults.standard.removeObject(forKey: systemPromptKey)
-            } else {
-                UserDefaults.standard.set(value, forKey: systemPromptKey)
-            }
-        }
+        get { defaultSystemPrompt }
+        set { UserDefaults.standard.removeObject(forKey: systemPromptKey) }
     }
 
-    static var isUsingCustomSystemPrompt: Bool {
-        UserDefaults.standard.string(forKey: systemPromptKey)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-    }
+    static var isUsingCustomSystemPrompt: Bool { false }
 
     static func restoreDefaultSystemPrompt() {
         UserDefaults.standard.removeObject(forKey: systemPromptKey)
