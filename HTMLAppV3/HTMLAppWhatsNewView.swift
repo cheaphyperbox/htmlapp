@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.9"
-    static let compiledBuild = "16"
+    static let compiledVersion = "1.6.10"
+    static let compiledBuild = "17"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,14 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.10" { return [
+            Entry(id: "native-tabs-mounted", title: "More reliable native tabs", description: "The iOS tab controller waits for its HTMLApp window before mounting, with native UIKit tab destinations.", symbol: "square.split.2x1", tint: .blue),
+            Entry(id: "tips", title: "Helpful first-time tips", description: "Short, dismissible hints explain Library, AI generation, gestures, sharing and editing after onboarding.", symbol: "lightbulb", tint: .orange),
+            Entry(id: "phone-sketches", title: "Phone-sized look previews", description: "Generated style mockups appear inside a larger rounded phone-style preview.", symbol: "iphone", tint: .purple),
+            Entry(id: "simplified-menu", title: "Organized app actions", description: "Long-press actions are grouped into Everyday Usage, Sharing, Developer and Delete.", symbol: "square.grid.2x2", tint: .indigo),
+            Entry(id: "faster-opening", title: "Faster first app opening", description: "HTMLApp primes its WebKit process while the Library is open.", symbol: "bolt", tint: .green),
+            Entry(id: "creating-app", title: "Clearer activity labels", description: "The AI activity chart now says Creating App instead of App Tests.", symbol: "chart.bar", tint: .green)
+        ] }
         if version == "1.6.9" { return [
             Entry(id: "mockup-fast", title: "Faster style previews", description: "Mockups generate in parallel using compact HTML instead of fragile JSON, with shorter first-pass requests.", symbol: "sparkles.rectangle.stack", tint: .purple),
             Entry(id: "mockup-recovery", title: "Reliable mockup choices", description: "Each style retries independently and shows a distinct local preview if the AI provider fails.", symbol: "square.grid.3x1", tint: .blue),
