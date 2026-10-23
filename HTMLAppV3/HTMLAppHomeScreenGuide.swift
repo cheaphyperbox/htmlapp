@@ -19,8 +19,9 @@ struct HTMLAppProfileSafariView: UIViewControllerRepresentable {
 struct HTMLAppHomeScreenGuide: View {
     let appName: String
     let profileURL: URL?
+    var openInSafari: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
-    @State private var showInAppSafari = true
+
 
     var body: some View {
         NavigationStack {
@@ -34,37 +35,15 @@ struct HTMLAppHomeScreenGuide: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    if let profileURL {
-                        if showInAppSafari {
-                            HTMLAppProfileSafariView(url: profileURL)
-                                .frame(height: 260)
-                                .clipShape(RoundedRectangle(cornerRadius: 18))
-                                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.secondary.opacity(0.25)))
-                                .accessibilityLabel("In-app Safari showing the Home Screen profile")
-                        } else {
-                            Label("In-app Safari is hidden.", systemImage: "safari")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(18)
-                        }
-
-                        Button {
-                            UIApplication.shared.open(profileURL, options: [:])
-                        } label: {
-                            Label("Open Profile in Safari", systemImage: "safari")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-
-                        Text("If the in-app preview doesn't offer a profile download, tap Open Profile in Safari. Only the full Safari app may be able to register it with iOS Settings.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Button(showInAppSafari ? "Hide Safari Preview" : "Show Safari Preview") {
-                            showInAppSafari.toggle()
-                        }
-                        .font(.subheadline)
+                    Button {
+                        if let openInSafari { openInSafari() }
+                        else if let profileURL { UIApplication.shared.open(profileURL) }
+                    } label: {
+                        Label("Continue to Safari", systemImage: "safari")
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
 
                     step(1, "Download the profile",
                          "Look for the profile download prompt in Safari and choose Allow. If there's no prompt, use the Open Profile in Safari button above.")
