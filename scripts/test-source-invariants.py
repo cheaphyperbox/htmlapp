@@ -90,7 +90,15 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.7"' in release
+assert 'compiledVersion = "1.6.8"' in release
+assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
+assert "currentPaint" in source("HTMLAppV3/AIIconRenderer.swift")
+assert "UITabBarController()" in source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+assert "Never include a fake phone status bar" in source("HTMLAppV3/ForgeStylePreview.swift")
+assert "Keep HTMLApp open and your screen on" in source("HTMLAppV3/ForgeBuildDashboard.swift")
+assert "testAIGeneratedFillCommandsRenderLocally" in source("HTMLAppWidgetTests/WidgetTests.swift")
+assert 'Button { store.installWebClip(for: app) }' in source("HTMLAppV3/LibraryUI.swift")
+
 assert "transcribingOffline" in source("HTMLAppV3/ForgeDictation.swift")
 assert "pendingFloatingVoiceFeedback" in source("HTMLAppV3/AIGenerationView.swift")
 assert 'ForEach(0..<3, id: \\.self)' in source("HTMLAppV3/AIGenerationView.swift")
