@@ -483,6 +483,7 @@ struct HTMLAppWidgetsBundle: WidgetBundle {
         // always displays the latest snapshot and needs no manual app selection.
         if #available(iOS 16.2, *) {
             HTMLAppLiveActivityWidget()
+            HTMLAppForgeActivityWidget()
         }
     }
 }
