@@ -192,7 +192,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "widgets.remove":
             removeWidget(id: id, args: args)
         case "widgets.reload":
-            WidgetCenter.shared.reloadAllTimelines()
+            HTMLAppWidgetReloadCoordinator.request()
             resolve(id, value: ["reloaded": true])
         case "background.configure":
             configureBackgroundJob(id: id, args: args)
@@ -419,7 +419,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 _ = try HTMLAppWidgetStore.saveVerified(definition)
                 // A failed probe must not misrepresent a successfully persisted publication.
                 _ = try? HTMLAppWidgetDiagnostics.begin()
-                WidgetCenter.shared.reloadAllTimelines()
+                HTMLAppWidgetReloadCoordinator.request()
             } catch {
                 let failure = (error as? HTMLAppWidgetStoreError) ?? HTMLAppWidgetRepository.failure("store_write_failed", error)
                 reject(id, code: failure.code, message: failure.message)
@@ -459,7 +459,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: failure.code, message: failure.message)
             return
         }
-        WidgetCenter.shared.reloadAllTimelines()
+        HTMLAppWidgetReloadCoordinator.request()
         resolve(id, value: ["removed": true, "all": widgetID == nil])
     }
 
