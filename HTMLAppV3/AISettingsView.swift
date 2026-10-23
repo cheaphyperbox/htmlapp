@@ -60,57 +60,25 @@ struct AIConfigurationSettingsView: View {
                 }
             }
 
-            Section {
-                DisclosureGroup("AI Specialists") {
-                NavigationLink {
-                    AIRoleProviderSettingsView(role: .planner)
-                } label: { Label("Thinking", systemImage: "brain") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .planner) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
-                NavigationLink {
-                    AIRoleProviderSettingsView(role: .research)
-                } label: { Label("Research", systemImage: "globe") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .research) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
-                NavigationLink {
-                    AIRoleProviderSettingsView(role: .coder)
-                } label: { Label("Programming", systemImage: "chevron.left.forwardslash.chevron.right") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .coder) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
-                NavigationLink {
-                    AIRoleProviderSettingsView(role: .ui)
-                } label: { Label("UI Redesigning", systemImage: "paintpalette") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .ui) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
-                if developerMode {
-                    NavigationLink {
-                        AIRoleProviderSettingsView(role: .icon)
-                    } label: { Label("Icon Artist", systemImage: "app.badge") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .icon) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
-                    NavigationLink {
-                        AIRoleProviderSettingsView(role: .verifier)
-                    } label: { Label("QA Reviewer", systemImage: "checkmark.shield") .overlay(alignment: .trailing) {
-                    if AISettingsStore.usesSpecialistProvider(for: .verifier) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                    }
-                } }
+            Section("AI Specialists") {
+                NavigationLink { AIRoleProviderSettingsView(role: .planner) } label: {
+                    specialistLabel("Thinking", symbol: "brain", role: .planner)
                 }
+                NavigationLink { AIRoleProviderSettingsView(role: .research) } label: {
+                    specialistLabel("Research", symbol: "globe", role: .research)
                 }
-            } header: {
-                Text("AI Specialists")
-            } footer: {
-                Text("Each stage can use a different provider, model and API key. Leave a specialist on Shared Provider to reuse your main connection. UI redesign is optional.")
+                NavigationLink { AIRoleProviderSettingsView(role: .coder) } label: {
+                    specialistLabel("Programming", symbol: "chevron.left.forwardslash.chevron.right", role: .coder)
+                }
+                NavigationLink { AIRoleProviderSettingsView(role: .ui) } label: {
+                    specialistLabel("UI Redesigning", symbol: "paintpalette", role: .ui)
+                }
+                NavigationLink { AIRoleProviderSettingsView(role: .icon) } label: {
+                    specialistLabel("Icon Artist", symbol: "app.badge", role: .icon)
+                }
+                NavigationLink { AIRoleProviderSettingsView(role: .verifier) } label: {
+                    specialistLabel("QA Reviewer", symbol: "checkmark.shield", role: .verifier)
+                }
             }
 
             if developerMode {
@@ -189,6 +157,18 @@ struct AIConfigurationSettingsView: View {
             if !apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !coderModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 save(showConfirmation: false)
+            }
+        }
+    }
+
+    private func specialistLabel(_ name: String, symbol: String, role: AIModelRole) -> some View {
+        HStack {
+            Label(name, systemImage: symbol)
+            Spacer()
+            if AISettingsStore.usesSpecialistProvider(for: role) {
+                Circle().fill(Color.green)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel("Specialist enabled")
             }
         }
     }
