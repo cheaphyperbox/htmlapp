@@ -43,6 +43,7 @@ struct LibraryView: View {
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
     @State private var shortcutSource = "siri"
+    @State private var pendingVoicePrompt: String?
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var editHistoryApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
@@ -91,18 +92,24 @@ struct LibraryView: View {
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
-        .fullScreenCover(isPresented: $showVoiceCreate) {
+        .fullScreenCover(isPresented: $showVoiceCreate, onDismiss: {
+            // Only hand off after the capture cover is fully dismissed.
+            // This removes the fragile fixed 350ms transition delay.
+            guard let idea = pendingVoicePrompt else { return }
+            pendingVoicePrompt = nil
+            shortcutPrompt = idea
+            shortcutSource = "widget"
+            UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
+            shortcutGenerationNonce += 1
+            showGenerator = true
+        }) {
             HTMLAppVoiceCreateView(cancel: {
+                pendingVoicePrompt = nil
                 showVoiceCreate = false
             }, generate: { idea in
-                shortcutPrompt = idea
-                shortcutSource = "widget"
-                UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
-                shortcutGenerationNonce += 1
+                guard pendingVoicePrompt == nil, !idea.isEmpty else { return }
+                pendingVoicePrompt = idea
                 showVoiceCreate = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    showGenerator = true
-                }
             })
         }
         .fullScreenCover(isPresented: $showGenerator) {
