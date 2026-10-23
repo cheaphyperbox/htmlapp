@@ -1074,6 +1074,7 @@ struct AIGenerationView: View {
         AIDebugTraceStore.shared.begin(originalPrompt: "EDIT REQUEST\n" + change, config: AISettingsStore.configuration)
         AIDebugTraceStore.shared.append("EDIT INPUT", "Prior HTML bytes: \(session.streamedHTML.utf8.count); existing app: \(existingApp?.name ?? "new draft")")
         session.isWorking = true
+        let activityJob = forgeActivityJobID
         generationTask = Task {
             defer {
                 let outcome = Task.isCancelled ? "Stopped" :
