@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.5"
-    static let compiledBuild = "12"
+    static let compiledVersion = "1.6.6"
+    static let compiledBuild = "13"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,14 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.6" { return [
+            Entry(id: "voice-looks", title: "Lock Screen voice mockups", description: "Voice-created apps respect mockup selection; three looks now generate concurrently.", symbol: "paintpalette", tint: .purple),
+            Entry(id: "match-style", title: "Keep the chosen look", description: "Forge uses selected mockup HTML and CSS tokens as its visual reference, even during later AI edits.", symbol: "checkmark.seal", tint: .blue),
+            Entry(id: "forge-activity", title: "Forge progress on Lock Screen", description: "A red Live Activity warns about background limitations and displays the active AI stage.", symbol: "exclamationmark.triangle.fill", tint: .red),
+            Entry(id: "widget-reloads", title: "Prompt widget refresh requests", description: "Widget publication and app-data changes request targeted WidgetKit reloads.", symbol: "arrow.clockwise", tint: .orange),
+            Entry(id: "stable-dictation", title: "Steadier microphone recording", description: "The create microphone stays in a fixed location during long presses and changing transcription.", symbol: "mic.fill", tint: .green),
+            Entry(id: "device-tools", title: "Discover more native tools", description: "Generated apps can query supported native APIs and request flashlight or brightness controls.", symbol: "iphone", tint: .blue)
+        ] }
         if version == "1.6.5" { return [
             Entry(id: "sketch-progress", title: "Live style sketch previews", description: "See each sketch appear blurred while the remaining directions generate.", symbol: "paintpalette", tint: .purple),
             Entry(id: "fix-reopen", title: "Library starts in the Library", description: "Stale AI edit checkpoints no longer auto-open an existing saved app.", symbol: "books.vertical", tint: .blue),
