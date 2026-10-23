@@ -94,6 +94,8 @@ targets:
         NSCameraUsageDescription: HTML apps can use the camera only after you allow that saved app and approve the iOS permission.
         NSMicrophoneUsageDescription: Dictate app ideas in Forge or allow a saved HTMLApp to use the microphone.
         NSLocationWhenInUseUsageDescription: HTML apps can request your location only after you allow that saved app and approve the iOS permission.
+        NSBluetoothAlwaysUsageDescription: HTMLApps may discover nearby Bluetooth Low Energy devices only after permission and your request to scan.
+        NSBluetoothPeripheralUsageDescription: HTMLApps may discover nearby Bluetooth Low Energy devices only after permission and your request to scan.
         NSMotionUsageDescription: HTML apps can use motion, orientation, and compass-related sensor events only after you allow that saved app.
         NSPhotoLibraryUsageDescription: HTML apps may request access to photos you select.
         NSPhotoLibraryAddUsageDescription: HTML apps can save media to Photos only after you allow that saved app and approve the iOS permission.
