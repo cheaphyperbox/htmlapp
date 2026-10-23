@@ -32,14 +32,20 @@ final class ForgeDictation: ObservableObject {
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
         guard generation == attempt, !Task.isCancelled else { return }
-        guard permission == .authorized else { status = "Enable Speech Recognition for HTMLApp in Settings, or type your idea."; return }
+        guard permission == .authorized else {
+            status = "Apple Speech is unavailable. Switching to Whisper Offline."
+            await startOffline()
+            return
+        }
         let microphone = await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
         }
         guard generation == attempt, !Task.isCancelled else { return }
         guard microphone else { status = "Enable Microphone for HTMLApp in Settings, or type your idea."; return }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable else {
-            status = "Speech recognition is unavailable for this language or connection. You can still type."; return
+            status = "Apple Speech is unavailable. Switching to Whisper Offline."
+            await startOffline()
+            return
         }
         stop()
         do {
@@ -76,7 +82,11 @@ final class ForgeDictation: ObservableObject {
                 guard !Task.isCancelled else { return }
                 self?.stop()
             }
-        } catch { stop(); status = error.localizedDescription }
+        } catch {
+            stop()
+            status = "Apple Speech failed; trying Whisper Offline."
+            await startOffline()
+        }
     }
     private func startOffline() async {
         requestingPermission = true
