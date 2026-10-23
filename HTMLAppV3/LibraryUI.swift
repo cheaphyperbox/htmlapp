@@ -38,6 +38,7 @@ struct LibraryView: View {
     @State private var showAllApps = false
     @State private var showAddOptions = false
     @State private var showGenerator = false
+    @State private var checkedInterruptedForgeThisLaunch = false
     @State private var showVoiceCreate = false
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
@@ -155,7 +156,16 @@ struct LibraryView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppVoiceCreateRequested"))) { _ in
             showVoiceCreate = true
         }
-        .onAppear(perform: handlePendingShortcut)
+        .onAppear {
+            handlePendingShortcut()
+            if !checkedInterruptedForgeThisLaunch {
+                checkedInterruptedForgeThisLaunch = true
+                if let checkpoint = ForgeDraftCheckpointStore.load(),
+                   checkpoint.existingAppID == nil, !showGenerator, !showVoiceCreate {
+                    showGenerator = true
+                }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handlePendingShortcut()
         }
