@@ -78,7 +78,7 @@ enum ForgeStylePreviewService {
         Keep HTML below 9000 characters. Include <html>, <head> and </html>.
         Use a deliberately distinct direction numbered \(index + 1) of 3:
         1 = quiet editorial, 2 = playful vivid, 3 = utilitarian high-contrast.
-        Escape all quotes and newlines correctly. No Markdown fences.
+        Never include a fake phone status bar, 9:41 clock, notch, Dynamic Island, battery, signal indicators, iPhone frame or home indicator. The real iOS host provides its own chrome.\n        Escape all quotes and newlines correctly. No Markdown fences.
         """
         let user = "APP IDEA: \(String(request.prefix(2800)))\nFEEDBACK: \(String(feedback.prefix(900)))"
         let raw = try await AIProviderClient.complete(
