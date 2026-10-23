@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.8"
-    static let compiledBuild = "15"
+    static let compiledVersion = "1.6.9"
+    static let compiledBuild = "16"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.9" { return [
+            Entry(id: "mockup-fast", title: "Faster style previews", description: "Mockups generate in parallel using compact HTML instead of fragile JSON, with shorter first-pass requests.", symbol: "sparkles.rectangle.stack", tint: .purple),
+            Entry(id: "mockup-recovery", title: "Reliable mockup choices", description: "Each style retries independently and shows a distinct local preview if the AI provider fails.", symbol: "square.grid.3x1", tint: .blue),
+            Entry(id: "discard-close", title: "Discard and close", description: "Discarding an interrupted generation closes Create with AI instead of leaving the page open.", symbol: "xmark.circle", tint: .orange)
+        ] }
         if version == "1.6.8" { return [
             Entry(id: "icon-renderer", title: "Reliable AI icon rendering", description: "The icon renderer supports the AI's FILL directives and inherited colors instead of repeatedly falling back to a generic icon.", symbol: "paintpalette", tint: .purple),
             Entry(id: "glass-tabs", title: "Host-owned iOS tabs", description: "Native tab navigation now uses a UITabBarController so eligible iOS 26 devices can receive Apple's system tab appearance.", symbol: "square.split.2x1", tint: .blue),
