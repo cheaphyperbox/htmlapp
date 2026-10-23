@@ -817,7 +817,7 @@ final class AppStore: ObservableObject {
     }
 
     func delete(_ app: SavedHTMLApp) {
-        if HTMLAppICloudPreferences.enabled { HTMLAppICloudPreferences.markDeleted(app.id) }
+        HTMLAppICloudPreferences.markDeleted(app.id)
         FolderAppLinkStore.shared.removeAll(appID: app.id)
         apps.removeAll { $0.id == app.id }
         save()
