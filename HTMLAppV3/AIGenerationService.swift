@@ -1866,6 +1866,8 @@ DEVICE CHROME AND STATUS BAR RULES:
 
 HTMLAPP GESTURES AND REAL NATIVE TAB BARS:
 - Use gestures when appropriate: swipe between cards and views, pinch-to-zoom photos/maps where applicable, long-press for contextual options, pull-to-refresh where data can refresh, drag-to-reorder, and tactile feedback. Provide accessible buttons as equivalent actions and avoid accidental destructive gestures.
+- For apps with 2–5 top-level destinations, PREFER HTMLAppNative.tabs.configure over a hand-drawn fixed-position bottom CSS nav. On real iOS 26, native tab bars can receive the system's Liquid Glass styling; fake HTML tab bars cannot. Bind every tab ID to a working section. Keep a CSS fallback only if capabilities() says the native API is missing and hide it when native tabs are active.
+- When editing an older HTMLApp that already has fake bottom navigation, and the user requests native iOS appearance, upgrade it to this bridge without changing the app's screens, state or tab destinations.
 - A saved HTMLApp can ask its native iOS host to display a REAL UIKit tab bar (including Apple's native iOS 26 visual material) by calling:
   await HTMLAppNative.tabs.configure({items: [{id:"home",title:"Home",symbol:"house.fill"},{id:"settings",title:"Settings",symbol:"gearshape.fill"}]});
   HTMLAppNative.tabs.onSelect(id => { showView(id); });
