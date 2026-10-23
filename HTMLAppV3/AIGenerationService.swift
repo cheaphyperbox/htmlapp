@@ -100,6 +100,7 @@ final class AIGenerationSession: ObservableObject {
     @Published var failedPhase: String?
 
     private var originalPrompt = ""
+    private var generationStartedAt = Date()
     private var lastResearch = ""
     private var editingExistingApp = false
     private var checkpointExistingAppID: String?
@@ -659,6 +660,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         editingExistingApp = false
         checkpointExistingAppID = nil
         originalPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        generationStartedAt = Date()
         persistCheckpoint()
     }
 
@@ -667,6 +669,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
         guard !originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ForgeDraftCheckpointStore.save(
             ForgeDraftCheckpoint(
+                startedAt: generationStartedAt,
                 savedAt: Date(),
                 originalPrompt: originalPrompt,
                 refinedBrief: refinedBrief,
@@ -684,6 +687,7 @@ Preserve all unrelated features, storage keys, APIs, navigation, data schemas, p
     func restore(checkpoint: ForgeDraftCheckpoint, existingIcon: Data? = nil) {
         checkpointExistingAppID = checkpoint.existingAppID
         editingExistingApp = checkpoint.existingAppID != nil
+        generationStartedAt = checkpoint.startedAt ?? checkpoint.savedAt
         originalPrompt = checkpoint.originalPrompt
         refinedBrief = checkpoint.refinedBrief
         lastResearch = checkpoint.research
