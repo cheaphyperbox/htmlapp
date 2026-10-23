@@ -26,7 +26,7 @@ struct HTMLAppWidgetEntry: TimelineEntry {
 enum HTMLAppWidgetTimeline {
     static func make(definition: HTMLAppWidgetDefinition) async -> Timeline<HTMLAppWidgetEntry> {
         // Providers are read-only. A slow network response must not revert shared publications.
-        let refreshed = await HTMLAppWidgetNetwork.refreshed(definition)
+        let refreshed = definition // Display committed App Group content immediately; never block on HTTPS.
         // Request shorter timelines for generated widgets. WidgetKit owns
         // actual background scheduling and may delay refreshes to save power.
         let interval = max(15, refreshed.refresh?.intervalMinutes ?? 30)
