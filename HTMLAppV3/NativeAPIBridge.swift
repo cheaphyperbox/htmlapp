@@ -11,6 +11,7 @@ import EventKit
 import LocalAuthentication
 import UniformTypeIdentifiers
 import AVFoundation
+import ActivityKit
 import Security
 import WidgetKit
 import SwiftUI
@@ -42,6 +43,67 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         switch method {
         case "device.info":
             deviceInfo(id: id)
+        case "capabilities.list":
+            resolve(id, value: [
+                "methods": [
+                    "device.info", "device.keepAwake", "device.brightness", "device.torch",
+                    "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
+                    "haptics.play", "share.present", "system.open", "externalApps.maps",
+                    "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
+                    "contacts.create", "photos.pick", "photos.save", "calendar.createEvent",
+                    "calendar.events", "calendar.updateEvent", "calendar.deleteEvent",
+                    "reminders.create", "reminders.list", "reminders.update", "reminders.delete",
+                    "notifications.schedule", "notifications.cancel", "biometrics.authenticate",
+                    "secureStorage.set", "secureStorage.get", "secureStorage.remove",
+                    "appStorage.get", "appStorage.set", "appStorage.remove", "appStorage.all",
+                    "appStorage.clear", "liveActivities.start", "liveActivities.update",
+                    "liveActivities.end", "liveActivities.list", "widgets.configure",
+                    "widgets.list", "widgets.remove", "widgets.reload", "background.configure",
+                    "background.list", "background.remove", "background.refreshNow",
+                    "speech.speak", "speech.stop"
+                ],
+                "permissions": HTMLPermission.allCases.map { $0.rawValue },
+                "torchAvailable": AVCaptureDevice.default(for: .video)?.hasTorch ?? false,
+                "liveActivitiesAvailable": {
+                    if #available(iOS 16.2, *) {
+                        return ActivityAuthorizationInfo().areActivitiesEnabled
+                    }
+                    return false
+                }()
+            ])
+        case "device.brightness":
+            withPermission(.displayControl, id: id) { [weak self] in
+                guard let self else { return }
+                if let level = args["level"] as? NSNumber {
+                    UIScreen.main.brightness = CGFloat(max(0, min(1, level.doubleValue)))
+                }
+                self.resolve(id, value: ["level": Double(UIScreen.main.brightness)])
+            }
+        case "device.torch":
+            withPermission(.camera, id: id) { [weak self] in
+                guard let self else { return }
+                Task {
+                    let status = AVCaptureDevice.authorizationStatus(for: .video)
+                    let permitted = status == .authorized ||
+                        (status == .notDetermined && (await AVCaptureDevice.requestAccess(for: .video)))
+                    guard permitted else {
+                        self.reject(id, code: "camera_denied", message: "Camera access must be allowed in iOS Settings.")
+                        return
+                    }
+                    guard let camera = AVCaptureDevice.default(for: .video), camera.hasTorch else {
+                        self.reject(id, code: "torch_unavailable", message: "There is no supported flashlight on this device.")
+                        return
+                    }
+                    do {
+                        try camera.lockForConfiguration()
+                        defer { camera.unlockForConfiguration() }
+                        camera.torchMode = (args["enabled"] as? Bool ?? false) ? .on : .off
+                        self.resolve(id, value: ["enabled": camera.isTorchActive])
+                    } catch {
+                        self.reject(id, code: "torch_failed", message: "Flashlight could not be configured.")
+                    }
+                }
+            }
         case "symbols.search":
             let query = (args["query"] as? String ?? "").lowercased()
             let names = HTMLAppSymbolCatalog.names.filter { query.isEmpty || $0.contains(query) }
@@ -1535,13 +1597,16 @@ enum HTMLNativeAPIScript {
 
       const api = {
         call,
+        capabilities: () => call('capabilities.list'),
         symbols: {
           search: (query = '') => call('symbols.search', { query: String(query) }),
           render: (name) => call('symbols.render', { name: String(name || '') })
         },
         device: {
           info: () => call('device.info'),
-          keepAwake: (enabled = true) => call('device.keepAwake', { enabled: !!enabled })
+          keepAwake: (enabled = true) => call('device.keepAwake', { enabled: !!enabled }),
+          brightness: (level) => call('device.brightness', level == null ? {} : { level: Number(level) }),
+          torch: (enabled = true) => call('device.torch', { enabled: !!enabled })
         },
         clipboard: {
           readText: () => call('clipboard.readText'),
@@ -1644,6 +1709,8 @@ enum HTMLNativeAPIScript {
         }
       };
 
+      window.HTMLApp = window.HTMLApp || {};
+      window.HTMLApp.capabilities = () => api.capabilities();
       Object.defineProperty(window, 'HTMLAppNative', {
         configurable: false,
         enumerable: true,
