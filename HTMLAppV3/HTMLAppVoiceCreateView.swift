@@ -8,6 +8,7 @@ struct HTMLAppVoiceCreateView: View {
     @StateObject private var dictation = ForgeDictation()
     @State private var spokenText = ""
     @State private var started = false
+    @State private var submitted = false
 
     var body: some View {
         VStack(spacing: 22) {
@@ -42,12 +43,16 @@ struct HTMLAppVoiceCreateView: View {
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
                 Button("Generate Now") {
+                    guard !submitted else { return }
+                    let idea = spokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !idea.isEmpty && !dictation.transcribingOffline else { return }
+                    submitted = true
                     dictation.stop()
-                    generate(spokenText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    generate(idea)
                 }
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity)
-                .disabled(spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(submitted || dictation.transcribingOffline || spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .controlSize(.large)
         }
@@ -58,7 +63,10 @@ struct HTMLAppVoiceCreateView: View {
             started = true
             Task { await dictation.start() }
         }
-        .onChange(of: dictation.transcript) { spokenText = $0 }
+        .onChange(of: dictation.transcript) { result in
+            guard !submitted else { return }
+            spokenText = result
+        }
         .onDisappear { dictation.stop() }
     }
 }
