@@ -1045,9 +1045,7 @@ struct AIGenerationView: View {
     private func generateApp() {
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         if demoMode {
-            session.beginDraft(prompt: prompt)
-            session.acceptExternalHTML(OnboardingView.calculatorDemoHTML)
-            session.phase = "Ready to review — practice calculator"
+            session.showTutorialExample(OnboardingView.calculatorDemoHTML)
             showingChange = true
             return
         }
