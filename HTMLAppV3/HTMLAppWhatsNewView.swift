@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.11"
-    static let compiledBuild = "18"
+    static let compiledVersion = "1.6.12"
+    static let compiledBuild = "19"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.12" { return [
+            Entry(id: "icloud-apps", title: "iCloud app syncing", description: "Opt in to mirroring your HTMLApp Library through iCloud Drive from Settings.", symbol: "icloud", tint: .blue),
+            Entry(id: "icloud-data", title: "Optional HTMLApp data syncing", description: "When iCloud app syncing is enabled, choose whether each app's portable saved data also syncs.", symbol: "externaldrive", tint: .purple)
+        ] }
         if version == "1.6.11" { return [
             Entry(id: "statusbar", title: "Choose the system status bar", description: "HTMLApps show the real status bar by default; immersive apps can request to hide it.", symbol: "iphone", tint: .blue),
             Entry(id: "default-prompt", title: "Simpler AI settings", description: "Forge always uses maintained built-in instructions instead of editable system prompts.", symbol: "wand.and.stars", tint: .purple),
