@@ -921,6 +921,7 @@ struct AIGenerationView: View {
                         let inside = x >= 0 && y >= 0 && x + side <= size.width && y + side <= size.height
                         if inside && !microphoneArmed {
                             microphoneArmed = true
+                            HTMLAppFirstUseTips.show("dragMic")
                             microphoneCapturing = true
                             promptDictationActive = false
                             dictationForEdit = false
