@@ -30,6 +30,8 @@ enum HTMLAppPortableDataStore {
             values.removeValue(forKey: key)
             persist(values, appID: appID)
         }
+        HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
+        HTMLAppWidgetReloadCoordinator.request()
     }
 
     static func all(appID: String) -> [String: String] {
@@ -37,7 +39,11 @@ enum HTMLAppPortableDataStore {
     }
 
     static func replace(appID: String, values: [String: String]) {
+        let removed = Set(all(appID: appID).keys).subtracting(values.keys)
         queue.sync { persist(values, appID: appID) }
+        for key in removed {
+            HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
+        }
         for (key, value) in values {
             HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: value)
         }
