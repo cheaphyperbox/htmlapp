@@ -143,6 +143,8 @@ struct LibraryView: View {
                         }
                     }
                 }
+                .htmlAppFirstUseToasts()
+                .onAppear { HTMLAppFirstUseTips.show("restore") }
                 .navigationTitle("AI Edit History")
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { editHistoryApp = nil }
@@ -158,6 +160,8 @@ struct LibraryView: View {
             NavigationStack {
                 NearbyAppTransferView(appIDs: route.appIDs)
                     .environmentObject(store)
+                    .htmlAppFirstUseToasts()
+                    .onAppear { HTMLAppFirstUseTips.show("nearby") }
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") { nearbyTransferRoute = nil }
