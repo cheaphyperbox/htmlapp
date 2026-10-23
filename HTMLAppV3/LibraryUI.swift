@@ -52,7 +52,6 @@ struct LibraryView: View {
     @State private var nearbyTransferRoute: NearbyTransferRoute?
     @State private var pendingImport: HTMLFileImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
-    @State private var profileApp: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
     @State private var refreshingID: String?
 
@@ -263,12 +262,6 @@ struct LibraryView: View {
             allowsMultipleSelection: false,
             onCompletion: importFile
         )
-        .sheet(item: $profileApp) { app in
-            HTMLAppHomeScreenGuide(appName: app.name, profileURL: nil) {
-                store.installWebClip(for: app)
-                profileApp = nil
-            }
-        }
         .confirmationDialog(
             "Delete \(pendingDelete?.name ?? "this app")?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -494,7 +487,7 @@ struct LibraryView: View {
         Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
         Divider()
         Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
-        Button { profileApp = app } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
+        Button { store.installWebClip(for: app) } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
         Divider()
         Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
         Button { store.exportHTML(app) } label: { Label("Export Raw Code", systemImage: "doc.text") }
