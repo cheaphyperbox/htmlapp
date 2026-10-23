@@ -1,6 +1,7 @@
 import Foundation
 
 enum HTMLAppPortableDataStore {
+    static let localDataChanged = Notification.Name("HTMLAppPortableDataChanged")
     private static let queue = DispatchQueue(label: "com.mekabrine.htmlapp.portable-data")
     private static let root: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -22,6 +23,7 @@ enum HTMLAppPortableDataStore {
         }
         HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: value)
         HTMLAppWidgetReloadCoordinator.request()
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
     }
 
     static func remove(appID: String, key: String) {
@@ -32,6 +34,7 @@ enum HTMLAppPortableDataStore {
         }
         HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
         HTMLAppWidgetReloadCoordinator.request()
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
     }
 
     static func all(appID: String) -> [String: String] {
