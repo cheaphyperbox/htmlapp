@@ -40,5 +40,20 @@ vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navig
   assert.equal(brightnessCall.args.level, 0.4);
   window.__htmlappNativeResolve(brightnessCall.id, true, { level: 0.4 });
   assert.equal((await brightnessPromise).level, 0.4);
+  const tabs = window.HTMLAppNative.tabs.configure([
+    {id:'home', title:'Home', symbol:'house.fill'},
+    {id:'settings', title:'Settings', symbol:'gearshape.fill'}
+  ]);
+  const configureCall = messages.shift();
+  assert.equal(configureCall.method, 'tabs.configure');
+  assert.equal(configureCall.args.items.length, 2);
+  window.__htmlappNativeResolve(configureCall.id, true, {enabled:true,count:2});
+  assert.equal((await tabs).enabled, true);
+  const ble = window.HTMLAppNative.bluetooth.scan(5);
+  const bleCall = messages.shift();
+  assert.equal(bleCall.method, 'bluetooth.scan');
+  assert.equal(bleCall.args.seconds, 5);
+  window.__htmlappNativeResolve(bleCall.id, true, {devices:[]});
+  assert.equal((await ble).devices.length, 0);
   console.log('Widget bridge: rejection code/message, visible diagnostics, and publication states passed.');
 })().catch(e=>{console.error(e);process.exitCode=1});
