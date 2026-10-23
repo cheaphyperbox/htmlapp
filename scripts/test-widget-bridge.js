@@ -21,5 +21,24 @@ vm.runInNewContext(source, {window,document,Map,Error,Date,Promise,console,navig
   window.__htmlappNativeResolve(messages.shift().id,true,{published:true,reloadRequested:true,extensionVerified:false});
   assert.equal((await published).extensionVerified,false);
   assert.equal(nodes.size,0);
+  const capabilityPromise = window.HTMLApp.capabilities();
+  const capabilityCall = messages.shift();
+  assert.equal(capabilityCall.method, 'capabilities.list');
+  window.__htmlappNativeResolve(capabilityCall.id, true, {
+    methods: ['device.torch','device.brightness'], permissions: ['camera','displayControl'], torchAvailable: true
+  });
+  assert.equal((await capabilityPromise).torchAvailable, true);
+  const torchPromise = window.HTMLAppNative.device.torch(true);
+  const torchCall = messages.shift();
+  assert.equal(torchCall.method, 'device.torch');
+  assert.equal(torchCall.args.enabled, true);
+  window.__htmlappNativeResolve(torchCall.id, true, { enabled: true });
+  assert.equal((await torchPromise).enabled, true);
+  const brightnessPromise = window.HTMLAppNative.device.brightness(0.4);
+  const brightnessCall = messages.shift();
+  assert.equal(brightnessCall.method, 'device.brightness');
+  assert.equal(brightnessCall.args.level, 0.4);
+  window.__htmlappNativeResolve(brightnessCall.id, true, { level: 0.4 });
+  assert.equal((await brightnessPromise).level, 0.4);
   console.log('Widget bridge: rejection code/message, visible diagnostics, and publication states passed.');
 })().catch(e=>{console.error(e);process.exitCode=1});
