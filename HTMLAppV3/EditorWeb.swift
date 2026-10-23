@@ -78,6 +78,7 @@ struct EditorView: View {
             case .edit(let app):
                 await store.update(app, html: html, summary: summary)
                 store.clearAIEditHistory(for: app)
+                ForgeStyleReferenceStore.clear(for: app.id)
             }
             saving = false
             dismiss()
