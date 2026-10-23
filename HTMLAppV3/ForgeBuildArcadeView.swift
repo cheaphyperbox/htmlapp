@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// A small offline tap-to-catch game. It uses no network or AI calls.
 /// Real Forge milestones change the falling shapes, colors, and bonus points,
@@ -21,7 +22,7 @@ struct ForgeBuildArcadeView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Label("Catch the blocks", systemImage: "hand.tap.fill")
+                Label("Tap falling shapes", systemImage: "hand.tap.fill")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text("Score \(score)")
@@ -31,6 +32,11 @@ struct ForgeBuildArcadeView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.orange)
                 }
+                Button { resetGame() } label: {
+                    Image(systemName: "arrow.clockwise").frame(width: 28, height: 28)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Restart game")
                 Button {
                     paused.toggle()
                     if !paused { resetGame() }
@@ -89,15 +95,16 @@ struct ForgeBuildArcadeView: View {
                                 guard !captured.contains(id),
                                       let block = piece(id: id, elapsed: now, size: proxy.size) else { continue }
                                 let touch = gesture.location
-                                if CGRect(x: block.x - 14, y: block.y - 14,
-                                          width: block.width + 24,
-                                          height: block.width + 24).contains(touch) {
+                                if CGRect(x: block.x - 22, y: block.y - 42,
+                                          width: block.width + 44,
+                                          height: block.width + 84).contains(touch) {
                                     captured.insert(id)
                                     combo = min(combo + 1, 9)
                                     // Tied to real milestones, with small idle targets.
                                     let sizeBonus = milestones.isEmpty ? 0 :
                                         min(4, max(0, milestones[min(id % milestones.count, milestones.count - 1)].bytes / 4000))
-                                    score += 10 + combo * 2 + sizeBonus
+                                    score += 10 + combo * 5 + sizeBonus
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     return
                                 }
                             }
@@ -112,7 +119,7 @@ struct ForgeBuildArcadeView: View {
 
             HStack(spacing: 5) {
                 Image(systemName: "hand.tap")
-                Text("Catch the quick falling pieces! New AI milestones unlock different shapes and bonus points.")
+                Text("Tap falling shapes to catch them. Chain catches for bonus points. Restart with ↻ or pause anytime.")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
