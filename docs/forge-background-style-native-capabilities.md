@@ -16,7 +16,7 @@ The chosen style is supplied as actual HTML and CSS token declarations, not
 just a description. A local check verifies that named CSS tokens survive
 generation and can request one focused repair; the generic UI overhaul
 is skipped to avoid visual drift. The style reference is saved separately
-under Application Support and reloaded for AI edits.
+under Application Support and reloaded for AI edits. Saving raw HTML code clears this design reference so later AI edits respect the hand-edited source.
 
 ## Background work and progress
 For iOS 16–25, HTMLApp requests the limited UIApplication background
