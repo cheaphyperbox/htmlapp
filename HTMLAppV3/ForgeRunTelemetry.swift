@@ -17,7 +17,7 @@ struct ForgeWorkSlice: Codable, Identifiable {
             case .script: return "JavaScript"
             case .polish: return "UI redesign"
             case .icon: return "App icon"
-            case .qa: return "App tests"
+            case .qa: return "Creating App"
             case .repair: return "AI repairs"
             case .other: return "Other work"
             }
