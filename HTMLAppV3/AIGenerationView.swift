@@ -23,6 +23,7 @@ struct AIGenerationView: View {
     @State private var promptDictationAwaitingResult = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
+    @State private var pendingFloatingVoiceFeedback: Bool?
     @ObservedObject private var debugTrace = AIDebugTraceStore.shared
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
@@ -219,6 +220,25 @@ struct AIGenerationView: View {
                 microphoneTranslation = .zero
                 dictation.stop()
                 persistDraftForBackground()
+            }
+        }
+        .onChange(of: dictation.transcribingOffline) { processing in
+            guard !processing, let forFeedback = pendingFloatingVoiceFeedback else { return }
+            pendingFloatingVoiceFeedback = nil
+            let words = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !words.isEmpty else {
+                microphoneEditNotice = "Whisper could not transcribe that recording."
+                if forFeedback { showingStyleFeedback = true } else { showingChange = true }
+                return
+            }
+            if forFeedback {
+                styleFeedback = words
+                styleFeedbackNotice = "Regenerating all looks from spoken feedback."
+                exploreStyleOptions()
+            } else {
+                changePrompt = words
+                showingChange = true
+                applyAIChange()
             }
         }
         .onChange(of: dictation.transcript) { value in
@@ -888,7 +908,7 @@ struct AIGenerationView: View {
                             microphoneArmed = false
                             microphoneRecordingTask?.cancel()
                             microphoneRecordingTask = nil
-                            dictation.stop()
+                            dictation.cancel()
                             dictation.transcript = ""
                             microphoneCapturing = false
                             dictationForEdit = false
@@ -908,6 +928,11 @@ struct AIGenerationView: View {
                         dictation.stop()
                         microphoneCapturing = false
                         dictationForEdit = false
+                        if inside && wasArmed && spoken.isEmpty && dictation.transcribingOffline {
+                            pendingFloatingVoiceFeedback = forStyleFeedback
+                            microphoneEditNotice = "Whisper is transcribing…"
+                            return
+                        }
                         if inside && wasArmed {
                             if forStyleFeedback {
                                 if !spoken.isEmpty {
