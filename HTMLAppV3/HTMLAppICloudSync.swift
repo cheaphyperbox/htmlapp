@@ -26,6 +26,7 @@ actor HTMLAppICloudSync {
 
     struct Incoming: Sendable {
         var apps: [SavedHTMLApp] = []
+        var folders: [LibraryFolder] = []
         var data: [String: [String: String]] = [:]
         var deleted: [String: Double] = [:]
     }
@@ -56,7 +57,7 @@ actor HTMLAppICloudSync {
         }
     }
 
-    func exchange(localApps: [SavedHTMLApp], localData: [String: [String: String]], localDeleted: [String: Double]) -> Incoming {
+    func exchange(localApps: [SavedHTMLApp], localFolders: [LibraryFolder], localData: [String: [String: String]], localDeleted: [String: Double]) -> Incoming {
         guard HTMLAppICloudPreferences.enabled, !syncing, let root = folder() else { return Incoming() }
         syncing = true
         defer { syncing = false }
@@ -83,6 +84,16 @@ actor HTMLAppICloudSync {
             }
         }
         incoming.deleted = deletions
+        let foldersURL = root.appendingPathComponent("folders.json")
+        let remoteFolders = read(foldersURL).flatMap {
+            try? JSONDecoder().decode([LibraryFolder].self, from: $0)
+        } ?? []
+        incoming.folders = remoteFolders.filter { cloud in
+            !localFolders.contains(where: { $0.id == cloud.id })
+        }
+        var mergedFolders = localFolders
+        mergedFolders.append(contentsOf: incoming.folders)
+        if let bytes = try? encoder.encode(mergedFolders) { write(bytes, at: foldersURL) }
         var remote: [String: SavedHTMLApp] = [:]
         for url in (try? fm.contentsOfDirectory(at: appRoot, includingPropertiesForKeys: nil)) ?? [] where url.pathExtension == "json" {
             if let bytes = read(url), let app = try? JSONDecoder().decode(SavedHTMLApp.self, from: bytes) {
