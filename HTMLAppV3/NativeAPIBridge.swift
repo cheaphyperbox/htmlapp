@@ -1706,10 +1706,23 @@ enum HTMLNativeAPIScript {
           scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) })
         },
         tabs: {
-          configure: (items) => call('tabs.configure', { items }),
+          configure: async (items) => {
+            const result = await call('tabs.configure', { items });
+            // Ensure the initial tab renders even if its native event was sent
+            // before the HTML app registered its onSelect callback.
+            if (result?.enabled && items?.length) {
+              window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {
+                detail: { id: items[0].id }
+              }));
+            }
+            return result;
+          },
           select: (id) => call('tabs.select', { id: String(id || '') }),
           remove: () => call('tabs.remove'),
-          onSelect: (handler) => window.addEventListener('htmlapp:native-tab-select', e => handler(e.detail.id))
+          onSelect: (handler) => {
+            if (typeof handler !== 'function') throw new TypeError('onSelect requires a function');
+            window.addEventListener('htmlapp:native-tab-select', e => handler(e.detail.id));
+          }
         },
         symbols: {
           search: (query = '') => call('symbols.search', { query: String(query) }),
