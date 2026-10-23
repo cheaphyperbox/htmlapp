@@ -16,6 +16,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
     private var controller: UITabBarController?
     private weak var parent: UIViewController?
     private var tabs: [Tab] = []
+    private var mountAttempts = 0
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -27,7 +28,16 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
         let tabsController: UITabBarController
         if let controller { tabsController = controller }
         else {
-            guard let root = webView.window?.rootViewController else { return }
+            guard let root = webView.window?.rootViewController else {
+                guard mountAttempts < 20 else { return }
+                mountAttempts += 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+                    guard let self, !self.tabs.isEmpty else { return }
+                    self.configure(tabs: self.tabs)
+                }
+                return
+            }
+            mountAttempts = 0
             let host = Self.topController(from: root)
             let created = UITabBarController()
             created.delegate = self
@@ -35,13 +45,13 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
             created.view.isOpaque = false
             // UIKit must own this bar to provide native iOS 26 Liquid Glass.
             host.addChild(created)
-            webView.addSubview(created.view)
+            host.view.addSubview(created.view)
             created.view.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
-                created.view.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
-                created.view.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
+                created.view.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+                created.view.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
                 created.view.heightAnchor.constraint(equalToConstant: 84),
-                created.view.bottomAnchor.constraint(equalTo: webView.bottomAnchor)
+                created.view.bottomAnchor.constraint(equalTo: host.view.safeAreaLayoutGuide.bottomAnchor)
             ])
             created.didMove(toParent: host)
             parent = host
@@ -56,6 +66,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
             return vc
         }
         tabsController.selectedIndex = 0
+        tabsController.tabBar.isHidden = false
         if let first = tabs.first { signal(first.id) }
     }
 
@@ -94,5 +105,6 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
         controller = nil
         parent = nil
         tabs = []
+        mountAttempts = 0
     }
 }
