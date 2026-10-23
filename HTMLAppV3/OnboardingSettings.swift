@@ -111,6 +111,10 @@ struct OnboardingView: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .sheet(isPresented: $showForgePractice) {
+            AIGenerationView(demoMode: true)
+                .interactiveDismissDisabled(false)
+        }
         .sheet(isPresented: $showAISetup) {
             NavigationStack {
                 AIConfigurationSettingsView()
