@@ -48,6 +48,21 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "The list only names installed bridge methods; hardware availability and user consent must be checked separately. No automatic permission grants."
         ),
         .init(
+            id: "motion.pedometer",
+            title: "Motion & Fitness walking steps",
+            keywords: ["steps", "pedometer", "walking", "fitness", "motion", "distance"],
+            purpose: "Get up to seven days of on-device step counts and available distance/floor totals.",
+            api: "await HTMLAppNative.motion.pedometer(days)",
+            example: """
+            const caps = await HTMLAppNative.capabilities();
+            if (caps.methods.includes("motion.pedometer")) {
+              const walking = await HTMLAppNative.motion.pedometer(1);
+              console.log(walking.steps, walking.distanceMeters);
+            }
+            """,
+            constraints: "Requires this saved HTMLApp's Motion & Steps permission, the iOS Motion & Fitness prompt and supported hardware. Return errors for denied access or missing pedometer. Never query without user intent."
+        ),
+        .init(
             id: "device.torch",
             title: "Permission-gated iPhone flashlight",
             keywords: ["flashlight", "torch", "light", "camera flash"],
