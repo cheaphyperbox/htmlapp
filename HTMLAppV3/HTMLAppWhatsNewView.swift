@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.6"
-    static let compiledBuild = "13"
+    static let compiledVersion = "1.6.7"
+    static let compiledBuild = "14"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,16 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.7" { return [
+            Entry(id: "floating-whisper", title: "Whisper for floating microphones", description: "Mockup feedback and AI edits wait for offline speech transcription before applying changes.", symbol: "waveform", tint: .blue),
+            Entry(id: "picker-buttons", title: "Visible mockup choices", description: "Three larger vertical design selectors stay visible on iPhone and iPad.", symbol: "square.grid.3x1.fill", tint: .purple),
+            Entry(id: "voice-prompt", title: "Reliable voice creation", description: "Lock Screen voice prompts survive dismissal and avoid duplicate creation jobs.", symbol: "mic.fill", tint: .blue),
+            Entry(id: "widgets", title: "More dependable widgets", description: "Widgets show cached shared data without waiting on network, and the Lock Screen voice icon stays visible.", symbol: "square.grid.2x2", tint: .orange),
+            Entry(id: "native-tabs", title: "Native iOS tabs and gestures", description: "Generated HTMLApps can request host-rendered UIKit tabs with JavaScript navigation events.", symbol: "square.split.2x1", tint: .indigo),
+            Entry(id: "nearby-bluetooth", title: "Bluetooth discovery", description: "Saved apps can request time-limited nearby BLE scans with permissions; sharing screens explain Wi-Fi and Bluetooth setup.", symbol: "antenna.radiowaves.left.and.right", tint: .blue),
+            Entry(id: "practice-forge", title: "Practice with real Forge screens", description: "The onboarding calculator uses the real creation and editing interface without making AI requests or saving changes.", symbol: "plus.forwardslash.minus", tint: .green),
+            Entry(id: "specialists", title: "Simpler AI settings", description: "Specialist AI choices replace the advanced model-names section; enabled specialists show green status dots.", symbol: "brain", tint: .green)
+        ] }
         if version == "1.6.6" { return [
             Entry(id: "voice-looks", title: "Lock Screen voice mockups", description: "Voice-created apps respect mockup selection; three looks now generate concurrently.", symbol: "paintpalette", tint: .purple),
             Entry(id: "match-style", title: "Keep the chosen look", description: "Forge uses selected mockup HTML and CSS tokens as its visual reference, even during later AI edits.", symbol: "checkmark.seal", tint: .blue),
