@@ -5,7 +5,7 @@ import WebKit
 /// Full floating/sidebar behavior on iOS 26 needs a UITabBarController host.
 /// Tabs are declarative: generated HTML controls content via the selection event.
 @MainActor
-final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
+final class HTMLAppNativeTabBar: NSObject, UITabBarControllerDelegate {
     struct Tab {
         let id: String
         let title: String
@@ -13,7 +13,8 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
     }
 
     private weak var webView: WKWebView?
-    private var bar: UITabBar?
+    private var controller: UITabBarController?
+    private weak var parent: UIViewController?
     private var tabs: [Tab] = []
 
     init(webView: WKWebView) {
@@ -23,40 +24,59 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
     func configure(tabs: [Tab]) {
         guard let webView else { return }
         self.tabs = tabs
-        let tabBar: UITabBar
-        if let bar { tabBar = bar }
+        let tabsController: UITabBarController
+        if let controller { tabsController = controller }
         else {
-            tabBar = UITabBar()
-            tabBar.delegate = self
-            tabBar.translatesAutoresizingMaskIntoConstraints = false
-            // Keep UIKit's own material/background for modern OS styling.
-            webView.addSubview(tabBar)
+            guard let root = webView.window?.rootViewController else { return }
+            let host = Self.topController(from: root)
+            let created = UITabBarController()
+            created.delegate = self
+            created.view.backgroundColor = .clear
+            created.view.isOpaque = false
+            // UIKit must own this bar to provide native iOS 26 Liquid Glass.
+            host.addChild(created)
+            webView.addSubview(created.view)
+            created.view.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
-                tabBar.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
-                tabBar.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
-                tabBar.bottomAnchor.constraint(equalTo: webView.safeAreaLayoutGuide.bottomAnchor)
+                created.view.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
+                created.view.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
+                created.view.topAnchor.constraint(equalTo: webView.topAnchor),
+                created.view.bottomAnchor.constraint(equalTo: webView.bottomAnchor)
             ])
-            self.bar = tabBar
+            created.didMove(toParent: host)
+            parent = host
+            controller = created
+            tabsController = created
         }
-        tabBar.items = tabs.enumerated().map { i, item in
-            UITabBarItem(title: item.title, image: UIImage(systemName: item.symbol), tag: i)
+        tabsController.viewControllers = tabs.map { item in
+            let vc = UIViewController()
+            vc.view.backgroundColor = .clear
+            vc.view.isUserInteractionEnabled = false
+            vc.tabBarItem = UITabBarItem(title: item.title, image: UIImage(systemName: item.symbol), tag: 0)
+            return vc
         }
-        tabBar.selectedItem = tabBar.items?.first
-        webView.scrollView.contentInset.bottom = max(webView.scrollView.contentInset.bottom, tabBar.intrinsicContentSize.height)
-        if let selected = tabs.first { signal(selected.id) }
+        tabsController.selectedIndex = 0
+        if let first = tabs.first { signal(first.id) }
     }
 
     func select(id: String) -> Bool {
-        guard let i = tabs.firstIndex(where: { $0.id == id }),
-              let item = bar?.items?[i] else { return false }
-        bar?.selectedItem = item
+        guard let index = tabs.firstIndex(where: { $0.id == id }), let controller else { return false }
+        controller.selectedIndex = index
         signal(id)
         return true
     }
 
-    func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-        guard tabs.indices.contains(item.tag) else { return }
-        signal(tabs[item.tag].id)
+    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+        let index = tabBarController.selectedIndex
+        if tabs.indices.contains(index) { signal(tabs[index].id) }
+    }
+
+    private static func topController(from root: UIViewController) -> UIViewController {
+        if let presented = root.presentedViewController { return topController(from: presented) }
+        if let navigation = root as? UINavigationController {
+            return topController(from: navigation.visibleViewController ?? navigation)
+        }
+        return root
     }
 
     private func signal(_ id: String) {
@@ -66,13 +86,13 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
     }
 
     func remove() {
-        bar?.removeFromSuperview()
-        bar = nil
+        if let controller {
+            controller.willMove(toParent: nil)
+            controller.view.removeFromSuperview()
+            controller.removeFromParent()
+        }
+        controller = nil
+        parent = nil
         tabs = []
-        webView?.scrollView.contentInset.bottom = 0
-    }
-
-    deinit {
-        // The owned UIKit subview is removed when its WKWebView is destroyed.
     }
 }
