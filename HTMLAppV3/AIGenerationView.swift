@@ -222,7 +222,10 @@ struct AIGenerationView: View {
             guard !microphoneCapturing else { return }
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged }
-            else if promptDictationAwaitingResult && !promptMicHeld { prompt = merged }
+            else if promptDictationAwaitingResult && !promptMicHeld {
+                prompt = merged
+                if !value.isEmpty { promptDictationAwaitingResult = false }
+            }
         }
         .onChange(of: session.refinedBrief) { brief in
             if !brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -444,6 +447,7 @@ struct AIGenerationView: View {
     private func startPromptRecording() {
         guard !dictation.recording && !dictation.requestingPermission else { return }
         promptMicHeld = true
+        promptDictationAwaitingResult = false
         dictationForEdit = false
         promptDictationActive = true
         promptDictationAwaitingResult = true
