@@ -181,6 +181,7 @@ struct AIGenerationView: View {
             if let existingApp, !didLoadExisting {
                 didLoadExisting = true
                 session.load(existing: existingApp)
+                selectedStyle = ForgeStyleReferenceStore.load(for: existingApp.id)
             }
             if recoverableDraft == nil,
                let draft = ForgeDraftCheckpointStore.load(),
@@ -978,7 +979,22 @@ struct AIGenerationView: View {
             )
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            await runOptionalUIPolish(originalPrompt: designBrief)
+            if let chosen = selectedStyle {
+                let missing = chosen.visualTokenDeclarations.filter {
+                    !session.streamedHTML.localizedCaseInsensitiveContains($0)
+                }
+                if !missing.isEmpty && !Task.isCancelled {
+                    AIDebugTraceStore.shared.append("MOCKUP FIDELITY",
+                        "Missing \(missing.count) CSS tokens. One focused repair requested.")
+                    await session.revise(
+                        change: "Restore the selected mockup's CSS variables and visual styling without changing working app behavior. Missing tokens: " + missing.prefix(8).joined(separator: "; "),
+                        styleInstruction: chosen.buildInstruction
+                    )
+                }
+                // Avoid the optional generic UI-overhaul pass restyling the chosen mockup.
+            } else {
+                await runOptionalUIPolish(originalPrompt: designBrief)
+            }
             if session.errorMessage == nil && !Task.isCancelled {
                 await HTMLAppForgeCompletionFeedback.announce(edit: false)
             }
@@ -1021,7 +1037,8 @@ Requested edit:
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this edit does not require public-web research; the internal device API catalog remains available.")
             }
             guard !Task.isCancelled else { return }
-            await session.revise(change: change, researchReport: webReport)
+            await session.revise(change: change, researchReport: webReport,
+                                styleInstruction: selectedStyle?.buildInstruction)
             guard session.errorMessage == nil else {
                 lastFailedChange = change
                 return
@@ -1029,7 +1046,7 @@ Requested edit:
             lastFailedChange = nil
             changePrompt = ""
             showingChange = true
-            if session.wantsUIPolish {
+            if session.wantsUIPolish && selectedStyle == nil {
                 await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
             } else {
                 uiPolishNotice = "This was a focused edit; no additional UI redesign was needed."
@@ -1081,12 +1098,14 @@ Requested edit:
                 if let icon = session.renderedIconData {
                     store.setGeneratedIcon(icon, for: existingApp)
                 }
+                if let selectedStyle { ForgeStyleReferenceStore.save(selectedStyle, for: existingApp.id) }
                 store.notice = "Saved AI changes to \(existingApp.name)."
             } else {
                 let beforeIDs = Set(store.apps.map(\.id))
                 await store.add(html: html, summary: session.description)
                 if let added = store.apps.first(where: { !beforeIDs.contains($0.id) }) {
                     workTracker.associateDraft(with: added.id)
+                    if let selectedStyle { ForgeStyleReferenceStore.save(selectedStyle, for: added.id) }
                 }
             }
             AIDebugTraceStore.shared.finish(outcome: "Saved")
