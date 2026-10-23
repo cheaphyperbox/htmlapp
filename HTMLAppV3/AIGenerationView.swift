@@ -88,6 +88,7 @@ struct AIGenerationView: View {
                     studioView
                 }
             }
+            .htmlAppFirstUseToasts()
             .navigationTitle(existingApp == nil ? "Generate" : "Edit with AI")
             .alert("Practice only — not a real AI edit", isPresented: $showPracticeEditNotice) {
                 Button("Continue Practicing", role: .cancel) {}
@@ -318,6 +319,7 @@ struct AIGenerationView: View {
             }
         }
         .onChange(of: session.phase) { phase in
+            if phase.localizedCaseInsensitiveContains("overhaul") || phase.localizedCaseInsensitiveContains("polish") { HTMLAppFirstUseTips.show("polish") }
             #if compiler(>=6.2)
             if #available(iOS 26.0, *) {
                 HTMLAppForgeContinuedProcessing.update(phase: phase)
@@ -544,7 +546,13 @@ struct AIGenerationView: View {
                     if !styleOptions.isEmpty {
                         HStack(spacing: 8) {
                             ForgeStyleSketchView(html: styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].previewHTML)
-                                .id(styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].name)
+                                .id(styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].id)
+                                .clipShape(RoundedRectangle(cornerRadius: 34))
+                                .overlay(RoundedRectangle(cornerRadius: 34).strokeBorder(.primary.opacity(0.24), lineWidth: 5))
+                                .padding(7)
+                                .background(Color.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 42))
+                                .padding(.leading, 4)
+                                .padding(.vertical, 8)
                                 .blur(radius: exploringStyles ? 26 : 0)
                                 .overlay {
                                     if exploringStyles {
@@ -601,10 +609,6 @@ struct AIGenerationView: View {
                         }
                         Spacer()
                     }
-                    if exploringStyles {
-                        Button("Skip and build directly") { skipStyleSelection() }
-                            .buttonStyle(.bordered)
-                    }
                 }
 
                 if !exploringStyles && styleFailure == nil && !styleOptions.isEmpty {
@@ -644,20 +648,10 @@ struct AIGenerationView: View {
                             }
                             .buttonStyle(.borderedProminent)
                         }
-                        Button {
-                            showingStyleFeedback = true
-                        } label: {
-                            Label("Give feedback on all looks", systemImage: "text.bubble")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
                         if let styleFeedbackNotice {
                             Text(styleFeedbackNotice)
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        Button("Skip and make app now") { skipStyleSelection() }
-                            .font(.caption)
-                            .frame(maxWidth: .infinity)
                     }
                     .padding(14)
                     .frame(maxWidth: min(500, geometry.size.width - 24))
@@ -690,6 +684,7 @@ struct AIGenerationView: View {
     }
 
     private func exploreStyleOptions() {
+        HTMLAppFirstUseTips.show("firstAI")
         let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !idea.isEmpty, !exploringStyles else { return }
         generationTask?.cancel()
@@ -733,6 +728,7 @@ struct AIGenerationView: View {
             }
             if Task.isCancelled { return }
             exploringStyles = false
+            if !styleOptions.isEmpty { HTMLAppFirstUseTips.show("mockups") }
             if styleOptions.isEmpty {
                 styleFailure = errors.first ?? "No previews could be generated."
             }
@@ -1061,6 +1057,7 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        HTMLAppFirstUseTips.show("generation")
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         if demoMode {
             milestones.reset()
