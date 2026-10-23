@@ -90,7 +90,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.12"' in release
+assert 'compiledVersion = "1.6.13"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -147,4 +147,14 @@ assert 'com.apple.developer.ubiquity-container-identifiers' in source("HTMLApp/H
 settings_source = source("HTMLAppV3/AISettingsView.swift")
 assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
+styles = source("HTMLAppV3/ForgeStylePreview.swift")
+assert '"Map First"' in styles and '"Action First"' in styles and '"List First"' in styles
+assert 'private static func offlinePreview' in styles
+assert 'No fake iPhone frame' in styles
+assert 'YOUR NEAREST STOP' in styles
+assert 'Craving' in styles
+assert 'ROUTES / NEARBY' in styles
+assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
+assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
+assert 'coreWorkflowWarnings(prompt:' in source("HTMLAppV3/AIGenerationService.swift")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
