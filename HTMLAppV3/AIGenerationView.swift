@@ -550,20 +550,28 @@ struct AIGenerationView: View {
                                 }
                                 .allowsHitTesting(!exploringStyles)
                             VStack(spacing: 10) {
-                                ForEach(styleOptions) { option in
+                                ForEach(0..<3, id: \.self) { slot in
+                                    let available = styleOptions.firstIndex(where: { $0.id == slot })
                                     Button {
-                                        selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == option.id }) ?? 0
+                                        if let available { selectedStyleIndex = available }
                                     } label: {
-                                        Text("Look \(option.id + 1)")
-                                            .font(.caption.bold())
-                                            .frame(width: 75, height: 44)
-                                            .foregroundStyle(.primary)
-                                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                                        HStack(spacing: 3) {
+                                            Text("Look \(slot + 1)")
+                                            if available == nil {
+                                                Image(systemName: "hourglass").font(.caption2)
+                                            }
+                                        }
+                                        .font(.caption.bold())
+                                        .frame(width: 76, height: 44)
+                                        .foregroundStyle(available == nil ? .secondary : .primary)
+                                        .background(
+                                            available == selectedStyleIndex ? Color.accentColor.opacity(0.24) : Color(.secondarySystemBackground),
+                                            in: RoundedRectangle(cornerRadius: 12)
+                                        )
                                     }
-                                    .accessibilityLabel("View mockup \(option.id + 1)")
-                                        .buttonStyle(.bordered)
-                                        .tint(option.id == styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].id ? .accentColor : .secondary)
-                                        .disabled(exploringStyles)
+                                    .buttonStyle(.plain)
+                                    .disabled(available == nil || exploringStyles)
+                                    .accessibilityLabel("View mockup \(slot + 1)")
                                 }
                             }
                             .frame(width: 84)
