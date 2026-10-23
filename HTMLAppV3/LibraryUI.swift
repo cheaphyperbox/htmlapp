@@ -161,12 +161,10 @@ struct LibraryView: View {
             if !checkedInterruptedForgeThisLaunch {
                 checkedInterruptedForgeThisLaunch = true
                 if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate {
-                    if let id = checkpoint.existingAppID {
-                        // Never create or overwrite a saved app during recovery.
-                        if let saved = store.apps.first(where: { $0.id == id }) {
-                            aiEditorApp = saved
-                        }
-                    } else {
+                    if checkpoint.existingAppID == nil {
+                        // Never auto-open an already saved app just because a
+                        // stale edit draft exists. Its history remains available
+                        // explicitly from the Library's Edit with AI action.
                         showGenerator = true
                     }
                 }
