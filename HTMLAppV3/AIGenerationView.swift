@@ -45,6 +45,7 @@ struct AIGenerationView: View {
     @State private var showRunHistory = false
     @State private var recoverableDraft: ForgeDraftCheckpoint?
     @State private var showDraftRecovery = false
+    @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     @State private var lastFailedChange: String?
     @State private var handledShortcutNonce = 0
     @State private var activeShortcutPrompt = ""
@@ -135,7 +136,7 @@ struct AIGenerationView: View {
                 Text(session.errorMessage ?? "")
             }
             .confirmationDialog("Resume Forge draft?", isPresented: $showDraftRecovery, titleVisibility: .visible) {
-                Button("Resume Draft") { resumeRecoveredDraft() }
+                Button("Continue Generation") { continueRecoveredDraft() }
                 Button("Discard Draft", role: .destructive) {
                     ForgeDraftCheckpointStore.clear()
                     recoverableDraft = nil
@@ -143,7 +144,7 @@ struct AIGenerationView: View {
                 Button("Not Now", role: .cancel) {}
             } message: {
                 if let draft = recoverableDraft {
-                    Text("A local draft from \(draft.savedAt.formatted(date: .abbreviated, time: .shortened)) is available. Resuming restores the saved preview and plan; it does not restart AI work automatically.")
+                    Text("Interrupted during \(draft.phase). Generation had run for \(Self.durationText(draft.savedAt.timeIntervalSince(draft.startedAt ?? draft.savedAt))). Continue will restore the checkpoint and restart the interrupted AI request using your original prompt; the provider may charge again.")
                 }
             }
             .sheet(isPresented: $showRunHistory) {
@@ -194,7 +195,12 @@ struct AIGenerationView: View {
             acceptShortcutRequest(nonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? activeShortcutPrompt)
         }
         .interactiveDismissDisabled(true)
-        .onDisappear { generationTask?.cancel(); microphoneRecordingTask?.cancel(); dictation.stop() }
+        .onDisappear {
+            microphoneRecordingTask?.cancel(); dictation.stop()
+            // Do not cancel the generation merely because the view disappears.
+            // Keep a checkpoint and allow the finite iOS background grace period.
+            session.persistCheckpoint()
+        }
         .onChange(of: scenePhase) { value in
             if value != .active {
                 microphoneRecordingTask?.cancel()
@@ -944,6 +950,11 @@ struct AIGenerationView: View {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
                 workTracker.finish(outcome: outcome)
+                if backgroundTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                    backgroundTaskID = .invalid
+                }
+                session.persistCheckpoint()
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let webReport: String
@@ -1110,6 +1121,28 @@ Requested edit:
         generateApp()
     }
 
+    private static func durationText(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total >= 3600 { return "\(total / 3600)h \((total % 3600) / 60)m \(total % 60)s" }
+        return "\(total / 60)m \(total % 60)s"
+    }
+
+    private func continueRecoveredDraft() {
+        guard let draft = recoverableDraft else { return }
+        resumeRecoveredDraft()
+        if draft.existingAppID == nil {
+            // A provider's old streaming connection cannot be resumed after
+            // process death. Reissue the original prompt rather than
+            // inventing missing bytes or silently saving an incomplete app.
+            session.clearCheckpoint()
+            prompt = draft.originalPrompt
+            generateApp()
+        } else {
+            // Keep the unsaved edited source and let the user submit an edit.
+            showingChange = true
+        }
+    }
+
     private func resumeRecoveredDraft() {
         guard let draft = recoverableDraft else { return }
         session.restore(checkpoint: draft, existingIcon: existingApp?.favicon)
@@ -1119,17 +1152,18 @@ Requested edit:
     }
 
     private func persistDraftForBackground() {
-        var taskID = UIBackgroundTaskIdentifier.invalid
-        taskID = UIApplication.shared.beginBackgroundTask(withName: "Save Forge Draft") {
-            if taskID != .invalid {
-                UIApplication.shared.endBackgroundTask(taskID)
-                taskID = .invalid
+        session.persistCheckpoint()
+        guard session.isWorking, backgroundTaskID == .invalid else { return }
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Forge Generation") {
+            session.persistCheckpoint()
+            generationTask?.cancel()
+            if backgroundTaskID != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                backgroundTaskID = .invalid
             }
         }
-        session.persistCheckpoint()
-        if taskID != .invalid {
-            UIApplication.shared.endBackgroundTask(taskID)
-            taskID = .invalid
+        if backgroundTaskID == .invalid {
+            session.persistCheckpoint()
         }
     }
 
