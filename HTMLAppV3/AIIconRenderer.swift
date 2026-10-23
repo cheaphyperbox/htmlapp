@@ -131,7 +131,7 @@ enum AIIconRenderer {
                     drewForeground = true
 
                 case "TRIANGLE":
-                    guard parts.count >= 6,
+                    guard parts.count >= 7,
                           let x1 = number(parts[1]), let y1 = number(parts[2]),
                           let x2 = number(parts[3]), let y2 = number(parts[4]),
                           let x3 = number(parts[5]), let y3 = number(parts[6]) else { continue }
@@ -146,7 +146,7 @@ enum AIIconRenderer {
                     drewForeground = true
 
                 case "LINE":
-                    guard parts.count >= 7,
+                    guard parts.count >= 6,
                           let x1 = number(parts[1]), let y1 = number(parts[2]),
                           let x2 = number(parts[3]), let y2 = number(parts[4]),
                           let thickness = number(parts[5]), thickness > 0 else { continue }
