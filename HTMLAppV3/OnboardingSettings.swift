@@ -8,6 +8,8 @@ struct OnboardingView: View {
     @State private var showForgePractice = false
     @State private var showMenuExample = false
     @AppStorage("htmlapp.dictationEngine") private var dictationEngine = "apple"
+    @AppStorage("htmlapp.icloud.syncApps") private var iCloudSyncApps = false
+    @AppStorage("htmlapp.icloud.syncData") private var iCloudSyncData = false
     @StateObject private var dictationTest = ForgeDictation()
     @State private var dictationTestPressed = false
 
@@ -485,6 +487,27 @@ struct SettingsView: View {
                 } footer: {
                     Text("Whisper is free and requires no API key. First use downloads an on-device model; allow microphone access and storage space.")
                 }
+                Section {
+                    Toggle("Sync HTMLApps with iCloud", isOn: $iCloudSyncApps)
+                        .onChange(of: iCloudSyncApps) { enabled in
+                            if enabled { store.requestICloudSync() }
+                        }
+                    if iCloudSyncApps {
+                        Toggle("Sync HTMLApp Data", isOn: $iCloudSyncData)
+                            .onChange(of: iCloudSyncData) { _ in store.requestICloudSync() }
+                        Text("Sync app code and details across devices signed into the same iCloud account. Data syncing includes each HTMLApp's portable saved data, but not permissions or credentials.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Sync Now") { store.requestICloudSync() }
+                    } else {
+                        Text("iCloud syncing is off. Apps and data stay on this device.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Label("iCloud Sync", systemImage: "icloud")
+                } footer: {
+                    Text("Requires iCloud Drive and an iCloud-enabled signing profile. Turning this off keeps existing local and cloud copies.")
+                }
+
                 Section("Home View") {
                     Picker("Layout", selection: $libraryLayout) {
                         Label("List", systemImage: "list.bullet").tag("list")
