@@ -97,6 +97,7 @@ struct AIGenerationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        if demoMode { generationTask?.cancel(); dismiss(); return }
                         if exploringStyles || !styleOptions.isEmpty || styleFailure != nil || session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
@@ -216,6 +217,7 @@ struct AIGenerationView: View {
             generationTask?.cancel()
         }
         .onDisappear {
+            if demoMode { generationTask?.cancel() }
             microphoneRecordingTask?.cancel(); dictation.stop()
             // Do not cancel the generation merely because the view disappears.
             // Keep a checkpoint and allow the finite iOS background grace period.
