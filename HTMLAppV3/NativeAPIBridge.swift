@@ -573,6 +573,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         if appID != "PREVIEW" {
             do {
                 _ = try HTMLAppWidgetStore.saveVerified(definition)
+                if let bindings = definition.dataBindings {
+                    for storageKey in Set(bindings.values) {
+                        let latest = HTMLAppPortableDataStore.get(appID: appID, key: storageKey)
+                        HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: storageKey, value: latest)
+                    }
+                }
                 // A failed probe must not misrepresent a successfully persisted publication.
                 _ = try? HTMLAppWidgetDiagnostics.begin()
                 HTMLAppWidgetReloadCoordinator.request()
