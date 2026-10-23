@@ -86,6 +86,7 @@ struct LibraryView: View {
         // Present from the navigation container, not the root page. This keeps
         // dialogs/sheets active while a nested folder destination is on screen.
         .htmlAppFirstUseToasts()
+        .task { HTMLAppWebWarmup.prime() }
         .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
         .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
         .sheet(item: $websiteSourcesApp) { WebsiteSourcesView(app: $0).environmentObject(store) }
@@ -490,6 +491,7 @@ struct LibraryView: View {
             }
             Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
         }
+        .onAppear { HTMLAppFirstUseTips.show("context") }
         Menu("Sharing", systemImage: "square.and.arrow.up") {
             Button {
                 HTMLAppFirstUseTips.show("nearby")
