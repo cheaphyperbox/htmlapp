@@ -20,6 +20,7 @@ enum HTMLAppPortableDataStore {
             values[key] = value
             persist(values, appID: appID)
         }
+        HTMLAppWidgetReloadCoordinator.request()
     }
 
     static func remove(appID: String, key: String) {
@@ -36,10 +37,12 @@ enum HTMLAppPortableDataStore {
 
     static func replace(appID: String, values: [String: String]) {
         queue.sync { persist(values, appID: appID) }
+        HTMLAppWidgetReloadCoordinator.request()
     }
 
     static func clear(appID: String) {
         queue.sync { try? FileManager.default.removeItem(at: url(appID: appID)) }
+        HTMLAppWidgetReloadCoordinator.request()
     }
 
     private static func load(appID: String) -> [String: String] {
