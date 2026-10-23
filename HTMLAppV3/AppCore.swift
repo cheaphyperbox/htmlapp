@@ -164,7 +164,7 @@ struct WebsiteUpdateBanner: View {
     }
 }
 
-struct SavedHTMLApp: Identifiable, Codable, Hashable {
+struct SavedHTMLApp: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var name: String
     var summary: String
@@ -227,6 +227,41 @@ final class AppStore: ObservableObject {
                 validFolderIDs: Set(folders.map(\.id))
             )
         }
+    }
+
+    /// Pull remote changes without deleting local apps. iCloud absence never
+    /// clears or blocks the local Library.
+    func syncICloud() async {
+        guard HTMLAppICloudPreferences.enabled, !libraryLoadBlocked else { return }
+        let snapshot = apps
+        let portable = HTMLAppICloudPreferences.includeData
+            ? Dictionary(uniqueKeysWithValues: apps.map { ($0.id, HTMLAppPortableDataStore.all(appID: $0.id)) })
+            : [:]
+        let incoming = await HTMLAppICloudSync.shared.exchange(localApps: snapshot, localData: portable)
+        guard HTMLAppICloudPreferences.enabled, !libraryLoadBlocked else { return }
+        var changed = false
+        for cloud in incoming.apps {
+            if let index = apps.firstIndex(where: { $0.id == cloud.id }) {
+                if cloud.updatedAt > apps[index].updatedAt {
+                    apps[index] = cloud
+                    changed = true
+                }
+            } else {
+                apps.append(cloud)
+                changed = true
+            }
+        }
+        for (id, values) in incoming.data where HTMLAppICloudPreferences.includeData {
+            // No cross-app access: only the matching saved app owns its store.
+            guard apps.contains(where: { $0.id == id }) else { continue }
+            HTMLAppPortableDataStore.replace(appID: id, values: values)
+        }
+        if changed { save() }
+    }
+
+    func requestICloudSync() {
+        guard HTMLAppICloudPreferences.enabled else { return }
+        Task { await syncICloud() }
     }
 
     func prepareNewItemDestination(_ folderID: String?) {
@@ -1225,6 +1260,7 @@ final class AppStore: ObservableObject {
                 try previous.write(to: libraryBackupURL, options: .atomic)
             }
             try result.write(to: libraryURL, options: .atomic)
+            requestICloudSync()
         } catch {
             errorMessage = "The library couldn't be saved. Existing data and its backup were kept."
         }
