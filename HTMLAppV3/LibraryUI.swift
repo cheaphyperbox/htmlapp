@@ -481,7 +481,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
-        Menu("Everyday Usage", systemImage: "hand.tap") {
+        Menu {
             Button { store.launch(app) } label: { Label("Open App", systemImage: "play.fill") }
             Button { store.toggleFavorite(app) } label: {
                 Label(app.isFavorite == true ? "Remove Favorite" : "Favorite", systemImage: "star.fill")
@@ -490,9 +490,9 @@ struct LibraryView: View {
                 Label("Move To", systemImage: "folder")
             }
             Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
-        }
+        } label: { Label("Everyday Usage", systemImage: "hand.tap") }
         .onAppear { HTMLAppFirstUseTips.show("context") }
-        Menu("Sharing", systemImage: "square.and.arrow.up") {
+        Menu {
             Button {
                 HTMLAppFirstUseTips.show("nearby")
                 nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id])
@@ -502,8 +502,8 @@ struct LibraryView: View {
                 UIPasteboard.general.string = "htmlapp://open?id=\(app.id)"
                 HTMLAppFirstUseTips.show("copyLink", appName: app.name)
             } label: { Label("Copy Link to Open App", systemImage: "link") }
-        }
-        Menu("Developer", systemImage: "chevron.left.forwardslash.chevron.right") {
+        } label: { Label("Sharing", systemImage: "square.and.arrow.up") }
+        Menu {
             Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
             Button {
                 HTMLAppFirstUseTips.show("icon")
@@ -518,7 +518,7 @@ struct LibraryView: View {
             Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
             Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
             Text("Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))")
-        }
+        } label: { Label("Developer", systemImage: "chevron.left.forwardslash.chevron.right") }
         Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
     }
 
