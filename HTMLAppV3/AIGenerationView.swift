@@ -469,40 +469,51 @@ struct AIGenerationView: View {
                     .padding(12)
                     .background(.bar)
 
-                    if exploringStyles {
-                        Spacer()
-                        VStack(spacing: 15) {
-                            ProgressView().controlSize(.large)
-                            Text("Designing three directions").font(.headline)
-                            Text("Making small previews to compare their colors, layouts, and motion. Full app generation starts only after you choose.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 28)
-                            Button("Skip and build directly") { skipStyleSelection() }
-                                .buttonStyle(.bordered)
+                    if !styleOptions.isEmpty {
+                        HStack(spacing: 8) {
+                            ForgeStyleSketchView(html: styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].previewHTML)
+                                .id(styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].name)
+                                .blur(radius: exploringStyles ? 26 : 0)
+                                .overlay {
+                                    if exploringStyles {
+                                        VStack(spacing: 10) {
+                                            ProgressView()
+                                            Text("\(styleOptions.count) of 3 sketches prepared")
+                                                .font(.headline)
+                                        }
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .background(.thinMaterial.opacity(0.55))
+                                    }
+                                }
+                                .allowsHitTesting(!exploringStyles)
+                            VStack(spacing: 10) {
+                                ForEach(styleOptions) { option in
+                                    Button("\(option.id + 1)") { selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == option.id }) ?? 0 }
+                                        .buttonStyle(.bordered)
+                                        .tint(option.id == styleOptions[min(selectedStyleIndex, styleOptions.count - 1)].id ? .accentColor : .secondary)
+                                        .disabled(exploringStyles)
+                                }
+                            }
+                            .frame(width: 44)
                         }
+                    } else if exploringStyles {
+                        Spacer()
+                        ProgressView("Preparing first sketch…")
                         Spacer()
                     } else if let failure = styleFailure {
                         Spacer()
                         VStack(spacing: 16) {
                             Image(systemName: "paintpalette")
-                                .font(.largeTitle).foregroundStyle(.secondary)
                             Text("Style previews aren't available").font(.headline)
-                            Text(failure)
-                                .font(.subheadline).foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
+                            Text(failure).font(.subheadline).foregroundStyle(.secondary)
                             Button("Try previews again") { exploreStyleOptions() }
-                                .buttonStyle(.bordered)
                             Button("Build app directly") { skipStyleSelection() }
-                                .buttonStyle(.borderedProminent)
                         }
-                        .padding(24)
                         Spacer()
-                    } else if styleOptions.indices.contains(selectedStyleIndex) {
-                        ForgeStyleSketchView(html: styleOptions[selectedStyleIndex].previewHTML)
-                            .id(styleOptions[selectedStyleIndex].name + String(selectedStyleIndex))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    if exploringStyles {
+                        Button("Skip and build directly") { skipStyleSelection() }
+                            .buttonStyle(.bordered)
                     }
                 }
 
@@ -517,45 +528,6 @@ struct AIGenerationView: View {
                             Text("Try the preview above")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                        }
-                        HStack(spacing: 7) {
-                            ForEach(styleOptions) { option in
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.18)) {
-                                        selectedStyleIndex = option.id
-                                    }
-                                } label: {
-                                    VStack(spacing: 5) {
-                                        Text(option.name)
-                                            .font(.caption.weight(.semibold))
-                                            .lineLimit(2)
-                                            .minimumScaleFactor(0.8)
-                                        if option.id == selectedStyleIndex {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption)
-                                        } else {
-                                            Image(systemName: "circle")
-                                                .font(.caption)
-                                                .opacity(0.6)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 56)
-                                    .padding(.horizontal, 4)
-                                    .foregroundStyle(option.id == selectedStyleIndex ? Color.accentColor : Color.primary)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(option.id == selectedStyleIndex ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.08))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .strokeBorder(option.id == selectedStyleIndex ? Color.accentColor : Color.clear, lineWidth: 1.5)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Preview \(option.name)")
-                                .accessibilityAddTraits(option.id == selectedStyleIndex ? [.isSelected] : [])
-                            }
                         }
                         Text(styleOptions[selectedStyleIndex].summary)
                             .font(.caption)
@@ -637,18 +609,24 @@ struct AIGenerationView: View {
         styleFailure = nil
         selectedStyle = nil
         generationTask = Task {
-            do {
-                let choices = try await ForgeStylePreviewService.generate(for: idea, feedback: styleFeedback)
-                try Task.checkCancellation()
-                styleOptions = choices
+            var errors: [String] = []
+            for index in 0..<3 {
+                if Task.isCancelled { return }
+                do {
+                    let option = try await ForgeStylePreviewService.generateSingle(for: idea, feedback: styleFeedback, index: index)
+                    try Task.checkCancellation()
+                    styleOptions.append(option)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    errors.append(error.localizedDescription)
+                }
+            }
+            exploringStyles = false
+            if styleOptions.isEmpty {
+                styleFailure = errors.first ?? "No previews could be generated."
+            } else {
                 selectedStyleIndex = 0
-                exploringStyles = false
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                styleFailure = error.localizedDescription
-                exploringStyles = false
             }
         }
     }
