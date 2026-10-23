@@ -144,4 +144,7 @@ assert 'Toggle("Sync HTMLApp Data"' in source("HTMLAppV3/OnboardingSettings.swif
 assert 'actor HTMLAppICloudSync' in source("HTMLAppV3/HTMLAppICloudSync.swift")
 assert 'HTMLAppICloudPreferences.includeData' in source("HTMLAppV3/AppCore.swift")
 assert 'com.apple.developer.ubiquity-container-identifiers' in source("HTMLApp/HTMLApp.entitlements")
+settings_source = source("HTMLAppV3/AISettingsView.swift")
+assert "} // Developer Mode" in settings_source
+assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
