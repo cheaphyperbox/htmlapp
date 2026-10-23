@@ -451,6 +451,7 @@ struct AIGenerationView: View {
                 }
             }
         }
+        .scrollDisabled(promptMicHeld)
     }
 
 
