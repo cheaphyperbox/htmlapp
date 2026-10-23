@@ -90,7 +90,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.11"' in release
+assert 'compiledVersion = "1.6.12"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -138,4 +138,10 @@ assert 'DisclosureGroup("Built-in Forge system prompt")' not in source("HTMLAppV
 assert 'get { defaultSystemPrompt }' in source("HTMLAppV3/AIConfiguration.swift")
 assert 'systemSmall, systemMedium, and systemLarge' in ai
 assert 'accessoryCircular (square/circular compact widget)' in ai
+assert 'Toggle("Sync HTMLApps with iCloud"' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'if iCloudSyncApps {' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'Toggle("Sync HTMLApp Data"' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'actor HTMLAppICloudSync' in source("HTMLAppV3/HTMLAppICloudSync.swift")
+assert 'HTMLAppICloudPreferences.includeData' in source("HTMLAppV3/AppCore.swift")
+assert 'com.apple.developer.ubiquity-container-identifiers' in source("HTMLApp/HTMLApp.entitlements")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
