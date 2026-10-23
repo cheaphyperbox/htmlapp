@@ -42,6 +42,7 @@ struct LibraryView: View {
     @State private var showVoiceCreate = false
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
+    @State private var shortcutSource = "siri"
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var editHistoryApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
@@ -95,6 +96,7 @@ struct LibraryView: View {
                 showVoiceCreate = false
             }, generate: { idea in
                 shortcutPrompt = idea
+                shortcutSource = "widget"
                 UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
                 shortcutGenerationNonce += 1
                 showVoiceCreate = false
@@ -104,7 +106,7 @@ struct LibraryView: View {
             })
         }
         .fullScreenCover(isPresented: $showGenerator) {
-            AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce).environmentObject(store).interactiveDismissDisabled(true)
+            AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce, shortcutSource: shortcutSource).environmentObject(store).interactiveDismissDisabled(true)
         }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
@@ -335,6 +337,7 @@ struct LibraryView: View {
         if let idea = UserDefaults.standard.string(forKey: "htmlapp.shortcut.createPrompt") {
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.createPrompt")
             shortcutPrompt = idea
+            shortcutSource = "siri"
             UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
             shortcutGenerationNonce += 1
             showGenerator = true
