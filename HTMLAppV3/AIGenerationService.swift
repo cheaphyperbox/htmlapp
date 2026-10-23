@@ -415,7 +415,7 @@ final class AIGenerationSession: ObservableObject {
         isWorking = false
     }
 
-    func revise(change: String, researchReport: String = "") async {
+    func revise(change: String, researchReport: String = "", styleInstruction: String? = nil) async {
         guard !streamedHTML.trimmed.isEmpty else { return }
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
@@ -486,6 +486,8 @@ Current app:
 
 Requested change:
 \(improvedChange)
+
+\(styleInstruction ?? "")
 """
             let response = try await AIProviderClient.complete(
                 config: config,
