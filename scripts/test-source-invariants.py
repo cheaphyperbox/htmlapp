@@ -90,7 +90,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.10"' in release
+assert 'compiledVersion = "1.6.11"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -132,4 +132,10 @@ assert "AIGenerationView(demoMode: true)" in source("HTMLAppV3/OnboardingSetting
 assert 'if demoMode { showPracticeEditNotice = true; return }' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'Advanced model names' not in source("HTMLAppV3/AISettingsView.swift")
 assert 'AISettingsStore.usesSpecialistProvider' in source("HTMLAppV3/AISettingsView.swift")
+assert 'static func shouldHideStatusBar(in html: String)' in source("HTMLAppV3/EditorWeb.swift")
+assert 'statusBarHidden(Self.shouldHideStatusBar(in: app.html))' in source("HTMLAppV3/EditorWeb.swift")
+assert 'DisclosureGroup("Built-in Forge system prompt")' not in source("HTMLAppV3/AISettingsView.swift")
+assert 'get { defaultSystemPrompt }' in source("HTMLAppV3/AIConfiguration.swift")
+assert 'systemSmall, systemMedium, and systemLarge' in ai
+assert 'accessoryCircular (square/circular compact widget)' in ai
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
