@@ -245,10 +245,19 @@ final class AppStore: ObservableObject {
         let portable = HTMLAppICloudPreferences.includeData
             ? Dictionary(uniqueKeysWithValues: apps.map { ($0.id, HTMLAppPortableDataStore.all(appID: $0.id)) })
             : [:]
-        let incoming = await HTMLAppICloudSync.shared.exchange(localApps: snapshot, localData: portable)
+        let incoming = await HTMLAppICloudSync.shared.exchange(localApps: snapshot, localData: portable, localDeleted: HTMLAppICloudPreferences.deleted)
         guard HTMLAppICloudPreferences.enabled, !libraryLoadBlocked else { return }
         var changed = false
+        var deleted = HTMLAppICloudPreferences.deleted
+        for (id, time) in incoming.deleted {
+            deleted[id] = max(deleted[id] ?? 0, time)
+        }
+        HTMLAppICloudPreferences.deleted = deleted
+        let oldCount = apps.count
+        apps.removeAll { item in (deleted[item.id] ?? 0) > item.updatedAt.timeIntervalSince1970 }
+        if apps.count != oldCount { changed = true }
         for cloud in incoming.apps {
+            guard (deleted[cloud.id] ?? 0) <= cloud.updatedAt.timeIntervalSince1970 else { continue }
             if let index = apps.firstIndex(where: { $0.id == cloud.id }) {
                 if cloud.updatedAt > apps[index].updatedAt {
                     apps[index] = cloud
@@ -798,6 +807,7 @@ final class AppStore: ObservableObject {
     }
 
     func delete(_ app: SavedHTMLApp) {
+        if HTMLAppICloudPreferences.enabled { HTMLAppICloudPreferences.markDeleted(app.id) }
         FolderAppLinkStore.shared.removeAll(appID: app.id)
         apps.removeAll { $0.id == app.id }
         save()
