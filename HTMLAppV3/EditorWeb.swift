@@ -128,6 +128,7 @@ struct HTMLWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.processPool = HTMLAppWebWarmup.pool
         configuration.defaultWebpagePreferences.allowsContentJavaScript = UserDefaults.standard.object(forKey: "allowJavaScript") as? Bool ?? true
         configuration.defaultWebpagePreferences.preferredContentMode = .mobile
         configuration.mediaTypesRequiringUserActionForPlayback = []
@@ -173,6 +174,7 @@ struct HTMLWebView: UIViewRepresentable {
         controller.add(context.coordinator, name: "htmlappNetwork")
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        HTMLAppWebWarmup.release()
         context.coordinator.attach(webView, initialHTML: html)
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
