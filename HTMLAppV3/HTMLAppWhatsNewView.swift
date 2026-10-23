@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.7"
-    static let compiledBuild = "14"
+    static let compiledVersion = "1.6.8"
+    static let compiledBuild = "15"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,14 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.8" { return [
+            Entry(id: "icon-renderer", title: "Reliable AI icon rendering", description: "The icon renderer supports the AI's FILL directives and inherited colors instead of repeatedly falling back to a generic icon.", symbol: "paintpalette", tint: .purple),
+            Entry(id: "glass-tabs", title: "Host-owned iOS tabs", description: "Native tab navigation now uses a UITabBarController so eligible iOS 26 devices can receive Apple's system tab appearance.", symbol: "square.split.2x1", tint: .blue),
+            Entry(id: "clean-ui", title: "No fake phone chrome", description: "AI generation and style mockups avoid drawing fake status bars, notches and Dynamic Islands.", symbol: "iphone", tint: .indigo),
+            Entry(id: "install-guide", title: "Simpler Home Screen installation", description: "A dedicated instructions page replaces the Safari-or-export dialog.", symbol: "apps.iphone", tint: .green),
+            Entry(id: "forge-warning", title: "Generation safety reminder", description: "The creation dashboard warns you to keep HTMLApp open, and Forge's Live Activity shows a return reminder.", symbol: "exclamationmark.triangle", tint: .red),
+            Entry(id: "forge-arcade", title: "Easier generation mini-game", description: "Larger hit targets, streak bonuses, haptics and restart controls make the arcade easier to play.", symbol: "gamecontroller", tint: .orange)
+        ] }
         if version == "1.6.7" { return [
             Entry(id: "floating-whisper", title: "Whisper for floating microphones", description: "Mockup feedback and AI edits wait for offline speech transcription before applying changes.", symbol: "waveform", tint: .blue),
             Entry(id: "picker-buttons", title: "Visible mockup choices", description: "Three larger vertical design selectors stay visible on iPhone and iPad.", symbol: "square.grid.3x1.fill", tint: .purple),
