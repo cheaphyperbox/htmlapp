@@ -103,6 +103,7 @@ targets:
         NSRemindersUsageDescription: HTML apps can read and create reminders only after you allow that saved app and approve the iOS permission.
         NSRemindersFullAccessUsageDescription: HTML apps can read and create reminders only after you allow that saved app and approve the iOS permission.
         NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
         NSFaceIDUsageDescription: HTML apps can request Face ID only after you allow that saved app and start an authentication action.
         NSLocalNetworkUsageDescription: HTML apps can connect to devices and servers on your local network only after you allow that saved app and approve iOS Local Network access.
         NSAppTransportSecurity:
@@ -125,8 +126,10 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         BGTaskSchedulerPermittedIdentifiers:
           - com.mekabrine.htmlapp.refresh
+          - com.mekabrine.htmlapp.forge.*
         UIBackgroundModes:
           - fetch
+          - processing
     dependencies:
       - package: WhisperKit
       - target: HTMLAppWidgets
