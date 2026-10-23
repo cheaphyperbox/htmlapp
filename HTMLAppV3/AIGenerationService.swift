@@ -260,11 +260,19 @@ final class AIGenerationSession: ObservableObject {
                 phase = "Generating live preview"
             } else {
                 phase = "Designing the app"
+                // Plan the user's intent without inflating planning tokens with
+                // the full style mockup. Preserve the raw chosen HTML for CODING.
+                let visualReference: String
+                if let originalUserPrompt, prompt.hasPrefix(originalUserPrompt) {
+                    visualReference = String(prompt.dropFirst(originalUserPrompt.count))
+                } else {
+                    visualReference = ""
+                }
                 let planning = try await AIHTMLAgent.planPrompt(
-                    prompt,
+                    originalUserPrompt ?? prompt,
                     config: AISettingsStore.configuration(for: .planner)
                 )
-                improved = planning.brief
+                improved = planning.brief + visualReference
                 refinedBrief = improved
                 let plan = planning.research
 
