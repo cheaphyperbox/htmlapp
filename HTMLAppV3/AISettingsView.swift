@@ -138,6 +138,8 @@ struct AIConfigurationSettingsView: View {
                 )
             }
         }
+.htmlAppFirstUseToasts()
+        .onAppear { HTMLAppFirstUseTips.show("aiSettings") }
         .navigationTitle("AI & Creation")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
