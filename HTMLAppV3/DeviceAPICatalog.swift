@@ -48,6 +48,39 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "The list only names installed bridge methods; hardware availability and user consent must be checked separately. No automatic permission grants."
         ),
         .init(
+            id: "tabs.configure",
+            title: "Native UIKit Tab Bar with iOS 26 system appearance",
+            keywords: ["tab bar", "liquid glass", "tabs", "bottom navigation", "native navigation"],
+            purpose: "Let a saved HTMLApp request a genuine iOS tab bar while its HTML/JavaScript owns each destination screen.",
+            api: "HTMLAppNative.tabs.configure(items); HTMLAppNative.tabs.onSelect(handler); HTMLAppNative.tabs.select(id); HTMLAppNative.tabs.remove()",
+            example: """
+            const support = await HTMLAppNative.capabilities();
+            if (support.methods.includes("tabs.configure")) {
+              HTMLAppNative.tabs.onSelect(id => renderScreen(id));
+              await HTMLAppNative.tabs.configure([
+                {id:"home",title:"Home",symbol:"house.fill"},
+                {id:"settings",title:"Settings",symbol:"gearshape.fill"}
+              ]);
+            }
+            """,
+            constraints: "2-5 tabs with unique IDs, titles and catalog SF Symbols. Native system rendering and Liquid Glass on eligible iOS 26 devices are controlled by Apple. HTML must implement each view and a fallback navigation UI when the bridge is absent."
+        ),
+        .init(
+            id: "bluetooth.scan",
+            title: "Nearby Bluetooth Low Energy discovery",
+            keywords: ["bluetooth", "BLE", "peripheral", "nearby device", "scan"],
+            purpose: "Discover nearby advertising BLE devices only after an explicit user request.",
+            api: "await HTMLAppNative.bluetooth.scan(seconds)",
+            example: """
+            const support = await HTMLAppNative.capabilities();
+            if (support.methods.includes("bluetooth.scan")) {
+              const {devices} = await HTMLAppNative.bluetooth.scan(6);
+              console.log(devices);
+            }
+            """,
+            constraints: "Requires per-HTMLApp Bluetooth permission and iOS Bluetooth authorization. No Classic Bluetooth pairing, connection, or hidden background scans; only bounded 2–12 second foreground discovery."
+        ),
+        .init(
             id: "motion.pedometer",
             title: "Motion & Fitness walking steps",
             keywords: ["steps", "pedometer", "walking", "fitness", "motion", "distance"],
