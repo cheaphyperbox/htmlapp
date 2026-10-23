@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import WebKit
 
-struct ForgeStyleConcept: Identifiable, Equatable, Codable {
+struct ForgeStyleConcept: Identifiable, Equatable, Codable, Sendable {
     let id: Int
     let name: String
     let summary: String
