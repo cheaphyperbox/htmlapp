@@ -41,6 +41,9 @@ struct HTMLAppMain: App {
                         .environmentObject(store)
                         .ignoresSafeArea()
                         .interactiveDismissDisabled(true)
+                        .onChange(of: store.pendingSwitchApp?.id) { id in
+                            if id != nil { HTMLAppFirstUseTips.show("switch") }
+                        }
                         .alert("Switch HTML app?", isPresented: Binding(
                             get: { store.pendingSwitchApp != nil },
                             set: { if !$0 { store.pendingSwitchApp = nil } }
