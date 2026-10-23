@@ -156,6 +156,8 @@ struct AIGenerationView: View {
                 Button("Discard Draft", role: .destructive) {
                     ForgeDraftCheckpointStore.clear()
                     recoverableDraft = nil
+                    generationTask?.cancel()
+                    dismiss()
                 }
                 Button("Not Now", role: .cancel) {}
             } message: {
@@ -718,7 +720,11 @@ struct AIGenerationView: View {
                     if let option {
                         styleOptions.append(option)
                         styleOptions.sort { $0.id < $1.id }
-                        selectedStyleIndex = 0
+                        if let chosen = selectedStyle, styleOptions.contains(where: { $0.id == chosen.id }) {
+                            selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == chosen.id }) ?? 0
+                        } else {
+                            selectedStyleIndex = min(selectedStyleIndex, styleOptions.count - 1)
+                        }
                     } else if let failure { errors.append("Style \(index + 1): \(failure)") }
                     if debugTrace.isActive {
                         AIDebugTraceStore.shared.append("STYLE MOCKUP", "Completed slot \(index + 1) at \(String(format: "%.1f", Date().timeIntervalSince(started)))s.")
