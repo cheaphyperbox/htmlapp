@@ -441,7 +441,10 @@ struct AIGenerationView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if existingApp == nil {
+                if existingApp == nil && demoMode {
+                    Text("Practice mode: the actual Forge progress and editing screens are shown with a prebuilt calculator. No AI, mockup, or save request will occur.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if existingApp == nil {
                     Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
                     Text(stylePickerEnabled
@@ -1046,8 +1049,19 @@ struct AIGenerationView: View {
     private func generateApp() {
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         if demoMode {
-            session.showTutorialExample(OnboardingView.calculatorDemoHTML)
-            showingChange = true
+            milestones.reset()
+            session.isWorking = true
+            session.phase = "Reading your request"
+            generationTask = Task {
+                for stage in ["Designing the calculator", "Generating live preview",
+                              "Adding working buttons", "Running app checks"] {
+                    do { try await Task.sleep(nanoseconds: 1_100_000_000) }
+                    catch { session.isWorking = false; return }
+                    session.phase = stage
+                }
+                session.showTutorialExample(OnboardingView.calculatorDemoHTML)
+                showingChange = true
+            }
             return
         }
         startForgeActivity(edit: false)
