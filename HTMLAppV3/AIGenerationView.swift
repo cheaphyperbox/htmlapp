@@ -482,7 +482,7 @@ struct AIGenerationView: View {
                                                 .font(.headline)
                                         }
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        .background(.thinMaterial.opacity(0.55))
+                                        .background(.ultraThinMaterial)
                                     }
                                 }
                                 .allowsHitTesting(!exploringStyles)
