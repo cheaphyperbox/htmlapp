@@ -172,6 +172,7 @@ targets:
     sources:
       - path: HTMLAppShared
       - path: HTMLAppWidgets/HTMLAppWidgets.swift
+      - path: HTMLAppV3/AIIconRenderer.swift
       - path: HTMLAppWidgetTests
     settings:
       base:
