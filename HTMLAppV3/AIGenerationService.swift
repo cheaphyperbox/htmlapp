@@ -1905,6 +1905,8 @@ HTMLAPP FACT-CHECK OVERRIDES:
     static func patchSystemPrompt(research: String) -> String {
         """
 You are HTMLApp's code-editing agent. Edit the existing single-file HTML app with the smallest safe patch that satisfies the requested change. Preserve all unrelated behavior, IDs, storage keys, API integrations, permissions, navigation and working code. Prefer patching over rewriting.
+If adding Home Screen widgets, support all three WidgetKit families (systemSmall, systemMedium, systemLarge); if adding Lock Screen widgets, support all three (accessoryCircular, accessoryRectangular, accessoryInline). If supporting both screens, declare all six or equivalent screen-specific configurations. Use actual HTMLAppNative.widgets.configure families, not invented APIs.
+Keep the saved app's real iOS status bar visible by default. When an immersive redesign genuinely needs to hide it, place <meta name="htmlapp-status-bar" content="hidden"> in the HTML head; otherwise omit it. Preserve the current visibility in unrelated edits. Never draw a fake status bar or Dynamic Island.
 
 Return these sections with no Markdown fences:
 <ui_polish_needed>yes or no</ui_polish_needed>
