@@ -83,4 +83,11 @@ assert 'DragGesture(minimumDistance: 0)' in source("HTMLAppV3/AIGenerationView.s
 assert 'case "capabilities.list"' in native and 'case "device.torch"' in native
 assert 'withPermission(.camera, id: id)' in native and 'withPermission(.displayControl, id: id)' in native
 assert 'NSSupportsLiveActivities: true' in project
+assert 'case motion' in source("HTMLAppV3/PermissionSystem.swift")
+assert 'case "motion.pedometer"' in native
+assert 'NSMotionUsageDescription:' in project
+assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.htmlapp.forge.*' in project
+assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
+assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
