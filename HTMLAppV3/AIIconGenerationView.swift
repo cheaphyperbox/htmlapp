@@ -101,6 +101,8 @@ struct AIIconGenerationView: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity)
+            .htmlAppFirstUseToasts()
+            .onAppear { HTMLAppFirstUseTips.show("icon") }
             .navigationTitle("Regenerate Icon")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
