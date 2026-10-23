@@ -11,6 +11,7 @@ struct HTMLAppMain: App {
     @State private var presentingWhatsNew = false
     @State private var detectedPreviousVersion: String?
     @State private var checkedVersionThisLaunch = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         if let diagnosis = HTMLAppProviderStorage.repairPreviouslyApprovedGroup() {
@@ -75,6 +76,13 @@ struct HTMLAppMain: App {
                     .interactiveDismissDisabled(true)
                 }
                 .onAppear(perform: checkVersionOnLaunch)
+                .task { await store.syncICloud() }
+                .onReceive(NotificationCenter.default.publisher(for: HTMLAppPortableDataStore.localDataChanged)) { _ in
+                    if HTMLAppICloudPreferences.includeData { store.requestICloudSync() }
+                }
+                .onChange(of: scenePhase) { phase in
+                    if phase == .active { store.requestICloudSync() }
+                }
                 .onChange(of: onboardingComplete) { finished in
                     guard finished else { return }
                     if lastOpenedVersion.isEmpty {
