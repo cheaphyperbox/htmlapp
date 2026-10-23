@@ -61,16 +61,19 @@ struct AIGenerationView: View {
     ]
 
     let existingApp: SavedHTMLApp?
+    let demoMode: Bool
+    @State private var showPracticeEditNotice = false
 
     let shortcutGenerationNonce: Int
     let shortcutSource: String
 
     init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "",
-         shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri") {
+         shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri", demoMode: Bool = false) {
         self.existingApp = existingApp
         self.shortcutGenerationNonce = shortcutGenerationNonce
         self.shortcutSource = shortcutSource
-        _prompt = State(initialValue: initialPrompt)
+        self.demoMode = demoMode
+        _prompt = State(initialValue: demoMode ? "Make a simple calculator" : initialPrompt)
     }
 
     var body: some View {
@@ -85,6 +88,11 @@ struct AIGenerationView: View {
                 }
             }
             .navigationTitle(existingApp == nil ? "Generate" : "Edit with AI")
+            .alert("Practice only — not a real AI edit", isPresented: $showPracticeEditNotice) {
+                Button("Continue Practicing", role: .cancel) {}
+            } message: {
+                Text("This only shows what generating and editing feels like. No AI request was sent and no app was saved.")
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -442,7 +450,7 @@ struct AIGenerationView: View {
                 }
 
                 Button {
-                    if existingApp == nil && stylePickerEnabled {
+                    if existingApp == nil && stylePickerEnabled && !demoMode {
                         exploreStyleOptions()
                     } else {
                         selectedStyle = nil
@@ -454,17 +462,17 @@ struct AIGenerationView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !AISettingsStore.configuration.isConfigured)
+                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (!demoMode && !AISettingsStore.configuration.isConfigured))
             }
 
-            if !AISettingsStore.configuration.isConfigured {
+            if !AISettingsStore.configuration.isConfigured && !demoMode {
                 Section {
                     Label("Connect your AI in Settings to start making apps.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if AISettingsStore.isUIOverhaulEnabled {
+            if AISettingsStore.isUIOverhaulEnabled && !demoMode {
                 Section {
                     Label("UI Overhaul is enabled. It can apply a visual CSS/markup patch, but script changes are rejected.", systemImage: "paintbrush")
                         .foregroundStyle(.secondary)
@@ -1028,6 +1036,13 @@ struct AIGenerationView: View {
 
     private func generateApp() {
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
+        if demoMode {
+            session.beginDraft(prompt: prompt)
+            session.acceptExternalHTML(OnboardingView.calculatorDemoHTML)
+            session.phase = "Ready to review — practice calculator"
+            showingChange = true
+            return
+        }
         startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
@@ -1102,6 +1117,7 @@ struct AIGenerationView: View {
     }
 
     private func applyAIChange() {
+        if demoMode { showPracticeEditNotice = true; return }
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         startForgeActivity(edit: true)
         milestones.reset()
@@ -1190,6 +1206,7 @@ Requested edit:
     }
 
     private func saveGeneratedApp() {
+        if demoMode { showPracticeEditNotice = true; return }
         saving = true
         Task {
             var html = session.streamedHTML
