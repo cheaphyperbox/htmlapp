@@ -13,6 +13,7 @@ final class ForgeDictation: ObservableObject {
     private var offlineRecorder: AVAudioRecorder?
     private var offlineURL: URL?
     private var offlineMode = false
+    private var preferWhisperWhenAppleUnavailable = false
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var generation = UUID()
@@ -21,7 +22,7 @@ final class ForgeDictation: ObservableObject {
 
     func start() async {
         guard !recording, !requestingPermission else { return }
-        if UserDefaults.standard.string(forKey: "htmlapp.dictationEngine") == "whisper" {
+        if preferWhisperWhenAppleUnavailable || UserDefaults.standard.string(forKey: "htmlapp.dictationEngine") == "whisper" {
             await startOffline()
             return
         }
@@ -33,6 +34,7 @@ final class ForgeDictation: ObservableObject {
         }
         guard generation == attempt, !Task.isCancelled else { return }
         guard permission == .authorized else {
+            preferWhisperWhenAppleUnavailable = true
             status = "Apple Speech is unavailable. Switching to Whisper Offline."
             await startOffline()
             return
@@ -68,8 +70,10 @@ final class ForgeDictation: ObservableObject {
                     guard let self, self.generation == generation else { return }
                     if let result { self.transcript = result.bestTranscription.formattedString }
                     if error != nil || result?.isFinal == true {
+                        if error != nil { self.preferWhisperWhenAppleUnavailable = true }
                         self.stop()
-                        self.status = error == nil ? "Dictation finished. Review your idea." : "Dictation stopped. Your transcribed text is kept; you can edit it."
+                        self.status = error == nil ? "Dictation finished. Review your idea." :
+                            "Apple Speech stopped. Whisper will be used on the next recording."
                     }
                 }
             }
@@ -84,6 +88,7 @@ final class ForgeDictation: ObservableObject {
             }
         } catch {
             stop()
+            preferWhisperWhenAppleUnavailable = true
             status = "Apple Speech failed; trying Whisper Offline."
             await startOffline()
         }
