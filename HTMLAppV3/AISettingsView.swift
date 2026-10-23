@@ -12,10 +12,8 @@ struct AIConfigurationSettingsView: View {
     @State private var iconModel = AISettingsStore.iconModel
     @State private var verifierModel = AISettingsStore.verifierModel
     @State private var requestDelay = AISettingsStore.requestDelaySeconds
-    @State private var systemPrompt = AISettingsStore.systemPrompt
     @State private var appearancePreference = AISettingsStore.appearancePreference
     @State private var saved = false
-    @State private var confirmRestorePrompt = false
 
     var body: some View {
         Form {
@@ -100,31 +98,6 @@ struct AIConfigurationSettingsView: View {
             }
 
             Section {
-                DisclosureGroup("Built-in Forge system prompt") {
-                    TextEditor(text: $systemPrompt)
-                        .font(.caption.monospaced())
-                        .frame(minHeight: 360)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Button("Restore Built-in Prompt", role: .destructive) {
-                        confirmRestorePrompt = true
-                    }
-                }
-            } header: {
-                HStack {
-                    Text("Advanced")
-                    Spacer()
-                    Text(AISettingsStore.isUsingCustomSystemPrompt ? "Custom prompt" : "Built-in prompt")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } footer: {
-                Text("The built-in Forge prompt already covers product anticipation, onboarding, portable app data, device/API truthfulness, generated assets, iOS-quality icons, accessibility, and release QA. Edit it only when you intentionally want different agent behavior.")
-            }
-
-            }
-            Section {
                 Button {
                     save()
                 } label: {
@@ -142,19 +115,6 @@ struct AIConfigurationSettingsView: View {
         .onAppear { HTMLAppFirstUseTips.show("aiSettings") }
         .navigationTitle("AI & Creation")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
-            "Restore HTMLApp Forge's built-in system prompt?",
-            isPresented: $confirmRestorePrompt,
-            titleVisibility: .visible
-        ) {
-            Button("Restore Built-in Prompt", role: .destructive) {
-                AISettingsStore.restoreDefaultSystemPrompt()
-                systemPrompt = AISettingsStore.defaultSystemPrompt
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your custom system prompt will be replaced with the current built-in agent instructions.")
-        }
         .onDisappear {
             if !apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !coderModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -201,7 +161,6 @@ struct AIConfigurationSettingsView: View {
         AISettingsStore.iconModel = iconModel
         AISettingsStore.verifierModel = verifierModel
         AISettingsStore.requestDelaySeconds = requestDelay
-        AISettingsStore.systemPrompt = systemPrompt
         AISettingsStore.appearancePreference = appearancePreference
 
         guard showConfirmation else { return }
