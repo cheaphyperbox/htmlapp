@@ -100,6 +100,8 @@ struct HTMLAppWidgetDefinition: Codable, Hashable, Identifiable {
     var updatedAt: Date
     var lastRefreshAt: Date?
     var lastError: String?
+    /// Optional explicit portable-data key mappings for fields shown in the widget.
+    var dataBindings: [String: String]? = nil
 
     var id: String { appID + "::" + widgetID }
 
@@ -245,6 +247,38 @@ enum HTMLAppWidgetStore {
     static func readAll() throws -> [HTMLAppWidgetDefinition] { try repository().all() }
     static func all() -> [HTMLAppWidgetDefinition] { (try? readAll()) ?? [] }
     static func definitions(appID: String) -> [HTMLAppWidgetDefinition] { all().filter { $0.appID == appID } }
+    static func updateFromPortableData(appID: String, key: String, value: String?) {
+        report {
+            try repository().mutate { widgets in
+                for index in widgets.indices where widgets[index].appID == appID {
+                    guard let bindings = widgets[index].dataBindings, !bindings.isEmpty else { continue }
+                    // The generated HTMLApp opts into these specific fields/keys.
+                    // Other apps' keys must never be read or published.
+                    let parsed: String
+                    if let value, let bytes = value.data(using: .utf8),
+                       let decoded = try? JSONSerialization.jsonObject(with: bytes, options: [.fragmentsAllowed]) {
+                        parsed = String(describing: decoded)
+                    } else { parsed = value ?? "" }
+                    let fieldNames = bindings.filter { $0.value == key }.map(\.key)
+                    guard !fieldNames.isEmpty else { continue }
+                    for field in fieldNames {
+                        switch field {
+                        case "title": widgets[index].snapshot.title = String(parsed.prefix(100))
+                        case "subtitle": widgets[index].snapshot.subtitle = String(parsed.prefix(180))
+                        case "value": widgets[index].snapshot.value = String(parsed.prefix(50))
+                        case "footer": widgets[index].snapshot.footer = String(parsed.prefix(180))
+                        case "eyebrow": widgets[index].snapshot.eyebrow = String(parsed.prefix(50))
+                        case "unit": widgets[index].snapshot.unit = String(parsed.prefix(30))
+                        case "progress": widgets[index].snapshot.progress = Double(parsed).map { max(0, min(1, $0)) }
+                        default: break
+                        }
+                    }
+                    widgets[index].updatedAt = Date()
+                }
+            }
+        }
+    }
+
     static func definition(compositeID: String) -> HTMLAppWidgetDefinition? { all().first { $0.id == compositeID } }
     static func preferredDefinition() -> HTMLAppWidgetDefinition? { all().first(where: { $0.primary }) }
     @discardableResult
