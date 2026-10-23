@@ -20,6 +20,9 @@ struct HTMLAppMain: App {
             HTMLAppSiriShortcuts.updateAppShortcutParameters()
         }
         HTMLNotificationCenterDelegate.shared.activate()
+        if #available(iOS 16.2, *) {
+            Task { await HTMLAppForgeActivityService.recoverStale() }
+        }
         HTMLAppBackgroundCoordinator.shared.register()
         HTMLAppBackgroundCoordinator.shared.schedule()
     }
