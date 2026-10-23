@@ -90,7 +90,7 @@ struct WebRunner: View {
     let app: SavedHTMLApp
     var body: some View {
         HTMLWebView(html: app.html, appID: app.id)
-            .statusBarHidden(true)
+            .statusBarHidden(app.html.localizedCaseInsensitiveContains("name=\"htmlapp-status-bar\" content=\"hidden\"") || app.html.localizedCaseInsensitiveContains("name=\'htmlapp-status-bar\' content=\'hidden\'"))
             .htmlAppFirstUseToasts()
             .onAppear { HTMLAppFirstUseTips.show("open") }
     }
