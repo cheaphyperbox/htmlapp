@@ -174,7 +174,7 @@ enum ForgeStylePreviewService {
     }
 
     static func generate(for request: String, feedback: String = "") async throws -> [ForgeStyleConcept] {
-        await withTaskGroup(of: ForgeStyleConcept?.self) { group in
+        return await withTaskGroup(of: ForgeStyleConcept?.self) { group in
             for index in 0..<3 {
                 group.addTask {
                     try? await generateSingle(for: request, feedback: feedback, index: index)
