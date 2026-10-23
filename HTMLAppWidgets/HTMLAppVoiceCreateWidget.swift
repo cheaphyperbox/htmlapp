@@ -26,7 +26,7 @@ struct HTMLAppVoiceCreateWidget: Widget {
         var body: some View {
             Group {
                 if family == .accessoryCircular {
-                    Image(systemName: "mic.badge.plus")
+                    Image(systemName: "mic.fill")
                         .font(.title2)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if family == .accessoryInline {
@@ -51,7 +51,7 @@ struct HTMLAppVoiceCreateWidget: Widget {
 private struct VoiceWidgetBackground: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *) {
-            content.containerBackground(for: .widget) { Color.clear }
+            content.containerBackground(for: .widget) { Color(.secondarySystemBackground) }
         } else {
             content
         }
