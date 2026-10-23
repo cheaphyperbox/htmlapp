@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.4"
-    static let compiledBuild = "11"
+    static let compiledVersion = "1.6.5"
+    static let compiledBuild = "12"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.5" { return [
+            Entry(id: "sketch-progress", title: "Live style sketch previews", description: "See each sketch appear blurred while the remaining directions generate.", symbol: "paintpalette", tint: .purple),
+            Entry(id: "fix-reopen", title: "Library starts in the Library", description: "Stale AI edit checkpoints no longer auto-open an existing saved app.", symbol: "books.vertical", tint: .blue),
+            Entry(id: "forge-done", title: "Generation completion feedback", description: "Get a notification away from HTMLApp or three haptics while the app is active.", symbol: "bell.badge", tint: .green)
+        ] }
         if version == "1.6.4" { return [
             Entry(id: "generation-recovery", title: "Recover interrupted AI work", description: "Review an unsaved generation checkpoint after reopening HTMLApp, including elapsed work time.", symbol: "arrow.clockwise.circle", tint: .blue),
             Entry(id: "background-grace", title: "Continue when switching apps", description: "Forge requests limited background execution time and preserves work if iOS suspends it.", symbol: "moon.stars", tint: .purple)
