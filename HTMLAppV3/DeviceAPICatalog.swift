@@ -34,6 +34,47 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "capabilities.list",
+            title: "Discover supported HTMLApp native APIs",
+            keywords: ["capabilities", "permissions", "feature detection", "supported APIs", "native"],
+            purpose: "Check the actual supported bridge methods and per-app permission categories before showing a control.",
+            api: "await HTMLAppNative.capabilities(); await window.HTMLApp.capabilities()",
+            example: """
+            const caps = await HTMLAppNative.capabilities();
+            if (caps.methods.includes("device.torch") && caps.torchAvailable) {
+              // Show a user-operated flashlight control.
+            }
+            """,
+            constraints: "The list only names installed bridge methods; hardware availability and user consent must be checked separately. No automatic permission grants."
+        ),
+        .init(
+            id: "device.torch",
+            title: "Permission-gated iPhone flashlight",
+            keywords: ["flashlight", "torch", "light", "camera flash"],
+            purpose: "Turn the device flashlight on or off from an explicit user action.",
+            api: "await HTMLAppNative.device.torch(true|false)",
+            example: """
+            const supported = await HTMLAppNative.capabilities();
+            if (supported.torchAvailable) await HTMLAppNative.device.torch(true);
+            // Always turn it off when the feature ends:
+            await HTMLAppNative.device.torch(false);
+            """,
+            constraints: "Requires this saved HTMLApp's Camera permission plus real iOS camera authorization. Not available on every device. Never turn on automatically."
+        ),
+        .init(
+            id: "device.brightness",
+            title: "Display brightness control",
+            keywords: ["screen brightness", "display", "dim", "bright", "light"],
+            purpose: "Read or adjust screen brightness within user-approved display controls.",
+            api: "await HTMLAppNative.device.brightness(level?)",
+            example: """
+            const before = await HTMLAppNative.device.brightness();
+            await HTMLAppNative.device.brightness(0.45);
+            await HTMLAppNative.device.brightness(before.level);
+            """,
+            constraints: "Requires this saved app's Display Control permission; always restore the original brightness when finished."
+        ),
+        .init(
             id: "device.info",
             title: "Device and runtime information",
             keywords: ["battery", "brightness", "thermal", "low power", "locale", "timezone", "screen", "model", "system version", "runtime"],
