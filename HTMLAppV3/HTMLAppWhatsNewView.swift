@@ -36,7 +36,7 @@ enum HTMLAppReleaseNotes {
             Entry(id: "forge-activity", title: "Forge progress on Lock Screen", description: "A red Live Activity warns about background limitations and displays the active AI stage.", symbol: "exclamationmark.triangle.fill", tint: .red),
             Entry(id: "widget-reloads", title: "Prompt widget refresh requests", description: "Widget publication and app-data changes request targeted WidgetKit reloads.", symbol: "arrow.clockwise", tint: .orange),
             Entry(id: "stable-dictation", title: "Steadier microphone recording", description: "The create microphone stays in a fixed location during long presses and changing transcription.", symbol: "mic.fill", tint: .green),
-            Entry(id: "device-tools", title: "Discover more native tools", description: "Generated apps can query supported native APIs and request flashlight or brightness controls.", symbol: "iphone", tint: .blue)
+            Entry(id: "device-tools", title: "Discover more native tools", description: "Generated apps can query supported native APIs and request flashlight, brightness, or walking-step data with consent.", symbol: "iphone", tint: .blue)
         ] }
         if version == "1.6.5" { return [
             Entry(id: "sketch-progress", title: "Live style sketch previews", description: "See each sketch appear blurred while the remaining directions generate.", symbol: "paintpalette", tint: .purple),
