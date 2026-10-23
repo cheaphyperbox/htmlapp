@@ -111,7 +111,7 @@ assert 'ForgeDraftCheckpointStore.clear()' in source("HTMLAppV3/AIGenerationView
 assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "currentPaint" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "UITabBarController()" in source("HTMLAppV3/HTMLAppNativeTabBar.swift")
-assert "Never include a fake phone status bar" in source("HTMLAppV3/ForgeStylePreview.swift")
+assert "No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island" in source("HTMLAppV3/ForgeStylePreview.swift")
 assert "Keep HTMLApp open and your screen on" in source("HTMLAppV3/ForgeBuildDashboard.swift")
 assert "testAIGeneratedFillCommandsRenderLocally" in source("HTMLAppWidgetTests/WidgetTests.swift")
 assert 'Button { store.installWebClip(for: app) }' in source("HTMLAppV3/LibraryUI.swift")
