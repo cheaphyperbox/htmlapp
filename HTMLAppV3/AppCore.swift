@@ -937,6 +937,7 @@ final class AppStore: ObservableObject {
     func openDeepLink(_ url: URL) {
         if url.scheme?.lowercased() == "htmlapp",
            url.host?.lowercased() == "voice-create" {
+            UserDefaults.standard.set(true, forKey: "htmlapp.voiceCreatePending")
             NotificationCenter.default.post(name: Notification.Name("HTMLAppVoiceCreateRequested"), object: nil)
             return
         }
