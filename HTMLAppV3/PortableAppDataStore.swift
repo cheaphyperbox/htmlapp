@@ -45,7 +45,11 @@ enum HTMLAppPortableDataStore {
     }
 
     static func clear(appID: String) {
+        let keys = Array(all(appID: appID).keys)
         queue.sync { try? FileManager.default.removeItem(at: url(appID: appID)) }
+        for key in keys {
+            HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
+        }
         HTMLAppWidgetReloadCoordinator.request()
     }
 
