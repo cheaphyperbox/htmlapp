@@ -53,6 +53,7 @@ enum AIIconRenderer {
             cg.setShouldAntialias(true)
 
             var pendingPaint: Paint?
+            var currentPaint: Paint = .solid(.white)
 
             for line in lines {
                 let parts = line.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -61,6 +62,12 @@ enum AIIconRenderer {
                 switch command {
                 case "SIZE":
                     continue
+
+                case "FILL":
+                    if parts.count >= 2, let color = cssColor(parts[1]) {
+                        currentPaint = .solid(color)
+                        pendingPaint = nil
+                    }
 
                 case "FILL_LINEAR":
                     let colors = parts.dropFirst().compactMap(cssColor)
@@ -98,13 +105,12 @@ enum AIIconRenderer {
                     pendingPaint = nil
 
                 case "RECT":
-                    guard parts.count >= 6,
+                    guard parts.count >= 4,
                           let x = number(parts[1]), let y = number(parts[2]),
                           let w = number(parts[3]), let h = number(parts[4]),
-                          let color = cssColor(parts[5]),
                           w >= 0, h >= 0 else { continue }
                     let path = UIBezierPath(rect: CGRect(x: x, y: y, width: w, height: h))
-                    fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
+                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
@@ -120,13 +126,13 @@ enum AIIconRenderer {
                         width: radius * 2,
                         height: radius * 2
                     ))
-                    fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
+                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
 
                 case "TRIANGLE":
-                    guard parts.count >= 8,
+                    guard parts.count >= 6,
                           let x1 = number(parts[1]), let y1 = number(parts[2]),
                           let x2 = number(parts[3]), let y2 = number(parts[4]),
                           let x3 = number(parts[5]), let y3 = number(parts[6]),
@@ -136,7 +142,7 @@ enum AIIconRenderer {
                     path.addLine(to: CGPoint(x: x2, y: y2))
                     path.addLine(to: CGPoint(x: x3, y: y3))
                     path.close()
-                    fill(path: path, paint: pendingPaint ?? .solid(color), context: cg)
+                    fill(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
@@ -152,7 +158,7 @@ enum AIIconRenderer {
                     path.addLine(to: CGPoint(x: x2, y: y2))
                     path.lineWidth = thickness
                     path.lineCapStyle = .round
-                    stroke(path: path, paint: pendingPaint ?? .solid(color), context: cg)
+                    stroke(path: path, paint: pendingPaint ?? color.map(Paint.solid) ?? currentPaint, context: cg)
                     pendingPaint = nil
                     drewSomething = true
                     drewForeground = true
