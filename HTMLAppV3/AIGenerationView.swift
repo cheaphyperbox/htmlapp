@@ -1041,8 +1041,10 @@ struct AIGenerationView: View {
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             if let chosen = selectedStyle {
-                let missing = chosen.visualTokenDeclarations.filter {
-                    !session.streamedHTML.localizedCaseInsensitiveContains($0)
+                let missing = chosen.visualTokenDeclarations.filter { declaration in
+                    let property = String(declaration.split(separator: ":", maxSplits: 1).first ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    return !property.isEmpty && !session.streamedHTML.contains(property)
                 }
                 if !missing.isEmpty && !Task.isCancelled {
                     AIDebugTraceStore.shared.append("MOCKUP FIDELITY",
