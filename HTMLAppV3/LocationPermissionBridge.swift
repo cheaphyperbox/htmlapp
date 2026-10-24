@@ -9,6 +9,7 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
     private let appID: String
     private let manager = CLLocationManager()
     private var callbacks: [String: DispatchWorkItem] = [:]
+    private var cachedLocation: CLLocation?
 
     init(webView: WKWebView, appID: String) {
         self.webView = webView
@@ -25,7 +26,15 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
                 return
             }
 
-            self.manager.desiredAccuracy = highAccuracy ? kCLLocationAccuracyBest : kCLLocationAccuracyHundredMeters
+            // A recent accurate-enough foreground fix should return immediately.
+            if let last = self.cachedLocation ?? self.manager.location,
+               abs(last.timestamp.timeIntervalSinceNow) < 45,
+               last.horizontalAccuracy >= 0,
+               last.horizontalAccuracy <= (highAccuracy ? 75 : 250) {
+                self.sendLocation(last, callbackIDs: [callbackID])
+                return
+            }
+            self.manager.desiredAccuracy = highAccuracy ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyHundredMeters
             self.queue(callbackID: callbackID, timeoutMS: timeoutMS)
 
             switch self.manager.authorizationStatus {
@@ -62,6 +71,11 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
         callbacks.values.forEach { $0.cancel() }
         callbacks.removeAll()
 
+        cachedLocation = location
+        sendLocation(location, callbackIDs: ids)
+    }
+
+    private func sendLocation(_ location: CLLocation, callbackIDs ids: [String]) {
         let payload: [String: Any] = [
             "latitude": location.coordinate.latitude,
             "longitude": location.coordinate.longitude,
