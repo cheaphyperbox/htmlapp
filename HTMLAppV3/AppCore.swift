@@ -11,6 +11,7 @@ struct HTMLAppMain: App {
     @State private var presentingWhatsNew = false
     @State private var detectedPreviousVersion: String?
     @State private var checkedVersionThisLaunch = false
+    @State private var deferredExternalURL: URL?
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -69,7 +70,13 @@ struct HTMLAppMain: App {
                     OnboardingView(complete: $onboardingComplete)
                         .interactiveDismissDisabled(true)
                 }
-                .fullScreenCover(isPresented: $presentingWhatsNew, onDismiss: recordVersionSeen) {
+                .fullScreenCover(isPresented: $presentingWhatsNew, onDismiss: {
+                    recordVersionSeen()
+                    if let url = deferredExternalURL {
+                        deferredExternalURL = nil
+                        store.openDeepLink(url)
+                    }
+                }) {
                     HTMLAppWhatsNewView(previousVersion: detectedPreviousVersion) {
                         presentingWhatsNew = false
                     }
@@ -108,7 +115,17 @@ struct HTMLAppMain: App {
                 } message: {
                     Text("HTMLApp couldn't read your saved apps. It preserved the damaged file rather than deleting it. Starting empty will not restore those apps. Use Keep Library Protected until you've recovered your data.")
                 }
-                .onOpenURL(perform: store.openDeepLink)
+                .onOpenURL { url in
+                    // A cold Lock Screen launch can race the What's New cover.
+                    // Route once that cover is fully dismissed on older iOS.
+                    if presentingWhatsNew && url.scheme?.lowercased() == "htmlapp" &&
+                        ["voice-create", "import"].contains(url.host?.lowercased() ?? "") {
+                        deferredExternalURL = url
+                        presentingWhatsNew = false
+                    } else {
+                        store.openDeepLink(url)
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .htmlAppNotificationOpened)) { notification in
                     if let url = notification.object as? URL {
                         store.openDeepLink(url)
@@ -200,6 +217,8 @@ struct LibraryFolder: Identifiable, Codable, Hashable, Sendable {
 
 @MainActor
 final class AppStore: ObservableObject {
+    @Published private(set) var voiceCreateRequest = 0
+    @Published private(set) var remoteHTMLImportRequest: URL?
     @Published private(set) var apps: [SavedHTMLApp] = []
     @Published private(set) var folders: [LibraryFolder] = []
     @Published var runningApp: SavedHTMLApp?
@@ -1010,7 +1029,17 @@ final class AppStore: ObservableObject {
         if url.scheme?.lowercased() == "htmlapp",
            url.host?.lowercased() == "voice-create" {
             UserDefaults.standard.set(true, forKey: "htmlapp.voiceCreatePending")
+            voiceCreateRequest += 1
             NotificationCenter.default.post(name: Notification.Name("HTMLAppVoiceCreateRequested"), object: nil)
+            return
+        }
+        if url.scheme?.lowercased() == "htmlapp",
+           url.host?.lowercased() == "import" {
+            do {
+                remoteHTMLImportRequest = try RemoteHTMLImport.sourceURL(from: url)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
             return
         }
         guard url.scheme?.lowercased() == "htmlapp",
@@ -1032,6 +1061,11 @@ final class AppStore: ObservableObject {
         } else {
             replaceRunningApp(with: app)
         }
+    }
+
+    func takeRemoteHTMLImportRequest() -> URL? {
+        defer { remoteHTMLImportRequest = nil }
+        return remoteHTMLImportRequest
     }
 
     func confirmPendingSwitch() {

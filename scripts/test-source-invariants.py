@@ -98,7 +98,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.15"' in release
+assert 'compiledVersion = "1.6.16"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -113,7 +113,20 @@ assert 'Give feedback on all looks' not in source("HTMLAppV3/AIGenerationView.sw
 
 assert 'return await withTaskGroup(of: ForgeStyleConcept?.self)' in source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'return ForgeStyleConcept(id: index, name: variant.0' in source("HTMLAppV3/ForgeStylePreview.swift")
-assert 'offlinePreview(request: request, variant: index)' in source("HTMLAppV3/ForgeStylePreview.swift")
+assert 'offlinePreview(request: request, variant: index, appearance: appearance)' in source("HTMLAppV3/ForgeStylePreview.swift")
+assert 'appearance: requestedAppearance' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'widgetTapRecordingFinished = true' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'voiceCreateRequest += 1' in core
+assert 'deferredExternalURL' in core
+assert 'RemoteHTMLImport.sourceURL(from: url)' in core
+assert 'RemoteHTMLImport.download(url)' in source("HTMLAppV3/LibraryUI.swift")
+assert 'guard isPublicHTTPS(url)' in source("HTMLAppV3/RemoteHTMLImport.swift")
+assert 'session.load(existing: source)' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'ForgeRunOptions.$quick.withValue' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'static var quickModel:' in source("HTMLAppV3/AIConfiguration.swift")
+assert 'skipCurrentStage()' in source("HTMLAppV3/AIGenerationService.swift")
+assert 'Button("Skip")' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'Start Hands-On Forge Practice' in source("HTMLAppV3/OnboardingSettings.swift")
 assert 'ForgeDraftCheckpointStore.clear()' in source("HTMLAppV3/AIGenerationView.swift")
 
 assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
@@ -137,7 +150,9 @@ assert "case bluetooth" in source("HTMLAppV3/PermissionSystem.swift")
 assert 'dataBindings' in source("HTMLAppShared/HTMLAppWidgetShared.swift")
 assert "HTMLAppWidgetStore.updateFromPortableData" in source("HTMLAppV3/PortableAppDataStore.swift")
 assert "AIGenerationView(demoMode: true)" in source("HTMLAppV3/OnboardingSettings.swift")
-assert 'if demoMode { showPracticeEditNotice = true; return }' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'practiceStep = 5' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'practiceStep = 4' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'if demoMode {' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'Advanced model names' not in source("HTMLAppV3/AISettingsView.swift")
 assert 'AISettingsStore.usesSpecialistProvider' in source("HTMLAppV3/AISettingsView.swift")
 assert 'static func shouldHideStatusBar(in html: String)' in source("HTMLAppV3/EditorWeb.swift")
@@ -156,12 +171,12 @@ settings_source = source("HTMLAppV3/AISettingsView.swift")
 assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 styles = source("HTMLAppV3/ForgeStylePreview.swift")
-assert '"Map First"' in styles and '"Action First"' in styles and '"List First"' in styles
+assert '"Immersive"' in styles and '"Action First"' in styles and '"Dashboard"' in styles
 assert 'private static func offlinePreview' in styles
 assert 'No fake iPhone frame' in styles
-assert 'YOUR NEAREST STOP' in styles
-assert 'Craving' in styles
-assert 'ROUTES / NEARBY' in styles
+assert 'Route Rep' in styles and 'Upper-body strength' in styles
+assert 'NearPath' in styles and 'Driving route' in styles
+assert 'Focus List' in styles and 'Pocket Ledger' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'coreWorkflowWarnings(prompt:' in source("HTMLAppV3/AIGenerationService.swift")

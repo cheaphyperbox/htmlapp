@@ -39,6 +39,9 @@ struct LibraryView: View {
     @State private var showAddOptions = false
     @State private var showGenerator = false
     @State private var checkedInterruptedForgeThisLaunch = false
+    @State private var remoteHTMLDraft: RemoteHTMLImportDraft?
+    @State private var remoteImportWorking = false
+    @State private var remoteImportTask: Task<Void, Never>?
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
     @State private var shortcutSource = "siri"
@@ -101,6 +104,11 @@ struct LibraryView: View {
         }) {
             AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce, shortcutSource: shortcutSource).environmentObject(store).interactiveDismissDisabled(true)
         }
+        .fullScreenCover(item: $remoteHTMLDraft) { draft in
+            AIGenerationView(importedDraft: draft)
+                .environmentObject(store)
+                .interactiveDismissDisabled(true)
+        }
         .fullScreenCover(item: $aiEditorApp) { app in
             AIGenerationView(existingApp: app).environmentObject(store).interactiveDismissDisabled(true)
         }
@@ -155,8 +163,15 @@ struct LibraryView: View {
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppVoiceCreateRequested"))) { _ in
             handlePendingShortcut()
         }
+        .onChange(of: store.voiceCreateRequest) { _ in
+            handlePendingShortcut()
+        }
+        .onChange(of: store.remoteHTMLImportRequest) { _ in
+            beginRemoteHTMLImportIfRequested()
+        }
         .onAppear {
             handlePendingShortcut()
+            beginRemoteHTMLImportIfRequested()
             if !checkedInterruptedForgeThisLaunch && !showGenerator {
                 checkedInterruptedForgeThisLaunch = true
                 if let stale = ForgeDraftCheckpointStore.load(),
@@ -176,6 +191,24 @@ struct LibraryView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handlePendingShortcut()
+            beginRemoteHTMLImportIfRequested()
+        }
+        .overlay {
+            if remoteImportWorking {
+                ZStack {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView().controlSize(.large)
+                        Text("Downloading HTML for AI editing…").font(.headline)
+                        Button("Cancel Download") {
+                            remoteImportTask?.cancel()
+                            remoteImportWorking = false
+                        }
+                    }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppShortcutRequested"))) { _ in
             handlePendingShortcut()
@@ -337,6 +370,24 @@ struct LibraryView: View {
             UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
             shortcutGenerationNonce += 1
             showGenerator = true
+        }
+    }
+
+    private func beginRemoteHTMLImportIfRequested() {
+        guard let url = store.takeRemoteHTMLImportRequest() else { return }
+        remoteImportTask?.cancel()
+        remoteImportTask = Task { @MainActor in
+            remoteImportWorking = true
+            defer { remoteImportWorking = false }
+            do {
+                let draft = try await RemoteHTMLImport.download(url)
+                guard !Task.isCancelled else { return }
+                remoteHTMLDraft = draft
+            } catch is CancellationError {
+                // Cancel leaves the Library unchanged.
+            } catch {
+                store.errorMessage = "Could not import HTML from that link: \(error.localizedDescription)"
+            }
         }
     }
 

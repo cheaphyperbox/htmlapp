@@ -1,6 +1,12 @@
 import Foundation
 import Security
 
+/// Task-local so simultaneous normal and QUICK! generations cannot change
+/// one another's model selection or leave a global override behind.
+enum ForgeRunOptions {
+    @TaskLocal static var quick = false
+}
+
 struct AIProviderConfiguration: Equatable {
     enum Compatibility: String, CaseIterable, Identifiable {
         case openAI = "OpenAI Compatible"
@@ -76,6 +82,7 @@ enum AISettingsStore {
     private static let providerKey = "ai.compatibility"
     private static let urlKey = "ai.apiURL"
     private static let modelKey = "ai.model"
+    private static let quickModelKey = "ai.quickModel"
     private static let plannerModelKey = "ai.role.plannerModel"
     private static let researchModelKey = "ai.role.researchModel"
     private static let uiModelKey = "ai.ui.model"
@@ -140,6 +147,11 @@ RESEARCH RESULTS
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: modelKey) }
     }
 
+    static var quickModel: String {
+        get { UserDefaults.standard.string(forKey: quickModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: quickModelKey) }
+    }
+
     static var plannerModel: String {
         get { UserDefaults.standard.string(forKey: plannerModelKey)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? model }
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: plannerModelKey) }
@@ -185,7 +197,8 @@ RESEARCH RESULTS
     }
 
     static func usesSpecialistProvider(for role: AIModelRole) -> Bool {
-        UserDefaults.standard.bool(forKey: "ai.specialist.\(role.rawValue).enabled")
+        if ForgeRunOptions.quick && !quickModel.isEmpty { return false }
+        return UserDefaults.standard.bool(forKey: "ai.specialist.\(role.rawValue).enabled")
     }
 
     static func setSpecialistProvider(_ enabled: Bool, for role: AIModelRole) {
@@ -212,6 +225,10 @@ RESEARCH RESULTS
     }
 
     static func configuration(for role: AIModelRole) -> AIProviderConfiguration {
+        if ForgeRunOptions.quick && !quickModel.isEmpty {
+            return AIProviderConfiguration(compatibility: compatibility, apiURL: apiURL,
+                                           model: quickModel, apiKey: apiKey)
+        }
         if usesSpecialistProvider(for: role) { return specialistConfiguration(for: role) }
         return AIProviderConfiguration(
             compatibility: compatibility,

@@ -6,6 +6,7 @@ struct AIConfigurationSettingsView: View {
     @State private var apiURL = AISettingsStore.apiURL
     @State private var apiKey = AISettingsStore.apiKey
     @State private var coderModel = AISettingsStore.model
+    @State private var quickModel = AISettingsStore.quickModel
     @State private var plannerModel = AISettingsStore.plannerModel
     @State private var researchModel = AISettingsStore.researchModel
     @State private var uiModel = AISettingsStore.uiModel
@@ -56,6 +57,16 @@ struct AIConfigurationSettingsView: View {
                     Text("Optional. The AI chooses the actual theme, colors, animations and icon for each new app.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+            }
+
+            Section {
+                TextField("QUICK! model name", text: $quickModel)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Text("Optional: use a smaller, faster model on your main provider for planning, coding, research, icons, previews and verification during a QUICK! run. Normal specialist settings are unchanged.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("QUICK! Generation")
             }
 
             Section("AI Specialists") {
@@ -156,6 +167,7 @@ struct AIConfigurationSettingsView: View {
         AISettingsStore.apiURL = apiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         AISettingsStore.apiKey = apiKey
         AISettingsStore.model = coderModel
+        AISettingsStore.quickModel = quickModel
         AISettingsStore.plannerModel = plannerModel
         AISettingsStore.researchModel = researchModel
         AISettingsStore.uiModel = uiModel

@@ -340,11 +340,16 @@ struct OnboardingView: View {
             }
         case 11:
             VStack(alignment: .leading, spacing: 12) {
-                Text("Try the real Forge generation and editing screens with a sample calculator.")
+                Text("Try Forge yourself with a working calculator — no AI credits required.")
                     .font(.headline)
-                Text("This is a demonstration: the example app is prebuilt, no AI requests are made, and practice edits do not alter your Library.")
+                tutorialRow("1", "Generate", "Edit the sample prompt and tap Make My App. Watch the fake build progress.", symbol: "sparkles", tint: .blue)
+                tutorialRow("2", "Test", "Tap the calculator's real buttons. Try 7 + 3 = before making changes.", symbol: "hand.tap", tint: .purple)
+                tutorialRow("3", "Drag the mic", "Drag the floating microphone fully onto the screen, speak while holding, then release. Tapping it opens the typed edit option.", symbol: "mic.fill", tint: .orange)
+                tutorialRow("4", "Type an edit", "In the edit field, type something like ‘Make the buttons purple’ and tap Apply Change.", symbol: "pencil", tint: .mint)
+                tutorialRow("5", "Save", "Tap Save App. In this lesson it simulates saving without changing your Library.", symbol: "square.and.arrow.down", tint: .green)
+                Text("A practice edit changes the preview locally. Real Forge uses your configured AI provider and can save the result to your Library.")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("Open Practice Generation & Editing") { showForgePractice = true }
+                Button("Start Hands-On Forge Practice") { showForgePractice = true }
                     .buttonStyle(.borderedProminent)
             }
         default:

@@ -6,9 +6,10 @@ struct HTMLAppVoiceCreateWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "HTMLAppVoiceCreate", provider: Provider()) { _ in
             Content()
+                .widgetURL(URL(string: "htmlapp://voice-create"))
         }
         .configurationDisplayName("Speak a New App")
-        .description("Open HTMLApp straight to the voice-only AI creation screen.")
+        .description("Open Generate with AI and begin microphone recording.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 
@@ -42,7 +43,6 @@ struct HTMLAppVoiceCreateWidget: Widget {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .widgetURL(URL(string: "htmlapp://voice-create"))
             .modifier(VoiceWidgetBackground())
         }
     }

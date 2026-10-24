@@ -5,10 +5,13 @@ struct AIGenerationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var dictation = ForgeDictation()
     @State private var dictationPrefix = ""
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
+    @State private var polishTask: Task<UIOverhaulResult, Error>?
+    @State private var skipUIPolish = false
     @State private var forgeActivityJobID: String?
     @State private var forgeActivityStartTask: Task<Void, Never>?
     @StateObject private var session = AIGenerationSession()
@@ -23,6 +26,8 @@ struct AIGenerationView: View {
     @State private var promptMicHeld = false
     @State private var promptDictationAwaitingResult = false
     @State private var generateAfterVoiceTranscription = false
+    @State private var widgetTapRecordingFinished = false
+    @State private var importedDraftLoaded = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @State private var pendingFloatingVoiceFeedback: Bool?
@@ -30,6 +35,7 @@ struct AIGenerationView: View {
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
+    @State private var quickMode = false
     @State private var exploringStyles = false
     @State private var styleOptions: [ForgeStyleConcept] = []
     @State private var selectedStyleIndex = 0
@@ -73,16 +79,20 @@ struct AIGenerationView: View {
     let existingApp: SavedHTMLApp?
     let demoMode: Bool
     @State private var showPracticeEditNotice = false
+    @State private var practiceStep = 0
 
     let shortcutGenerationNonce: Int
     let shortcutSource: String
+    let importedDraft: RemoteHTMLImportDraft?
     private var isWidgetVoiceEntry: Bool { shortcutSource == "widgetMic" && existingApp == nil }
 
     init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "",
-         shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri", demoMode: Bool = false) {
+         shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri",
+         importedDraft: RemoteHTMLImportDraft? = nil, demoMode: Bool = false) {
         self.existingApp = existingApp
         self.shortcutGenerationNonce = shortcutGenerationNonce
         self.shortcutSource = shortcutSource
+        self.importedDraft = importedDraft
         self.demoMode = demoMode
         _prompt = State(initialValue: demoMode ? "Make a simple calculator" : initialPrompt)
     }
@@ -99,11 +109,11 @@ struct AIGenerationView: View {
                 }
             }
             .htmlAppFirstUseToasts()
-            .navigationTitle(existingApp == nil ? "Generate" : "Edit with AI")
-            .alert("Practice only — not a real AI edit", isPresented: $showPracticeEditNotice) {
+            .navigationTitle(importedDraft != nil ? "Edit imported HTML" : existingApp == nil ? "Generate" : "Edit with AI")
+            .alert(practiceStep >= 5 ? "Practice complete!" : "Practice edit", isPresented: $showPracticeEditNotice) {
                 Button("Continue Practicing", role: .cancel) {}
             } message: {
-                Text("This only shows what generating and editing feels like. No AI request was sent and no app was saved.")
+                Text("You practiced Forge without sending an AI request or saving anything to your Library.")
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -250,6 +260,21 @@ struct AIGenerationView: View {
         }
         .task {
             workTracker.select(appKey: existingApp?.id ?? draftWorkID)
+            if let importedDraft, !importedDraftLoaded {
+                importedDraftLoaded = true
+                let now = Date()
+                let source = SavedHTMLApp(
+                    id: "unsaved-import-\(UUID().uuidString)", name: importedDraft.name,
+                    summary: "Imported from \(importedDraft.sourceURL.host ?? "the web")",
+                    html: importedDraft.html, favicon: nil, createdAt: now,
+                    updatedAt: now, lastOpenedAt: nil, isFavorite: false,
+                    folderName: nil, folderID: nil, websiteSourceURL: nil,
+                    websiteFingerprint: nil
+                )
+                session.load(existing: source)
+                showingChange = true
+                prompt = "Improve the imported HTML app while preserving its working features."
+            }
             if let existingApp, !didLoadExisting {
                 didLoadExisting = true
                 session.load(existing: existingApp)
@@ -330,6 +355,7 @@ struct AIGenerationView: View {
             if isWidgetVoiceEntry && !recording && !dictation.requestingPermission {
                 promptMicHeld = false
                 promptDictationActive = false
+                widgetTapRecordingFinished = true
             }
         }
         .onChange(of: dictation.transcript) { value in
@@ -441,6 +467,11 @@ struct AIGenerationView: View {
     private var promptView: some View {
         Form {
             Section {
+                if demoMode {
+                    Label("PRACTICE 1 OF 5 · Edit the sample idea below, then tap Make My App. No AI calls or Library changes will occur.", systemImage: "hand.tap.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                }
                 if existingApp == nil && prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -460,10 +491,11 @@ struct AIGenerationView: View {
                     .frame(height: 150)
                     .font(.body)
                 HStack(spacing: 14) {
-                    if isWidgetVoiceEntry {
+                    if isWidgetVoiceEntry && !widgetTapRecordingFinished {
                         Button {
                             if promptMicHeld || dictation.recording || dictation.requestingPermission {
                                 stopPromptRecording()
+                                widgetTapRecordingFinished = true
                             } else {
                                 startPromptRecording()
                             }
@@ -500,9 +532,9 @@ struct AIGenerationView: View {
                             .accessibilityHint("Hold down the microphone while you speak, then release.")
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(isWidgetVoiceEntry && promptMicHeld ? "Listening…" : (dictation.recording ? "Listening…" : "Hold to talk"))
+                        Text(isWidgetVoiceEntry && !widgetTapRecordingFinished && promptMicHeld ? "Listening…" : (dictation.recording ? "Listening…" : "Hold to talk"))
                             .font(.headline)
-                        Text(isWidgetVoiceEntry
+                        Text(isWidgetVoiceEntry && !widgetTapRecordingFinished
                              ? (promptMicHeld ? "Tap to stop recording." : "Tap the microphone to record your idea.")
                              : (dictation.recording ? "Release to stop recording." :
                                 "Keep the gray mic pressed while you describe your app."))
@@ -520,7 +552,9 @@ struct AIGenerationView: View {
                 Text("Step 1 · Describe your app")
             } footer: {
                 Text(isWidgetVoiceEntry
-                     ? "Tell Forge what your app should do. Tap the microphone to stop listening, or use Generate or Cancel."
+                     ? (widgetTapRecordingFinished
+                        ? "To add more words, hold the microphone while speaking and release to transcribe."
+                        : "Recording starts automatically. Tap the microphone to stop, or use Generate or Cancel.")
                      : "Tell Forge what your app should do. You can type or hold the gray microphone to speak.")
             }
 
@@ -551,6 +585,15 @@ struct AIGenerationView: View {
                     Text("Practice mode: the actual Forge progress and editing screens are shown with a prebuilt calculator. No AI, mockup, or save request will occur.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if existingApp == nil {
+                    Toggle(isOn: $quickMode) {
+                        Label("QUICK!", systemImage: "bolt.fill")
+                            .font(.headline)
+                    }
+                    .disabled(AISettingsStore.quickModel.isEmpty)
+                    Text(AISettingsStore.quickModel.isEmpty
+                         ? "Set a QUICK! model in Settings → AI & Creation to enable faster, streamlined generation."
+                         : "Uses \(AISettingsStore.quickModel) for every AI role in this run. Optional expensive stages may be skipped.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
                     Text(stylePickerEnabled
@@ -589,12 +632,12 @@ struct AIGenerationView: View {
                 }
             }
         }
-        .scrollDisabled(promptMicHeld && !isWidgetVoiceEntry)
+        .scrollDisabled(promptMicHeld && (!isWidgetVoiceEntry || widgetTapRecordingFinished))
     }
 
 
     private func startPromptRecording() {
-        guard !dictation.recording && !dictation.requestingPermission else { return }
+        guard !dictation.recording && !dictation.requestingPermission && !dictation.transcribingOffline else { return }
         promptMicHeld = true
         promptDictationAwaitingResult = false
         dictationForEdit = false
@@ -603,7 +646,7 @@ struct AIGenerationView: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         dictationPrefix = prompt
         microphoneRecordingTask?.cancel()
-        microphoneRecordingTask = Task { await dictation.start(tapToStop: isWidgetVoiceEntry) }
+        microphoneRecordingTask = Task { await dictation.start(tapToStop: isWidgetVoiceEntry && !widgetTapRecordingFinished) }
     }
 
     private func stopPromptRecording() {
@@ -802,9 +845,16 @@ struct AIGenerationView: View {
     private func exploreStyleOptions() {
         HTMLAppFirstUseTips.show("firstAI")
         let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let useQuickModel = quickMode && !AISettingsStore.quickModel.isEmpty
+        let requestedAppearance = colorScheme == .dark ? "dark" : "light"
         guard !idea.isEmpty, !exploringStyles else { return }
         generationTask?.cancel()
         exploringStyles = true
+        let traceConfig = ForgeRunOptions.$quick.withValue(useQuickModel) {
+            AISettingsStore.configuration
+        }
+        AIDebugTraceStore.shared.begin(originalPrompt: "STYLE PREVIEWS\n" + idea,
+                                       config: traceConfig)
         styleOptions = []
         selectedStyleIndex = 0
         styleFailure = nil
@@ -817,9 +867,12 @@ struct AIGenerationView: View {
                 for index in 0..<3 {
                     group.addTask {
                         do {
-                            let result = try await ForgeStylePreviewService.generateSingle(
-                                for: idea, feedback: feedback, index: index
-                            )
+                            let result = try await ForgeRunOptions.$quick.withValue(useQuickModel) {
+                                try await ForgeStylePreviewService.generateSingle(
+                                    for: idea, feedback: feedback, index: index,
+                                    appearance: requestedAppearance
+                                )
+                            }
                             return (index, result, nil)
                         } catch {
                             return (index, nil, error.localizedDescription)
@@ -845,6 +898,10 @@ struct AIGenerationView: View {
             if Task.isCancelled { return }
             exploringStyles = false
             if !styleOptions.isEmpty { HTMLAppFirstUseTips.show("mockups") }
+            let offlineCount = styleOptions.filter { $0.summary.contains("(offline preview)") }.count
+            styleFeedbackNotice = offlineCount > 0
+                ? "\(offlineCount) look(s) used local fallback sketches because the style AI did not return usable HTML. Check your style model in Settings or the AI debug trace."
+                : nil
             if styleOptions.isEmpty {
                 styleFailure = errors.first ?? "No previews could be generated."
             }
@@ -881,6 +938,20 @@ struct AIGenerationView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
+                    if let stage = session.skippableStage {
+                        Button("Skip") { session.skipCurrentStage() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityLabel("Skip \(stage)")
+                    } else if session.phase == "Polishing the interface" {
+                        Button("Skip") {
+                            skipUIPolish = true
+                            polishTask?.cancel()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityLabel("Skip UI Overhaul")
+                    }
                     Button { showRunHistory = true } label: {
                         Image(systemName: "chart.pie")
                     }
@@ -895,6 +966,10 @@ struct AIGenerationView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
                 .background(.bar)
+
+                if demoMode && !session.isWorking {
+                    practiceGuide
+                }
 
                 if session.isWorking || browserResearch.isBrowsing {
                     ForgeBuildDashboard(
@@ -1010,6 +1085,46 @@ struct AIGenerationView: View {
         }
     }
 
+    private var practiceGuide: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("PRACTICE \(min(practiceStep + 1, 5)) OF 5")
+                .font(.caption.bold()).foregroundStyle(.blue)
+            Text(practiceStep == 2
+                 ? "Tap 7, +, 3 and = in the calculator. Then drag the floating gray mic from the left edge fully onto the screen, speak, and release. You can also tap it to type."
+                 : practiceStep == 3
+                 ? "Type a change in the edit box below, such as ‘Make the buttons purple,’ then tap Apply Change."
+                 : practiceStep == 4
+                 ? "Review your changed calculator. Tap Save App below to practice finishing. This demo will not enter your Library."
+                 : practiceStep >= 5
+                 ? "Great work! You've practiced generating, testing, dragging the mic, typing an edit and saving."
+                 : "Watch Forge's short simulated build. You can stop a real build later from this screen.")
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                if practiceStep == 2 {
+                    Button("I tried the calculator") {
+                        practiceStep = 3
+                        showingChange = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if practiceStep == 3 && !showingChange {
+                    Button("Show edit field") { showingChange = true }
+                        .buttonStyle(.bordered)
+                }
+                if practiceStep >= 5 {
+                    Button("Finish Practice") { dismiss() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(13)
+        .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+    }
+
     private func voiceEditBubble(in size: CGSize, forStyleFeedback: Bool = false) -> some View {
         let side: CGFloat = 63
         let origin = CGPoint(x: -24 + microphoneTranslation.width, y: 68 + microphoneTranslation.height)
@@ -1037,6 +1152,7 @@ struct AIGenerationView: View {
                         let inside = x >= 0 && y >= 0 && x + side <= size.width && y + side <= size.height
                         if inside && !microphoneArmed {
                             microphoneArmed = true
+                            if demoMode { practiceStep = max(practiceStep, 3); showingChange = true }
                             HTMLAppFirstUseTips.show("dragMic")
                             microphoneCapturing = true
                             promptDictationActive = false
@@ -1070,6 +1186,12 @@ struct AIGenerationView: View {
                         dictation.stop()
                         microphoneCapturing = false
                         dictationForEdit = false
+                        if demoMode && inside && wasArmed {
+                            practiceStep = 3
+                            showingChange = true
+                            microphoneEditNotice = "Nice drag! Now type an edit below and tap Apply Change."
+                            return
+                        }
                         if inside && wasArmed && spoken.isEmpty && dictation.transcribingOffline {
                             pendingFloatingVoiceFeedback = forStyleFeedback
                             microphoneEditNotice = "Whisper is transcribing…"
@@ -1126,6 +1248,7 @@ struct AIGenerationView: View {
             prompt = ""
             activeShortcutPrompt = ""
             generateAfterVoiceTranscription = false
+            widgetTapRecordingFinished = false
             showDraftRecovery = false
             recoverableDraft = nil
             startPromptRecording()
@@ -1237,7 +1360,9 @@ struct AIGenerationView: View {
             questionAlreadyAsked = true
             let source = prompt
             Task { @MainActor in
-                let question = await Self.askForgeQuestion(for: source)
+                let question = await ForgeRunOptions.$quick.withValue(quickMode) {
+                    await Self.askForgeQuestion(for: source)
+                }
                 questionTitle = question.title
                 questionChoices = question.options
                 suggestedAnswer = question.suggested
@@ -1255,6 +1380,7 @@ struct AIGenerationView: View {
         HTMLAppFirstUseTips.show("generation")
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         if demoMode {
+            practiceStep = 1
             milestones.reset()
             session.isWorking = true
             session.phase = "Reading your request"
@@ -1266,7 +1392,8 @@ struct AIGenerationView: View {
                     session.phase = stage
                 }
                 session.showTutorialExample(OnboardingView.calculatorDemoHTML)
-                showingChange = true
+                practiceStep = 2
+                showingChange = false
             }
             return
         }
@@ -1285,6 +1412,7 @@ struct AIGenerationView: View {
         session.isWorking = true
         let activityJob = forgeActivityJobID
         generationTask = Task {
+            await ForgeRunOptions.$quick.withValue(quickMode && !AISettingsStore.quickModel.isEmpty) {
             defer {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
@@ -1334,17 +1462,18 @@ struct AIGenerationView: View {
                 let fidelityIssue: String?
                 switch chosen.id {
                 case 0:
-                    fidelityIssue = (layout.contains("map") && (layout.contains("floating") ||
+                    fidelityIssue = ((layout.contains("feature") || layout.contains("hero") ||
+                        layout.contains("map")) && (layout.contains("floating") ||
                         layout.contains("sheet") || layout.contains("overlay"))) ? nil :
-                        "Restore a dominant map-first viewport with a floating destination/action panel."
+                        "Restore the dominant domain-specific feature visual and anchored floating action panel."
                 case 1:
                     fidelityIssue = (layout.contains("hero") && (layout.contains("action") ||
                         layout.contains("button"))) ? nil :
                         "Restore a distinctive action-first hero and prominent task CTA."
                 default:
-                    fidelityIssue = (layout.contains("list") && (layout.contains("step") ||
+                    fidelityIssue = (layout.contains("list") && (layout.contains("item") ||
                         layout.contains("row"))) ? nil :
-                        "Restore a compact list-first screen with numbered results or directions."
+                        "Restore compact domain-specific metrics and an ordered activity or item list."
                 }
                 if (!missing.isEmpty || fidelityIssue != nil) && !Task.isCancelled {
                     AIDebugTraceStore.shared.append("MOCKUP FIDELITY",
@@ -1363,11 +1492,27 @@ struct AIGenerationView: View {
             if session.errorMessage == nil && !Task.isCancelled {
                 await HTMLAppForgeCompletionFeedback.announce(edit: false)
             }
+            }
         }
     }
 
     private func applyAIChange() {
-        if demoMode { showPracticeEditNotice = true; return }
+        if demoMode {
+            let words = changePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !words.isEmpty else { return }
+            let newColor = words.localizedCaseInsensitiveContains("green") ? "#34a853" :
+                words.localizedCaseInsensitiveContains("red") ? "#ed5353" :
+                words.localizedCaseInsensitiveContains("orange") ? "#ed8a35" : "#8965cc"
+            let updated = session.streamedHTML.replacingOccurrences(
+                of: "</style>", with: "button{border:2px solid \(newColor);box-shadow:0 2px 5px #0001} </style>"
+            )
+            session.acceptExternalHTML(updated)
+            session.phase = "Practice edit applied"
+            session.lastEditSummary = "Simulated change: \(words)"
+            practiceStep = 4
+            showingChange = false
+            return
+        }
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         startForgeActivity(edit: true)
         milestones.reset()
@@ -1381,6 +1526,7 @@ struct AIGenerationView: View {
         session.isWorking = true
         let activityJob = forgeActivityJobID
         generationTask = Task {
+            await ForgeRunOptions.$quick.withValue(quickMode && !AISettingsStore.quickModel.isEmpty) {
             defer {
                 let outcome = Task.isCancelled ? "Stopped" :
                     (session.errorMessage == nil ? "Completed" : "Failed")
@@ -1423,16 +1569,24 @@ Requested edit:
             if session.errorMessage == nil && !Task.isCancelled {
                 await HTMLAppForgeCompletionFeedback.announce(edit: true)
             }
+            }
         }
     }
 
     private func runOptionalUIPolish(originalPrompt: String) async {
-        guard AISettingsStore.isUIOverhaulEnabled else { return }
+        guard AISettingsStore.isUIOverhaulEnabled, !ForgeRunOptions.quick else { return }
         let functionalHTML = session.streamedHTML
         session.isWorking = true
         session.phase = "Polishing the interface"
+        skipUIPolish = false
+        let worker = Task {
+            try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
+        }
+        polishTask = worker
+        defer { polishTask = nil }
         do {
-            let result = try await UIOverhaulService.polish(html: functionalHTML, originalPrompt: originalPrompt)
+            let result = try await worker.value
+            if skipUIPolish { throw CancellationError() }
             session.acceptExternalHTML(result.html)
             session.isWorking = false
             if result.html == functionalHTML {
@@ -1451,12 +1605,18 @@ Requested edit:
             session.acceptExternalHTML(functionalHTML)
             session.isWorking = false
             session.phase = "Ready to review"
-            uiPolishNotice = "UI Overhaul was skipped because it failed. The previous version was preserved."
+            uiPolishNotice = skipUIPolish
+                ? "UI Overhaul skipped. The functional app was preserved."
+                : "UI Overhaul was skipped because it failed. The previous version was preserved."
         }
     }
 
     private func saveGeneratedApp() {
-        if demoMode { showPracticeEditNotice = true; return }
+        if demoMode {
+            practiceStep = 5
+            showPracticeEditNotice = true
+            return
+        }
         saving = true
         Task {
             var html = session.streamedHTML

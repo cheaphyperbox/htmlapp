@@ -1,6 +1,6 @@
 import Foundation
 
-struct UIOverhaulResult {
+struct UIOverhaulResult: Sendable {
     let html: String
     let changedOnlyCSS: Bool
 }

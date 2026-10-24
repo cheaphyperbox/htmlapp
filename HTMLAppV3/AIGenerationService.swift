@@ -15,7 +15,7 @@ struct AIGenerationOutput {
     var refinedBrief = ""
 }
 
-struct AIResearchPlan {
+struct AIResearchPlan: Sendable {
     var publicQueries: [String] = []
     var deviceQueries: [String] = []
 
@@ -24,7 +24,7 @@ struct AIResearchPlan {
     }
 }
 
-struct AIPlanningResult {
+struct AIPlanningResult: Sendable {
     var brief: String
     var research: AIResearchPlan
 }
@@ -93,6 +93,9 @@ final class AIGenerationSession: ObservableObject {
     @Published var wantsUIPolish = false
     @Published var errorMessage: String?
     @Published var isWorking = false
+    @Published private(set) var skippableStage: String?
+    private var skipCurrentOperation: (() -> Void)?
+    private var skipWasRequested = false
     @Published var streamedByteCount = 0
     @Published var streamedSection = "css"
     @Published var qaRepairResponseBytes = 0
@@ -237,6 +240,39 @@ final class AIGenerationSession: ObservableObject {
         phase = "Ready for AI edits"
     }
 
+    func skipCurrentStage() {
+        guard let skipCurrentOperation else { return }
+        skipWasRequested = true
+        skipCurrentOperation()
+    }
+
+    /// Cancel an optional model call without cancelling the entire Forge run.
+    /// If an optional stage is skipped, the caller preserves its safe input.
+    private func optionalStage<T: Sendable>(
+        _ title: String,
+        operation: @escaping () async throws -> T
+    ) async throws -> T? {
+        skipWasRequested = false
+        let worker = Task { try await operation() }
+        skippableStage = title
+        skipCurrentOperation = { worker.cancel() }
+        defer {
+            skippableStage = nil
+            skipCurrentOperation = nil
+        }
+        return try await withTaskCancellationHandler {
+            do {
+                let result = try await worker.value
+                return skipWasRequested ? nil : result
+            } catch {
+                if skipWasRequested { return nil }
+                throw error
+            }
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
     func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "") async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
@@ -251,7 +287,7 @@ final class AIGenerationSession: ObservableObject {
         do {
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             let improved: String
-            if AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt) {
+            if ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
                 let localCapabilities = AIHTMLAgent.fastPathCapabilityQueries(for: originalPrompt)
@@ -268,10 +304,13 @@ final class AIGenerationSession: ObservableObject {
                 } else {
                     visualReference = ""
                 }
-                let planning = try await AIHTMLAgent.planPrompt(
-                    originalUserPrompt ?? prompt,
-                    config: AISettingsStore.configuration(for: .planner)
-                )
+                let planning = try await optionalStage("Prompt improvement") {
+                    try await AIHTMLAgent.planPrompt(
+                        originalUserPrompt ?? prompt,
+                        config: AISettingsStore.configuration(for: .planner)
+                    )
+                }
+                if let planning {
                 improved = planning.brief + visualReference
                 refinedBrief = improved
                 let plan = planning.research
@@ -303,6 +342,13 @@ final class AIGenerationSession: ObservableObject {
                     .filter { !$0.isEmpty }
                     .joined(separator: "\n\n")
                 phase = "Generating live preview"
+                } else {
+                    improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                    refinedBrief = improved
+                    lastResearch = suppliedResearch
+                    phase = "Generating live preview"
+                    AIDebugTraceStore.shared.append("FORGE SKIP", "Optional prompt improvement was skipped.")
+                }
             }
 
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
@@ -398,13 +444,14 @@ final class AIGenerationSession: ObservableObject {
             apply(final, partial: false)
             let finalAssets = await refineGeneratedAssets(final.assetScripts)
             await installGeneratedAssets(finalAssets)
-            try await ensureValidIcon(
-                config: AISettingsStore.configuration(for: .icon),
-                // The coding model's valid draft icon is a useful default. Only
-                // make another model call when a dedicated icon artist is chosen.
-                forceRegenerate: AISettingsStore.usesSpecialistProvider(for: .icon) ||
-                    AISettingsStore.iconModel != AISettingsStore.model
-            )
+            _ = try await optionalStage("App icon") {
+                try await self.ensureValidIcon(
+                    config: AISettingsStore.configuration(for: .icon),
+                    // Reuse a valid coding-agent draft unless a separate icon artist is selected.
+                    forceRegenerate: AISettingsStore.usesSpecialistProvider(for: .icon) ||
+                        AISettingsStore.iconModel != AISettingsStore.model
+                )
+            }
             try await verifyAndRepair(config: config)
             try Task.checkCancellation()
             phase = "Ready to review"

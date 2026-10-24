@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.15"
-    static let compiledBuild = "22"
+    static let compiledVersion = "1.6.16"
+    static let compiledBuild = "23"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,13 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.16" { return [
+            Entry(id: "voice-widget-resume", title: "More reliable Lock Screen voice launch", description: "Cold-start widget links reopen Forge, begin recording, then switch to hold-to-talk after you tap Stop.", symbol: "mic.fill", tint: .blue),
+            Entry(id: "style-sketches", title: "More relevant AI style previews", description: "Forge requests mockups for your exact idea and system light or dark appearance. Offline sketches now show realistic product content.", symbol: "paintpalette.fill", tint: .purple),
+            Entry(id: "quick-run", title: "QUICK! generation and optional skips", description: "Configure a smaller model, switch QUICK! on when creating, and skip optional planning, icon or UI polish stages.", symbol: "bolt.fill", tint: .orange),
+            Entry(id: "import-url", title: "Edit HTML from a link", description: "An htmlapp://import link can download a public HTTPS HTML file into an unsaved Forge AI editing session.", symbol: "link", tint: .green),
+            Entry(id: "guided-practice", title: "Hands-on Forge tutorial", description: "Practice calculator testing, dragging the mic, typing changes, and saving without using AI credits.", symbol: "hand.tap.fill", tint: .mint)
+        ] }
         if version == "1.6.15" { return [
             Entry(id: "lockscreen-forge", title: "Lock Screen voice goes straight to Forge", description: "The Lock Screen microphone opens the regular Generate with AI screen and starts listening. Tap the mic again to stop, or use Generate or Cancel.", symbol: "mic.fill", tint: .blue),
             Entry(id: "whisper-handoff", title: "Voice generation waits for transcription", description: "If Whisper is selected, Forge finishes transcribing before using your spoken idea.", symbol: "waveform", tint: .purple),
