@@ -179,7 +179,12 @@ struct LibraryView: View {
             handlePendingShortcut()
             if !checkedInterruptedForgeThisLaunch && !UserDefaults.standard.bool(forKey: "htmlapp.voiceCreatePending") {
                 checkedInterruptedForgeThisLaunch = true
-                if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate {
+                if let stale = ForgeDraftCheckpointStore.load(),
+                   ["Ready to review", "Saved", "Completed"].contains(stale.phase) {
+                    ForgeDraftCheckpointStore.clear()
+                }
+                if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate,
+                   !["Ready to review", "Saved", "Completed"].contains(checkpoint.phase) {
                     if checkpoint.existingAppID == nil {
                         // Never auto-open an already saved app just because a
                         // stale edit draft exists. Its history remains available
