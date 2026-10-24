@@ -53,6 +53,11 @@ struct AIGenerationView: View {
     @State private var lastFailedChange: String?
     @State private var handledShortcutNonce = 0
     @State private var activeShortcutPrompt = ""
+    @State private var pendingChoiceQuestion = false
+    @State private var choiceResponse = ""
+    @State private var questionTimer: Task<Void, Never>?
+    @State private var questionAlreadyAsked = false
+    @State private var customQuestionAnswer = ""
 
     private let starterPrompts = [
         "A simple homework planner that works offline",
@@ -115,6 +120,49 @@ struct AIGenerationView: View {
                             .accessibilityLabel("View AI debug trace")
                     }
                 }
+            }
+            .sheet(isPresented: $pendingChoiceQuestion, onDismiss: {
+                if !questionAlreadyAsked { return }
+                resolveCreationQuestion(answer: choiceResponse.isEmpty ? "Choose the most practical option" : choiceResponse)
+            }) {
+                NavigationStack {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("One quick question").font(.title2.bold())
+                        Text("Would you prefer more visual detail or a simpler, faster interface?")
+                            .font(.headline)
+                        Text("Forge will choose a sensible default after 20 seconds if you don't answer.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        ForEach(["A detailed, visual experience", "Simple and fast (recommended)"], id: \.self) { option in
+                            Button {
+                                choiceResponse = option
+                                pendingChoiceQuestion = false
+                            } label: {
+                                HStack { Text(option); Spacer(); Image(systemName: "chevron.right") }
+                                    .padding()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        TextField("Or describe your preference", text: $customQuestionAnswer, axis: .vertical)
+                            .lineLimit(2...4).textFieldStyle(.roundedBorder)
+                        Button("Use my answer") {
+                            choiceResponse = customQuestionAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+                            pendingChoiceQuestion = false
+                        }.buttonStyle(.borderedProminent)
+                            .disabled(customQuestionAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Spacer()
+                    }
+                    .padding()
+                    .navigationTitle("Forge Question")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Let Forge choose") {
+                                choiceResponse = "Simple and fast"
+                                pendingChoiceQuestion = false
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showDebug) {
                 AIDebugTraceView()
@@ -1058,7 +1106,31 @@ struct AIGenerationView: View {
         }
     }
 
+    private func resolveCreationQuestion(answer: String) {
+        questionTimer?.cancel()
+        questionTimer = nil
+        guard questionAlreadyAsked else { return }
+        // Record explicit choice for this generation only; do not persist it
+        // as a global taste preference.
+        prompt += "\n\nAdditional preference: " + answer
+        generateApp()
+    }
+
     private func generateApp() {
+        if !questionAlreadyAsked && selectedStyle == nil && existingApp == nil &&
+           !demoMode && shortcutSource != "widget" && shortcutGenerationNonce == 0 &&
+           prompt.count > 90 && prompt.lowercased().contains("design") {
+            questionAlreadyAsked = true
+            choiceResponse = ""
+            pendingChoiceQuestion = true
+            questionTimer = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard !Task.isCancelled, pendingChoiceQuestion else { return }
+                choiceResponse = "Simple and fast"
+                pendingChoiceQuestion = false
+            }
+            return
+        }
         HTMLAppFirstUseTips.show("generation")
         guard !session.isWorking && !browserResearch.isBrowsing else { return }
         if demoMode {
