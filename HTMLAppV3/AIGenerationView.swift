@@ -58,6 +58,9 @@ struct AIGenerationView: View {
     @State private var questionTimer: Task<Void, Never>?
     @State private var questionAlreadyAsked = false
     @State private var customQuestionAnswer = ""
+    @State private var questionTitle = "Which direction should Forge prioritize?"
+    @State private var questionChoices = ["More visual detail", "Simple and fast"]
+    @State private var suggestedAnswer = "Simple and fast"
 
     private let starterPrompts = [
         "A simple homework planner that works offline",
@@ -128,11 +131,11 @@ struct AIGenerationView: View {
                 NavigationStack {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("One quick question").font(.title2.bold())
-                        Text("Would you prefer more visual detail or a simpler, faster interface?")
+                        Text(questionTitle)
                             .font(.headline)
                         Text("Forge will choose a sensible default after 20 seconds if you don't answer.")
                             .font(.footnote).foregroundStyle(.secondary)
-                        ForEach(["A detailed, visual experience", "Simple and fast (recommended)"], id: \.self) { option in
+                        ForEach(questionChoices, id: \.self) { option in
                             Button {
                                 choiceResponse = option
                                 pendingChoiceQuestion = false
@@ -156,7 +159,7 @@ struct AIGenerationView: View {
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Let Forge choose") {
-                                choiceResponse = "Simple and fast"
+                                choiceResponse = suggestedAnswer
                                 pendingChoiceQuestion = false
                             }
                         }
@@ -1103,6 +1106,43 @@ struct AIGenerationView: View {
         }
     }
 
+    private static func askForgeQuestion(for idea: String) async -> (title: String, options: [String], suggested: String) {
+        let fallback = (title: "What should the app prioritize?",
+                        options: ["More visual detail", "Simple and fast"],
+                        suggested: "Simple and fast")
+        do {
+            let response = try await AIProviderClient.complete(
+                config: AISettingsStore.configuration(for: .planner),
+                system: """
+                You are a product designer. If the app idea leaves a meaningful
+                design choice unresolved, ask ONE short user-facing question with
+                TWO distinct options. Recommend the best default for this request.
+                Return EXACTLY four lines:
+                QUESTION: question
+                A: first option
+                B: second option
+                DEFAULT: A or B
+                No JSON, Markdown or commentary. Don't ask for personal data.
+                """,
+                messages: [("user", String(idea.prefix(900)))],
+                timeout: 12, maxTokens: 170, retryOnTransient: false
+            )
+            let lines = response.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            func field(_ prefix: String) -> String? {
+                lines.first(where: { $0.uppercased().hasPrefix(prefix) })
+                    .map { String($0.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines) }
+            }
+            guard let title = field("QUESTION:"), let first = field("A:"),
+                  let second = field("B:"), !title.isEmpty, !first.isEmpty,
+                  !second.isEmpty, title.count < 180, first.count < 110,
+                  second.count < 110 else { return fallback }
+            return (title, [first, second],
+                field("DEFAULT:")?.uppercased() == "A" ? first : second)
+        } catch {
+            return fallback
+        }
+    }
+
     private func resolveCreationQuestion(answer: String) {
         questionTimer?.cancel()
         questionTimer = nil
@@ -1116,15 +1156,24 @@ struct AIGenerationView: View {
     private func generateApp() {
         if !questionAlreadyAsked && selectedStyle == nil && existingApp == nil &&
            !demoMode && shortcutSource != "widget" && shortcutGenerationNonce == 0 &&
-           prompt.count > 90 && prompt.lowercased().contains("design") {
+           prompt.count > 90 && (prompt.lowercased().contains("design") ||
+               prompt.lowercased().contains("whatever you think") ||
+               prompt.lowercased().contains("something like")) {
             questionAlreadyAsked = true
-            choiceResponse = ""
-            pendingChoiceQuestion = true
-            questionTimer = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 20_000_000_000)
-                guard !Task.isCancelled, pendingChoiceQuestion else { return }
-                choiceResponse = "Simple and fast"
-                pendingChoiceQuestion = false
+            let source = prompt
+            Task { @MainActor in
+                let question = await Self.askForgeQuestion(for: source)
+                questionTitle = question.title
+                questionChoices = question.options
+                suggestedAnswer = question.suggested
+                choiceResponse = ""
+                pendingChoiceQuestion = true
+                questionTimer = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 20_000_000_000)
+                    guard !Task.isCancelled, pendingChoiceQuestion else { return }
+                    choiceResponse = suggestedAnswer
+                    pendingChoiceQuestion = false
+                }
             }
             return
         }
