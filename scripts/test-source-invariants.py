@@ -90,7 +90,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.13"' in release
+assert 'compiledVersion = "1.6.14"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -157,4 +157,11 @@ assert 'ROUTES / NEARBY' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'coreWorkflowWarnings(prompt:' in source("HTMLAppV3/AIGenerationService.swift")
+assert 'preloadIfSelected()' in source("HTMLAppV3/HTMLAppOfflineSpeech.swift")
+assert 'HTMLAppOfflineSpeech.shared.preloadIfSelected()' in source("HTMLAppV3/LibraryUI.swift")
+assert 'cachedLocation' in source("HTMLAppV3/LocationPermissionBridge.swift")
+assert 'isRecoverable(_ draft:' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'askForgeQuestion(for idea:' in source("HTMLAppV3/AIGenerationView.swift")
+assert '20_000_000_000' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'MOCKUP FIDELITY' in source("HTMLAppV3/AIGenerationView.swift")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
