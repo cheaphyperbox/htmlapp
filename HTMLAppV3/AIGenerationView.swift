@@ -1066,13 +1066,10 @@ struct AIGenerationView: View {
         activeShortcutPrompt = idea
         prompt = idea
         UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.activeIdea")
-        // Voice widget follows in-app mockup selection; Siri retains
-        // its previously requested direct-build behavior.
-        if shortcutSource == "widget" && stylePickerEnabled {
-            exploreStyleOptions()
-        } else {
-            generateApp()
-        }
+        // "Generate Now" from the Lock Screen means start with the dictated
+        // request, never return to a blank describe-your-app page or force
+        // the user to repeat a voice capture.
+        generateApp()
     }
 
     private func startForgeActivity(edit: Bool) {
