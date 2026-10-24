@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.14"
-    static let compiledBuild = "21"
+    static let compiledVersion = "1.6.15"
+    static let compiledBuild = "22"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.15" { return [
+            Entry(id: "lockscreen-forge", title: "Lock Screen voice goes straight to Forge", description: "The Lock Screen microphone opens the regular Generate with AI screen and starts listening. Tap the mic again to stop, or use Generate or Cancel.", symbol: "mic.fill", tint: .blue),
+            Entry(id: "whisper-handoff", title: "Voice generation waits for transcription", description: "If Whisper is selected, Forge finishes transcribing before using your spoken idea.", symbol: "waveform", tint: .purple),
+            Entry(id: "welcome-action", title: "A simpler What's New screen", description: "One clear Continue to HTMLApp button closes the update notes.", symbol: "arrow.right.circle.fill", tint: .green)
+        ] }
         if version == "1.6.14" { return [
             Entry(id: "faithful-look", title: "More faithful generated apps", description: "Forge checks the chosen mockup's layout as well as its colors before presenting the final app.", symbol: "square.stack", tint: .purple),
             Entry(id: "fast-location", title: "Faster location responses", description: "Recently obtained accurate locations can be reused instead of waiting for GPS again.", symbol: "location.fill", tint: .blue),
@@ -268,11 +273,6 @@ struct HTMLAppWhatsNewView: View {
                 .background(.regularMaterial)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onDone)
-                }
-            }
         }
     }
 

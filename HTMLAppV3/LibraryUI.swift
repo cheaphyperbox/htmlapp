@@ -39,11 +39,9 @@ struct LibraryView: View {
     @State private var showAddOptions = false
     @State private var showGenerator = false
     @State private var checkedInterruptedForgeThisLaunch = false
-    @State private var showVoiceCreate = false
     @State private var shortcutPrompt = ""
     @State private var shortcutGenerationNonce = 0
     @State private var shortcutSource = "siri"
-    @State private var pendingVoicePrompt: String?
     @State private var aiEditorApp: SavedHTMLApp?
     @State private var editHistoryApp: SavedHTMLApp?
     @State private var aiIconApp: SavedHTMLApp?
@@ -96,29 +94,11 @@ struct LibraryView: View {
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(store) }
         .sheet(isPresented: $showAllApps) { AllHTMLAppsView().environmentObject(store) }
         .sheet(isPresented: $showWebsiteImporter) { WebsiteImportView().environmentObject(store) }
-        .fullScreenCover(isPresented: $showVoiceCreate, onDismiss: {
-            // Only hand off after the capture cover is fully dismissed.
-            // This removes the fragile fixed 350ms transition delay.
-            UserDefaults.standard.removeObject(forKey: "htmlapp.voiceCreatePending")
-            guard let idea = pendingVoicePrompt else { return }
-            pendingVoicePrompt = nil
-            shortcutPrompt = idea
-            shortcutSource = "widget"
-            UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
-            shortcutGenerationNonce += 1
-            DispatchQueue.main.async { showGenerator = true }
+        .fullScreenCover(isPresented: $showGenerator, onDismiss: {
+            shortcutPrompt = ""
+            shortcutSource = "siri"
+            shortcutGenerationNonce = 0
         }) {
-            HTMLAppVoiceCreateView(cancel: {
-                pendingVoicePrompt = nil
-                UserDefaults.standard.removeObject(forKey: "htmlapp.voiceCreatePending")
-                showVoiceCreate = false
-            }, generate: { idea in
-                guard pendingVoicePrompt == nil, !idea.isEmpty else { return }
-                pendingVoicePrompt = idea
-                showVoiceCreate = false
-            })
-        }
-        .fullScreenCover(isPresented: $showGenerator) {
             AIGenerationView(initialPrompt: shortcutPrompt, shortcutGenerationNonce: shortcutGenerationNonce, shortcutSource: shortcutSource).environmentObject(store).interactiveDismissDisabled(true)
         }
         .fullScreenCover(item: $aiEditorApp) { app in
@@ -173,17 +153,17 @@ struct LibraryView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppVoiceCreateRequested"))) { _ in
-            showVoiceCreate = true
+            handlePendingShortcut()
         }
         .onAppear {
             handlePendingShortcut()
-            if !checkedInterruptedForgeThisLaunch && !UserDefaults.standard.bool(forKey: "htmlapp.voiceCreatePending") {
+            if !checkedInterruptedForgeThisLaunch && !showGenerator {
                 checkedInterruptedForgeThisLaunch = true
                 if let stale = ForgeDraftCheckpointStore.load(),
                    ["Ready to review", "Saved", "Completed"].contains(stale.phase) {
                     ForgeDraftCheckpointStore.clear()
                 }
-                if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator, !showVoiceCreate,
+                if let checkpoint = ForgeDraftCheckpointStore.load(), !showGenerator,
                    !["Ready to review", "Saved", "Completed"].contains(checkpoint.phase) {
                     if checkpoint.existingAppID == nil {
                         // Never auto-open an already saved app just because a
@@ -329,6 +309,17 @@ struct LibraryView: View {
     }
 
     private func handlePendingShortcut() {
+        // The Lock Screen widget opens the normal Forge prompt screen. Its
+        // microphone starts there, without a separate voice-capture modal.
+        if UserDefaults.standard.bool(forKey: "htmlapp.voiceCreatePending") {
+            UserDefaults.standard.removeObject(forKey: "htmlapp.voiceCreatePending")
+            UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.activeIdea")
+            shortcutPrompt = ""
+            shortcutSource = "widgetMic"
+            shortcutGenerationNonce += 1
+            showGenerator = true
+            return
+        }
         if let name = UserDefaults.standard.string(forKey: "htmlapp.shortcut.openName") {
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.openName")
             let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)

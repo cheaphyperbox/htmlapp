@@ -22,6 +22,7 @@ struct AIGenerationView: View {
     @State private var promptDictationActive = false
     @State private var promptMicHeld = false
     @State private var promptDictationAwaitingResult = false
+    @State private var generateAfterVoiceTranscription = false
     @State private var microphoneRecordingTask: Task<Void, Never>?
     @State private var microphoneEditNotice: String?
     @State private var pendingFloatingVoiceFeedback: Bool?
@@ -75,6 +76,7 @@ struct AIGenerationView: View {
 
     let shortcutGenerationNonce: Int
     let shortcutSource: String
+    private var isWidgetVoiceEntry: Bool { shortcutSource == "widgetMic" && existingApp == nil }
 
     init(existingApp: SavedHTMLApp? = nil, initialPrompt: String = "",
          shortcutGenerationNonce: Int = 0, shortcutSource: String = "siri", demoMode: Bool = false) {
@@ -112,6 +114,8 @@ struct AIGenerationView: View {
                             showCancelConfirmation = true
                         } else {
                             AIDebugTraceStore.shared.finish(outcome: "Canceled before starting")
+                            microphoneRecordingTask?.cancel()
+                            dictation.cancel()
                             dismiss()
                         }
                     }
@@ -274,7 +278,7 @@ struct AIGenerationView: View {
         }
         .onDisappear {
             if demoMode { generationTask?.cancel() }
-            microphoneRecordingTask?.cancel(); dictation.stop()
+            microphoneRecordingTask?.cancel(); dictation.cancel()
             // Do not cancel the generation merely because the view disappears.
             // Keep a checkpoint and allow the finite iOS background grace period.
             if !demoMode && session.isWorking { session.persistCheckpoint() }
@@ -285,11 +289,25 @@ struct AIGenerationView: View {
                 microphoneCapturing = false
                 microphoneArmed = false
                 microphoneTranslation = .zero
-                dictation.stop()
+                if isWidgetVoiceEntry {
+                    generateAfterVoiceTranscription = false
+                    promptMicHeld = false
+                    dictation.cancel()
+                } else {
+                    dictation.stop()
+                }
                 persistDraftForBackground()
             }
         }
         .onChange(of: dictation.transcribingOffline) { processing in
+            if !processing && generateAfterVoiceTranscription {
+                generateAfterVoiceTranscription = false
+                let words = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !words.isEmpty {
+                    prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + words
+                }
+                submitPromptGeneration()
+            }
             guard !processing, let forFeedback = pendingFloatingVoiceFeedback else { return }
             pendingFloatingVoiceFeedback = nil
             let words = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -308,15 +326,21 @@ struct AIGenerationView: View {
                 applyAIChange()
             }
         }
+        .onChange(of: dictation.recording) { recording in
+            if isWidgetVoiceEntry && !recording && !dictation.requestingPermission {
+                promptMicHeld = false
+                promptDictationActive = false
+            }
+        }
         .onChange(of: dictation.transcript) { value in
             // Drag-edit dictation is committed only on release; never overwrite a
             // typed request, and never clear the creation prompt on cancellation.
             guard !microphoneCapturing else { return }
             let merged = dictationPrefix + (dictationPrefix.isEmpty || value.isEmpty ? "" : "\n") + value
             if dictationForEdit { changePrompt = merged }
-            else if promptDictationAwaitingResult && !promptMicHeld {
+            else if promptDictationAwaitingResult && (!promptMicHeld || isWidgetVoiceEntry) {
                 prompt = merged
-                if !value.isEmpty { promptDictationAwaitingResult = false }
+                if !value.isEmpty && !promptMicHeld { promptDictationAwaitingResult = false }
             }
         }
         .onChange(of: session.refinedBrief) { brief in
@@ -436,31 +460,52 @@ struct AIGenerationView: View {
                     .frame(height: 150)
                     .font(.body)
                 HStack(spacing: 14) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 34, weight: .semibold))
-                        .frame(width: 86, height: 86)
-                        .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
-                        .background(promptMicHeld ? Color.red : Color(.systemGray4),
-                                    in: RoundedRectangle(cornerRadius: 24))
-                        .contentShape(RoundedRectangle(cornerRadius: 24))
-                        .highPriorityGesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { _ in
-                                    if !promptMicHeld { startPromptRecording() }
-                                }
-                                .onEnded { _ in stopPromptRecording() }
-                        )
-                        .accessibilityAction {
-                            if dictation.recording || promptMicHeld { stopPromptRecording() }
-                            else { startPromptRecording() }
+                    if isWidgetVoiceEntry {
+                        Button {
+                            if promptMicHeld || dictation.recording || dictation.requestingPermission {
+                                stopPromptRecording()
+                            } else {
+                                startPromptRecording()
+                            }
+                        } label: {
+                            Image(systemName: promptMicHeld ? "stop.fill" : "mic.fill")
+                                .font(.system(size: 34, weight: .semibold))
+                                .frame(width: 86, height: 86)
+                                .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
+                                .background(promptMicHeld ? Color.red : Color(.systemGray4),
+                                            in: RoundedRectangle(cornerRadius: 24))
                         }
-                        .accessibilityLabel("Hold to dictate app idea")
-                        .accessibilityHint("Hold down the microphone while you speak, then release.")
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(promptMicHeld ? "Tap to stop recording" : "Tap to start recording")
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 34, weight: .semibold))
+                            .frame(width: 86, height: 86)
+                            .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
+                            .background(promptMicHeld ? Color.red : Color(.systemGray4),
+                                        in: RoundedRectangle(cornerRadius: 24))
+                            .contentShape(RoundedRectangle(cornerRadius: 24))
+                            .highPriorityGesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { _ in
+                                        if !promptMicHeld { startPromptRecording() }
+                                    }
+                                    .onEnded { _ in stopPromptRecording() }
+                            )
+                            .accessibilityAction {
+                                if dictation.recording || promptMicHeld { stopPromptRecording() }
+                                else { startPromptRecording() }
+                            }
+                            .accessibilityLabel("Hold to dictate app idea")
+                            .accessibilityHint("Hold down the microphone while you speak, then release.")
+                    }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(dictation.recording ? "Listening…" : "Hold to talk")
+                        Text(isWidgetVoiceEntry && promptMicHeld ? "Listening…" : (dictation.recording ? "Listening…" : "Hold to talk"))
                             .font(.headline)
-                        Text(dictation.recording ? "Release to stop recording." :
-                            "Keep the gray mic pressed while you describe your app.")
+                        Text(isWidgetVoiceEntry
+                             ? (promptMicHeld ? "Tap to stop recording." : "Tap the microphone to record your idea.")
+                             : (dictation.recording ? "Release to stop recording." :
+                                "Keep the gray mic pressed while you describe your app."))
                             .font(.subheadline).foregroundStyle(.secondary)
                         Text(dictation.status)
                             .font(.caption).foregroundStyle(.secondary)
@@ -474,7 +519,9 @@ struct AIGenerationView: View {
             } header: {
                 Text("Step 1 · Describe your app")
             } footer: {
-                Text("Tell Forge what your app should do. You can type or hold the gray microphone to speak.")
+                Text(isWidgetVoiceEntry
+                     ? "Tell Forge what your app should do. Tap the microphone to stop listening, or use Generate or Cancel."
+                     : "Tell Forge what your app should do. You can type or hold the gray microphone to speak.")
             }
 
             Section {
@@ -513,19 +560,19 @@ struct AIGenerationView: View {
                 }
 
                 Button {
-                    if existingApp == nil && stylePickerEnabled && !demoMode {
-                        exploreStyleOptions()
-                    } else {
-                        selectedStyle = nil
-                        generateApp()
-                    }
+                    submitPromptGeneration()
                 } label: {
-                    Label(existingApp == nil && stylePickerEnabled ? "Start Generating" : "Make My App", systemImage: "sparkles")
+                    Label(generateAfterVoiceTranscription ? "Finishing transcription…" :
+                          (existingApp == nil && stylePickerEnabled ? "Start Generating" : "Make My App"),
+                          systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (!demoMode && !AISettingsStore.configuration.isConfigured))
+                .disabled(generateAfterVoiceTranscription ||
+                          (prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                           !(isWidgetVoiceEntry && (promptMicHeld || dictation.transcribingOffline))) ||
+                          (!demoMode && !AISettingsStore.configuration.isConfigured))
             }
 
             if !AISettingsStore.configuration.isConfigured && !demoMode {
@@ -542,7 +589,7 @@ struct AIGenerationView: View {
                 }
             }
         }
-        .scrollDisabled(promptMicHeld)
+        .scrollDisabled(promptMicHeld && !isWidgetVoiceEntry)
     }
 
 
@@ -556,7 +603,7 @@ struct AIGenerationView: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         dictationPrefix = prompt
         microphoneRecordingTask?.cancel()
-        microphoneRecordingTask = Task { await dictation.start() }
+        microphoneRecordingTask = Task { await dictation.start(tapToStop: isWidgetVoiceEntry) }
     }
 
     private func stopPromptRecording() {
@@ -569,6 +616,23 @@ struct AIGenerationView: View {
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         promptDictationActive = false
+    }
+
+    private func submitPromptGeneration() {
+        if isWidgetVoiceEntry && (promptMicHeld || dictation.recording || dictation.requestingPermission) {
+            stopPromptRecording()
+        }
+        if isWidgetVoiceEntry && dictation.transcribingOffline {
+            generateAfterVoiceTranscription = true
+            return
+        }
+        guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if existingApp == nil && stylePickerEnabled && !demoMode {
+            exploreStyleOptions()
+        } else {
+            selectedStyle = nil
+            generateApp()
+        }
     }
 
     private var styleSelectionView: some View {
@@ -1056,6 +1120,17 @@ struct AIGenerationView: View {
     private func acceptShortcutRequest(_ nonce: Int, incoming: String) {
         guard existingApp == nil, nonce > 0, nonce != handledShortcutNonce else { return }
         handledShortcutNonce = nonce
+        if isWidgetVoiceEntry {
+            // Opening from the Lock Screen is a request to dictate, not to
+            // generate immediately or show the old voice-only capture page.
+            prompt = ""
+            activeShortcutPrompt = ""
+            generateAfterVoiceTranscription = false
+            showDraftRecovery = false
+            recoverableDraft = nil
+            startPromptRecording()
+            return
+        }
         let idea = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !idea.isEmpty else { return }
         generationTask?.cancel()
@@ -1069,9 +1144,9 @@ struct AIGenerationView: View {
         activeShortcutPrompt = idea
         prompt = idea
         UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.activeIdea")
-        // "Generate Now" from the Lock Screen means start with the dictated
-        // request, never return to a blank describe-your-app page or force
-        // the user to repeat a voice capture.
+        // Other shortcuts provide a finished text prompt and can still
+        // start generation directly; the Lock Screen microphone path above
+        // intentionally waits for the user to finish dictating.
         generateApp()
     }
 

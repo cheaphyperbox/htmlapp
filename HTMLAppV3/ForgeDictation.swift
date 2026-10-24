@@ -20,10 +20,10 @@ final class ForgeDictation: ObservableObject {
     private var tapped = false
     private var timeout: Task<Void, Never>?
 
-    func start() async {
+    func start(tapToStop: Bool = false) async {
         guard !recording, !requestingPermission else { return }
         if preferWhisperWhenAppleUnavailable || UserDefaults.standard.string(forKey: "htmlapp.dictationEngine") == "whisper" {
-            await startOffline()
+            await startOffline(tapToStop: tapToStop)
             return
         }
         requestingPermission = true
@@ -36,7 +36,7 @@ final class ForgeDictation: ObservableObject {
         guard permission == .authorized else {
             preferWhisperWhenAppleUnavailable = true
             status = "Apple Speech is unavailable. Switching to Whisper Offline."
-            await startOffline()
+            await startOffline(tapToStop: tapToStop)
             return
         }
         let microphone = await withCheckedContinuation { continuation in
@@ -46,7 +46,7 @@ final class ForgeDictation: ObservableObject {
         guard microphone else { status = "Enable Microphone for HTMLApp in Settings, or type your idea."; return }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable else {
             status = "Apple Speech is unavailable. Switching to Whisper Offline."
-            await startOffline()
+            await startOffline(tapToStop: tapToStop)
             return
         }
         stop()
@@ -81,19 +81,21 @@ final class ForgeDictation: ObservableObject {
             try engine.start()
             recording = true
             status = recognizer.supportsOnDeviceRecognition ? "Listening on device…" : "Listening using Apple speech recognition. Audio may be sent to Apple."
-            timeout = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 55_000_000_000)
-                guard !Task.isCancelled else { return }
-                self?.stop()
+            if !tapToStop {
+                timeout = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 55_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    self?.stop()
+                }
             }
         } catch {
             stop()
             preferWhisperWhenAppleUnavailable = true
             status = "Apple Speech failed; trying Whisper Offline."
-            await startOffline()
+            await startOffline(tapToStop: tapToStop)
         }
     }
-    private func startOffline() async {
+    private func startOffline(tapToStop: Bool = false) async {
         let requestedGeneration = generation
         requestingPermission = true
         defer { requestingPermission = false }
@@ -126,7 +128,7 @@ final class ForgeDictation: ObservableObject {
             offlineMode = true
             transcript = ""
             recording = true
-            status = "Recording for Whisper… Release to transcribe offline."
+            status = tapToStop ? "Recording for Whisper… Tap the mic to stop recording." : "Recording for Whisper… Release to transcribe offline."
         } catch {
             status = "Offline recording could not start: " + error.localizedDescription
             stop()

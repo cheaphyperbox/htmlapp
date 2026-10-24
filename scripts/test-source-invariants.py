@@ -67,10 +67,15 @@ assert "Never auto-open an already saved app" in source("HTMLAppV3/LibraryUI.swi
 assert "HTMLAppForgeCompletionFeedback.announce" in source("HTMLAppV3/AIGenerationView.swift"), "Completion feedback must be called"
 assert "No microphone audio was recorded" in source("HTMLAppV3/ForgeDictation.swift"), "Whisper must diagnose empty recordings"
 voice_handoff = source("HTMLAppV3/AIGenerationView.swift").split("private func acceptShortcutRequest(", 1)[1].split("private func startForgeActivity(", 1)[0]
-assert "activeShortcutPrompt = idea" in voice_handoff
-assert "prompt = idea" in voice_handoff
-assert "generateApp()" in voice_handoff, "Generate Now should submit the saved voice idea directly"
-assert 'shortcutSource = "widget"' in source("HTMLAppV3/LibraryUI.swift")
+assert "startPromptRecording()" in voice_handoff, "Widget must start microphone in the regular AI generator"
+assert 'shortcutSource = "widgetMic"' in source("HTMLAppV3/LibraryUI.swift")
+assert "HTMLAppVoiceCreateView(" not in source("HTMLAppV3/LibraryUI.swift")
+assert not (root / "HTMLAppV3/HTMLAppVoiceCreateView.swift").exists(), "The duplicate widget capture screen must remain removed"
+assert "shortcutSource = \"siri\"" in source("HTMLAppV3/LibraryUI.swift"), "Normal creation must not inherit tap-to-stop mode"
+assert "Tap to stop recording." in source("HTMLAppV3/AIGenerationView.swift")
+assert "generateAfterVoiceTranscription" in source("HTMLAppV3/AIGenerationView.swift")
+assert 'Button("Done", action: onDone)' not in release
+assert 'Text("Continue to HTMLApp")' in release
 assert '"Start Generating"' in source("HTMLAppV3/AIGenerationView.swift")
 assert '"Choose a Look"' not in source("HTMLAppV3/AIGenerationView.swift")
 assert 'previewHTML)' in source("HTMLAppV3/ForgeStylePreview.swift")
@@ -93,7 +98,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.14"' in release
+assert 'compiledVersion = "1.6.15"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
