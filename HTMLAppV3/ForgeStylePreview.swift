@@ -39,10 +39,18 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable, Sendable {
         Name: \(name)
         Impression: \(summary)
         Design specification: \(direction)
-        MANDATORY VISUAL REFERENCE: Match this mockup nearly pixel-for-pixel.
+        MANDATORY VISUAL REFERENCE: Match the chosen mockup layout closely.
         Preserve the SAME colors, typography, font sizes, spacing, padding, corner radii,
         shadows, borders, layout, navigation, icons, component shapes and positions.
         REUSE its CSS custom properties and class structure where practical.
+        The initial screen MUST retain the chosen reference's exact content hierarchy:
+        same header treatment, dominant visual region, relative positioning of the
+        primary action, card ordering, navigation scheme, and surface geometry.
+        Treat the selected mockup as the source of truth, not a suggestion.
+        Implement features INSIDE this architecture rather than switching to a
+        generic dashboard. Prefer faithful layout over decorative novelty.
+        If runtime requirements demand extra screens, leave the initial
+        mockup composition intact and extend around it.
         Only introduce new elements for real features and responsive layouts, in
         precisely the same design language. Replace demo data with real working data.
         Do NOT redesign this mockup or replace it with a generic layout.
