@@ -1209,11 +1209,29 @@ struct AIGenerationView: View {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     return !property.isEmpty && !session.streamedHTML.contains(property)
                 }
-                if !missing.isEmpty && !Task.isCancelled {
+                let layout = session.streamedHTML.lowercased()
+                let fidelityIssue: String?
+                switch chosen.id {
+                case 0:
+                    fidelityIssue = (layout.contains("map") && (layout.contains("floating") ||
+                        layout.contains("sheet") || layout.contains("overlay"))) ? nil :
+                        "Restore a dominant map-first viewport with a floating destination/action panel."
+                case 1:
+                    fidelityIssue = (layout.contains("hero") && (layout.contains("action") ||
+                        layout.contains("button"))) ? nil :
+                        "Restore a distinctive action-first hero and prominent task CTA."
+                default:
+                    fidelityIssue = (layout.contains("list") && (layout.contains("step") ||
+                        layout.contains("row"))) ? nil :
+                        "Restore a compact list-first screen with numbered results or directions."
+                }
+                if (!missing.isEmpty || fidelityIssue != nil) && !Task.isCancelled {
                     AIDebugTraceStore.shared.append("MOCKUP FIDELITY",
-                        "Missing \(missing.count) CSS tokens. One focused repair requested.")
+                        "Missing CSS tokens: \(missing.count). Layout issue: \(fidelityIssue ?? "none").")
                     await session.revise(
-                        change: "Restore the selected mockup's CSS variables and visual styling without changing working app behavior. Missing tokens: " + missing.prefix(8).joined(separator: "; "),
+                        change: "Restore the CHOSEN mockup's initial screen layout, hierarchy, component geometry and CSS variables without breaking any functionality. " +
+                            (fidelityIssue ?? "") + " Missing style tokens: " +
+                            missing.prefix(8).joined(separator: "; "),
                         styleInstruction: chosen.buildInstruction
                     )
                 }
