@@ -66,9 +66,10 @@ assert "sketches prepared" in source("HTMLAppV3/AIGenerationView.swift"), "Previ
 assert "Never auto-open an already saved app" in source("HTMLAppV3/LibraryUI.swift"), "Saved app must not be forced open"
 assert "HTMLAppForgeCompletionFeedback.announce" in source("HTMLAppV3/AIGenerationView.swift"), "Completion feedback must be called"
 assert "No microphone audio was recorded" in source("HTMLAppV3/ForgeDictation.swift"), "Whisper must diagnose empty recordings"
-assert '// "Generate Now" from the Lock Screen means start with the dictated' in source("HTMLAppV3/AIGenerationView.swift")
-assert 'activeShortcutPrompt = idea' in source("HTMLAppV3/AIGenerationView.swift")
-assert '// the user to repeat a voice capture.\n        generateApp()' in source("HTMLAppV3/AIGenerationView.swift")
+voice_handoff = source("HTMLAppV3/AIGenerationView.swift").split("private func acceptShortcutRequest(", 1)[1].split("private func startForgeActivity(", 1)[0]
+assert "activeShortcutPrompt = idea" in voice_handoff
+assert "prompt = idea" in voice_handoff
+assert "generateApp()" in voice_handoff, "Generate Now should submit the saved voice idea directly"
 assert 'shortcutSource = "widget"' in source("HTMLAppV3/LibraryUI.swift")
 assert '"Start Generating"' in source("HTMLAppV3/AIGenerationView.swift")
 assert '"Choose a Look"' not in source("HTMLAppV3/AIGenerationView.swift")
