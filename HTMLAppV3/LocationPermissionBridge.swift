@@ -27,7 +27,9 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
             }
 
             // A recent accurate-enough foreground fix should return immediately.
-            if let last = self.cachedLocation ?? self.manager.location,
+            if (self.manager.authorizationStatus == .authorizedWhenInUse ||
+                self.manager.authorizationStatus == .authorizedAlways),
+               let last = self.cachedLocation ?? self.manager.location,
                abs(last.timestamp.timeIntervalSinceNow) < 45,
                last.horizontalAccuracy >= 0,
                last.horizontalAccuracy <= (highAccuracy ? 75 : 250) {
