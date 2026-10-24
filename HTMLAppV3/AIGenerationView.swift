@@ -202,7 +202,8 @@ struct AIGenerationView: View {
             }
             if !demoMode && recoverableDraft == nil,
                let draft = ForgeDraftCheckpointStore.load(),
-               draft.existingAppID == existingApp?.id {
+               draft.existingAppID == existingApp?.id,
+               Self.isRecoverable(draft) {
                 recoverableDraft = draft
                 if shortcutGenerationNonce == 0 { showDraftRecovery = true }
             }
@@ -1100,7 +1101,12 @@ struct AIGenerationView: View {
                     UIApplication.shared.endBackgroundTask(backgroundTaskID)
                     backgroundTaskID = .invalid
                 }
-                session.persistCheckpoint()
+                if !Task.isCancelled && session.errorMessage == nil &&
+                    !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    session.clearCheckpoint()
+                } else {
+                    session.persistCheckpoint()
+                }
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let webReport: String
@@ -1297,6 +1303,18 @@ Requested edit:
         }
 
         generateApp()
+    }
+
+    private static func isRecoverable(_ draft: ForgeDraftCheckpoint) -> Bool {
+        let phase = draft.phase.lowercased()
+        if phase.contains("ready to review") || phase.contains("saved") ||
+            phase.contains("completed") || phase.contains("ready for ai edits") {
+            ForgeDraftCheckpointStore.clear()
+            return false
+        }
+        return !draft.originalPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            (draft.streamedByteCount > 0 || !draft.html.isEmpty ||
+             phase.contains("generat") || phase.contains("edit") || phase.contains("research"))
     }
 
     private static func durationText(_ seconds: TimeInterval) -> String {
