@@ -86,7 +86,10 @@ struct LibraryView: View {
         // Present from the navigation container, not the root page. This keeps
         // dialogs/sheets active while a nested folder destination is on screen.
         .htmlAppFirstUseToasts()
-        .task { HTMLAppWebWarmup.prime() }
+        .task {
+            HTMLAppWebWarmup.prime()
+            await HTMLAppOfflineSpeech.shared.preloadIfSelected()
+        }
         .sheet(item: $editor) { EditorView(mode: $0).environmentObject(store) }
         .sheet(item: $websiteEditorApp) { WebsiteSourceEditorView(app: $0).environmentObject(store) }
         .sheet(item: $websiteSourcesApp) { WebsiteSourcesView(app: $0).environmentObject(store) }
@@ -103,7 +106,7 @@ struct LibraryView: View {
             shortcutSource = "widget"
             UserDefaults.standard.set(idea, forKey: "htmlapp.shortcut.activeIdea")
             shortcutGenerationNonce += 1
-            showGenerator = true
+            DispatchQueue.main.async { showGenerator = true }
         }) {
             HTMLAppVoiceCreateView(cancel: {
                 pendingVoicePrompt = nil
