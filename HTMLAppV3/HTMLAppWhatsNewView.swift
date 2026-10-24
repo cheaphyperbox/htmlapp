@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.13"
-    static let compiledBuild = "20"
+    static let compiledVersion = "1.6.14"
+    static let compiledBuild = "21"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,13 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.14" { return [
+            Entry(id: "faithful-look", title: "More faithful generated apps", description: "Forge checks the chosen mockup's layout as well as its colors before presenting the final app.", symbol: "square.stack", tint: .purple),
+            Entry(id: "fast-location", title: "Faster location responses", description: "Recently obtained accurate locations can be reused instead of waiting for GPS again.", symbol: "location.fill", tint: .blue),
+            Entry(id: "whisper-ready", title: "Whisper preloading", description: "When selected, Whisper can load on opening HTMLApp instead of at the end of recording.", symbol: "waveform", tint: .orange),
+            Entry(id: "forge-questions", title: "Optional Forge questions", description: "Forge can ask a quick design question and continue with its recommended answer after 20 seconds.", symbol: "questionmark.bubble", tint: .green),
+            Entry(id: "voice-drafts", title: "Voice capture and draft fixes", description: "Lock Screen Generate Now uses the captured idea, while completed drafts no longer trigger recovery.", symbol: "mic", tint: .blue)
+        ] }
         if version == "1.6.13" { return [
             Entry(id: "distinct-styles", title: "Three different looks", description: "Style previews now vary layout, structure and domain-specific content, not just colors.", symbol: "square.grid.3x1", tint: .purple),
             Entry(id: "functional", title: "Better working apps", description: "Forge now audits core workflows and asks the AI for real functionality instead of decorative placeholders.", symbol: "checkmark.shield", tint: .blue),
