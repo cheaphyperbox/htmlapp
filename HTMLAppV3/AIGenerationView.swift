@@ -274,7 +274,7 @@ struct AIGenerationView: View {
             microphoneRecordingTask?.cancel(); dictation.stop()
             // Do not cancel the generation merely because the view disappears.
             // Keep a checkpoint and allow the finite iOS background grace period.
-            if !demoMode { session.persistCheckpoint() }
+            if !demoMode && session.isWorking { session.persistCheckpoint() }
         }
         .onChange(of: scenePhase) { value in
             if value != .active {
