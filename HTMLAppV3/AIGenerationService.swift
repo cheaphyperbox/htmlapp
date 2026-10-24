@@ -1332,7 +1332,17 @@ enum AIProviderClient {
                     let shape = responseShape(object)
                     throw AIGenerationError.provider("The AI provider returned a successful response without usable text (\(shape)).")
                 }
-                await MainActor.run { AIDebugTraceStore.shared.append("AI RESPONSE", text) }
+                let finishReason = (object["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String ?? "unspecified"
+                let usage = object["usage"] as? [String: Any]
+                let completionTokens = usage?["completion_tokens"] as? Int
+                    ?? usage?["output_tokens"] as? Int
+                let visibleTokens = usage?["completion_tokens_details"] as? [String: Any]
+                let reasoningTokens = visibleTokens?["reasoning_tokens"] as? Int
+                let responseMetadata = "Finish: \(finishReason); visible characters: \(text.count); output tokens: \(completionTokens.map { String($0) } ?? "unknown"); reasoning tokens: \(reasoningTokens.map { String($0) } ?? "unknown")"
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append("AI RESPONSE METADATA", responseMetadata)
+                    AIDebugTraceStore.shared.append("AI RESPONSE", text)
+                }
                 return text
             } catch {
                 lastError = error

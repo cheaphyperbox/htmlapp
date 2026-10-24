@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.16"
-    static let compiledBuild = "23"
+    static let compiledVersion = "1.6.17"
+    static let compiledBuild = "24"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.17" { return [
+            Entry(id: "complete-style-mockups", title: "Complete AI style previews", description: "Forge gives preview models enough output budget to finish their HTML and retries incomplete specialist results using the main app model.", symbol: "paintpalette.fill", tint: .purple),
+            Entry(id: "preview-debug", title: "Clearer provider diagnostics", description: "AI Debug now shows response finish reasons and token usage when the provider includes them, helping identify truncated mockups.", symbol: "waveform.path.ecg.rectangle", tint: .blue)
+        ] }
         if version == "1.6.16" { return [
             Entry(id: "voice-widget-resume", title: "More reliable Lock Screen voice launch", description: "Cold-start widget links reopen Forge, begin recording, then switch to hold-to-talk after you tap Stop.", symbol: "mic.fill", tint: .blue),
             Entry(id: "style-sketches", title: "More relevant AI style previews", description: "Forge requests mockups for your exact idea and system light or dark appearance. Offline sketches now show realistic product content.", symbol: "paintpalette.fill", tint: .purple),

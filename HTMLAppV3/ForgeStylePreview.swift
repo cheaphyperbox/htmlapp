@@ -79,9 +79,13 @@ enum ForgeStylePreviewService {
     /// fallback keeps all three distinct choices available if a provider fails.
     static func generateSingle(for request: String, feedback: String = "", index: Int,
                                appearance: String = "light") async throws -> ForgeStyleConcept {
-        let config = AISettingsStore.isUIOverhaulEnabled
+        let preferredConfig = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
+        // A specialist that produces only a fragment must not permanently
+        // force every style onto the offline fallback. The regular app model
+        // is a useful second chance when the UI specialist runs out of tokens.
+        let recoveryConfig = AISettingsStore.configuration(for: .coder)
         let directions = [
             ("Immersive", "Large visual-first product layout", "Dominant product-specific visual or data feature, with overlaid contextual controls and an anchored action sheet"),
             ("Action First", "Bold guided action layout", "Big functional call-to-action, expressive type and asymmetrical summary tiles, with a clear next step"),
@@ -108,7 +112,9 @@ enum ForgeStylePreviewService {
         let system = """
         Return ONLY a complete standalone HTML document starting with <!DOCTYPE html>.
         Build a compact visual mockup, not a functioning app. Include inline CSS
-        and realistic labels from the app idea. Keep output under 5000 characters.
+        and realistic labels from the app idea. Aim for 2000–3200 characters.
+        Finish the entire document, including </body></html>, before adding
+        decoration. Do not spend output on planning or reasoning text.
         Use responsive mobile-first styling. Design a visually complete
         preview with domain-relevant content, different shapes and hierarchy.
         Three styles share the objective but must not share a template.
@@ -122,10 +128,14 @@ enum ForgeStylePreviewService {
         for attempt in 0..<(ForgeRunOptions.quick ? 1 : 2) {
             try Task.checkCancellation()
             do {
+                let config = attempt == 0 ? preferredConfig : recoveryConfig
                 let raw = try await AIProviderClient.complete(
                     config: config, system: system, messages: [("user", user)],
-                    timeout: ForgeRunOptions.quick ? 25 : (attempt == 0 ? 45 : 35),
-                    maxTokens: ForgeRunOptions.quick ? 1700 : (attempt == 0 ? 2400 : 1800),
+                    timeout: ForgeRunOptions.quick ? 55 : (attempt == 0 ? 75 : 90),
+                    // Reasoning-capable OpenAI-compatible models may spend
+                    // most of max_tokens internally. Small limits yielded
+                    // only 190–270 visible characters on iOS 16.2.
+                    maxTokens: ForgeRunOptions.quick ? 6500 : (attempt == 0 ? 8500 : 12000),
                     retryOnTransient: false
                 )
                 if let html = extractHTML(raw) {
@@ -134,7 +144,7 @@ enum ForgeStylePreviewService {
                 }
                 await MainActor.run {
                     AIDebugTraceStore.shared.append("STYLE MOCKUP",
-                        "Look \(index + 1) attempt \(attempt + 1) returned \(raw.count) characters but no usable standalone HTML.")
+                        "Look \(index + 1) attempt \(attempt + 1) from \(config.model) returned \(raw.count) characters but no usable standalone HTML. \(attempt == 0 && !ForgeRunOptions.quick ? "Retrying with the main app model and a larger completion budget." : "")")
                 }
             } catch is CancellationError {
                 throw CancellationError()
