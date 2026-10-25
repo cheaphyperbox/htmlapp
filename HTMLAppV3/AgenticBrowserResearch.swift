@@ -83,7 +83,8 @@ final class AgenticBrowserResearch: ObservableObject {
 }
 
 enum WebResearchAgent {
-    private static let maximumSteps = 3
+    // Keep this single knob reversible if API-research quality suffers.
+    private static let maximumSteps = 1
     private static let maximumNotebookCharacters = 24_000
 
     static func run(
