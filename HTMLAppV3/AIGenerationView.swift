@@ -1758,7 +1758,9 @@ Requested edit:
     /// actually backgrounds, then preserve its result for foreground QA.
     private func handoffForgeToBackgroundURLSession() {
         guard !demoMode, session.isWorking, !ForgeBackgroundUpload.shared.isActive else { return }
-        let config = AISettingsStore.configuration
+        let config = ForgeRunOptions.$quick.withValue(quickMode && !AISettingsStore.quickModel.isEmpty) {
+            AISettingsStore.configuration
+        }
         let isEdit = !changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let system: String
@@ -1776,8 +1778,11 @@ Requested edit:
             """
         } else {
             system = AIHTMLAgent.systemPrompt(research: browserResearch.lastReport)
-            let idea = session.refinedBrief.isEmpty ? prompt : session.refinedBrief
-            message = selectedStyle.map { idea + "\n\n" + $0.buildInstruction } ?? idea
+            if !session.refinedBrief.isEmpty {
+                message = session.refinedBrief
+            } else {
+                message = selectedStyle.map { prompt + "\n\n" + $0.buildInstruction } ?? prompt
+            }
         }
         session.persistCheckpoint()
         guard ForgeBackgroundUpload.shared.start(
