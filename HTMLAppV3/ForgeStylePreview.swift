@@ -103,16 +103,15 @@ enum ForgeStylePreviewService {
     }
 
     /// Standalone HTML avoids fragile JSON-escaping of markup, CSS and scripts.
-    /// Each slot gets a fast attempt plus one compact retry. The deterministic
-    /// fallback keeps all three distinct choices available if a provider fails.
+    /// Each slot requests a complete document and retries with the coder model
+    /// if necessary. Incomplete provider output is reported, not substituted.
     static func generateSingle(for request: String, feedback: String = "", index: Int,
                                appearance: String = "light") async throws -> ForgeStyleConcept {
         let preferredConfig = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
-        // A specialist that produces only a fragment must not permanently
-        // force every style onto the offline fallback. The regular app model
-        // is a useful second chance when the UI specialist runs out of tokens.
+        // The regular coder model retries incomplete specialist output;
+        // no locally drawn replacement is ever returned.
         let recoveryConfig = AISettingsStore.configuration(for: .coder)
         let directions = [
             ("Immersive", "Large visual-first product layout", "Dominant product-specific visual or data feature, with overlaid contextual controls and an anchored action sheet"),
