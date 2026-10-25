@@ -45,6 +45,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard locationWaiter != nil else { return }
         if manager.authorizationStatus == .authorizedWhenInUse ||
             manager.authorizationStatus == .authorizedAlways {
             manager.requestLocation()
@@ -55,6 +56,10 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard AIPrivacyOptions.location != "off" else {
+            locationResult("{\"error\":\"disabled_by_user\"}")
+            return
+        }
         guard let latest = locations.last else { return }
         let precise = AIPrivacyOptions.location == "precise" && manager.accuracyAuthorization == .fullAccuracy
         let digits = precise ? 5 : 2
@@ -107,6 +112,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
                 }
             }
         }
+        guard AIPrivacyOptions.allowed(key) else { return "{\"error\":\"disabled_by_user\"}" }
         guard permission else { return "{\"error\":\"permission_denied\"}" }
         if reminders {
             let values: [EKReminder] = await withCheckedContinuation { continuation in
