@@ -28,6 +28,13 @@ private final class AIHTTPRedirectDeny: NSObject, URLSessionTaskDelegate {
 
 @MainActor
 final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
+    private static var approvedCoordinates: (String, String)?
+
+    static func generatedHTMLContainsPrivateLocation(_ html: String) -> Bool {
+        guard let coordinates = approvedCoordinates else { return false }
+        return html.contains(coordinates.0) && html.contains(coordinates.1)
+    }
+
     private let manager = CLLocationManager()
     private var locationWaiter: CheckedContinuation<String, Never>?
     private var countHTTP = 0
@@ -65,6 +72,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
         let precision = precise ? 100_000.0 : 100.0
         let latitude = (latest.coordinate.latitude * precision).rounded() / precision
         let longitude = (latest.coordinate.longitude * precision).rounded() / precision
+        Self.approvedCoordinates = (String(latitude), String(longitude))
         locationResult(json([
             "latitude": latitude,
             "longitude": longitude,
@@ -212,6 +220,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
     /// Independent provider-compatible JSON tool loop. It runs before Forge
     /// coding/editing, with six steps and a strict twenty-second overall budget.
     static func research(_ prompt: String, config: AIProviderConfiguration) async -> String {
+        approvedCoordinates = nil
         guard AIPrivacyOptions.anyEnabled else { return "" }
         let tool = AIPrivacyToolRunner()
         let deadline = Date().addingTimeInterval(20)
