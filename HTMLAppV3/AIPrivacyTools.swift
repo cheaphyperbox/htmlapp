@@ -213,8 +213,9 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
         default:
             return "{\"error\":\"unknown_tool\"}"
         }
+        let destination = URL(string: args["url"] as? String ?? "")?.host ?? "unknown host"
         AIDebugTraceStore.shared.append("AI PRIVACY TOOL",
-            "\(name): " + (name == "http_get" ? String((args["url"] as? String ?? "").prefix(180)) :
+            "\(name): " + (name == "http_get" ? destination :
                 (output.contains("disabled_by_user") ? "Denied by settings" : "Used with user settings")))
         return String(output.prefix(200_000))
     }
@@ -247,11 +248,13 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
                     maxTokens: 750, retryOnTransient: false)
             } catch { break }
             if let start = raw.range(of: "<tool_report>"),
-               let end = raw.range(of: "</tool_report>") {
+               let end = raw.range(of: "</tool_report>"),
+               start.upperBound <= end.lowerBound {
                 return String(raw[start.upperBound..<end.lowerBound].prefix(3500))
             }
             guard let first = raw.range(of: "<tool_call>"),
                   let last = raw.range(of: "</tool_call>"),
+                  first.upperBound <= last.lowerBound,
                   let data = String(raw[first.upperBound..<last.lowerBound]).data(using: .utf8),
                   let call = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let name = call["name"] as? String else { break }
