@@ -30,6 +30,17 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.20" { return [
+            Entry(id: "background-music", title: "Longer background playback", description: "Generation Music uses primary audio playback and safer background request handoffs when audio is interrupted.", symbol: "music.note", tint: .purple),
+            Entry(id: "auto-fast", title: "Automatic Quick mode", description: "Choose Manual or Automatic AI speed selection, with the option to override the recommendation.", symbol: "bolt.fill", tint: .orange),
+            Entry(id: "smarter-planner", title: "Faster planning and clearer intent", description: "Forge produces shorter planning briefs and suggests an editable purpose during style selection.", symbol: "brain", tint: .blue),
+            Entry(id: "smoother-library", title: "Faster opening and setup", description: "App launching avoids a synchronous Library rewrite, and Home Screen installation now offers additional recovery options.", symbol: "apps.iphone", tint: .green),
+            Entry(id: "shorter-tour", title: "A shorter welcome tour", description: "Five introduction cards plus optional permissions replace the long setup walkthrough.", symbol: "hand.tap.fill", tint: .mint)
+        ] }
+        if version == "1.6.19" { return [
+            Entry(id: "variety", title: "More original AI looks", description: "Regenerated looks use genuinely different layout archetypes, not just different colors.", symbol: "paintpalette.fill", tint: .purple),
+            Entry(id: "runtime-js", title: "JavaScript error assistant", description: "A warning icon in Forge preview can show runtime errors and offer to ask AI for a fix.", symbol: "exclamationmark.triangle.fill", tint: .orange)
+        ] }
         if version == "1.6.18" { return [
             Entry(id: "generation-music", title: "Generation Music", description: "Play your own linked audio during Forge creation and editing, with cached playback, volume and preview controls.", symbol: "music.note", tint: .purple),
             Entry(id: "quick-performance", title: "Faster QUICK! creation", description: "QUICK! avoids optional web research and extra specialist icon regeneration.", symbol: "bolt.fill", tint: .orange),
