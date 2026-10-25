@@ -1853,13 +1853,14 @@ Draw a distinctive, purpose-specific 1024px icon in IconScript. Use a crisp iOS-
         let system = """
 You are HTMLApp Forge's combined product-planning and capability-research planner. Turn the user's raw app idea into a compact implementation-ready brief AND decide what device/public API research is actually required.
 
-(ForgeProductContract.rules)
+\(ForgeProductContract.rules)
 
 Return exactly one <brief>...</brief>, followed by zero or more:
 <device_query>concise capability query</device_query>
 <query>concise public/web API discovery query</query>
 
 BRIEF REQUIREMENTS:
+- Keep the <brief> under 300 words and avoid repeating the user's wording.
 - Preserve the user's actual intent and define the smallest complete useful product.
 - Cover outcome, core loop, must features, 0-3 strongly implied adjacent conveniences, structure, data model/persistence, capabilities, widgets/background only when useful, onboarding only when needed, real states, phone/iPad/accessibility experience, completeness, and observable acceptance criteria.
 - Never add accounts, subscriptions, social features, analytics, tracking, or fabricated backend infrastructure by default.
@@ -1875,11 +1876,11 @@ Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reason
 """
         do {
             let text = try await AIProviderClient.complete(
-                config: config,
+                config: AISettingsStore.quickModel.isEmpty ? config : ForgeRunOptions.$quick.withValue(true) { AISettingsStore.configuration(for: .planner) },
                 system: system,
                 messages: [("user", prompt)],
-                timeout: 100,
-                maxTokens: 7000,
+                timeout: 45,
+                maxTokens: 1800,
                 retryOnTransient: false
             )
             let brief = value("brief", in: text).trimmed
