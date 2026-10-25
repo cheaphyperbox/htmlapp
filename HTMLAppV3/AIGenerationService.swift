@@ -448,8 +448,8 @@ final class AIGenerationSession: ObservableObject {
                 try await self.ensureValidIcon(
                     config: AISettingsStore.configuration(for: .icon),
                     // Reuse a valid coding-agent draft unless a separate icon artist is selected.
-                    forceRegenerate: AISettingsStore.usesSpecialistProvider(for: .icon) ||
-                        AISettingsStore.iconModel != AISettingsStore.model
+                    forceRegenerate: !ForgeRunOptions.quick && (AISettingsStore.usesSpecialistProvider(for: .icon) ||
+                        AISettingsStore.iconModel != AISettingsStore.model)
                 )
             }
             try await verifyAndRepair(config: config)
