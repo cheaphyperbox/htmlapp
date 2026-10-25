@@ -134,6 +134,7 @@ targets:
           - com.mekabrine.htmlapp.refresh
           - com.mekabrine.htmlapp.forge.*
         UIBackgroundModes:
+          - audio
           - fetch
           - processing
     dependencies:
