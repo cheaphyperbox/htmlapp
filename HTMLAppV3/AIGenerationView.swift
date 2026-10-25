@@ -1118,7 +1118,8 @@ struct AIGenerationView: View {
                                 if existingApp == nil {
                                     Button("Regenerate from scratch") {
                                         generationTask?.cancel()
-                                        selectedStyle = nil
+                                        // Preserve the user's approved design and its full
+                                        // mockup HTML across a from-scratch coding retry.
                                         showingChange = false
                                         session.clearCheckpoint()
                                         generateApp()
@@ -1474,12 +1475,12 @@ struct AIGenerationView: View {
             }
             return
         }
+        dictation.stop()
         startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
         workTracker.updateVolume(prompt.utf8.count)
         milestones.add(.plan, "Reading your request", bytes: prompt.utf8.count, key: "initial")
-        dictation.stop()
         lastFailedChange = nil
         let originalPrompt = prompt
         let pendingPreflight = preparedStylePrompt == originalPrompt ? preparedStyleTask : nil
@@ -1837,11 +1838,8 @@ Requested edit:
             """
         } else {
             system = AIHTMLAgent.systemPrompt(research: browserResearch.lastReport)
-            if !session.refinedBrief.isEmpty {
-                message = session.refinedBrief
-            } else {
-                message = selectedStyle.map { prompt + "\n\n" + $0.buildInstruction } ?? prompt
-            }
+            let base = session.refinedBrief.isEmpty ? prompt : session.refinedBrief
+            message = selectedStyle.map { base + "\n\n" + $0.buildInstruction } ?? base
         }
         session.persistCheckpoint()
         guard ForgeBackgroundUpload.shared.start(
