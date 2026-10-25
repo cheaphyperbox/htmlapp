@@ -62,10 +62,14 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
         }
         guard let latest = locations.last else { return }
         let precise = AIPrivacyOptions.location == "precise" && manager.accuracyAuthorization == .fullAccuracy
-        let digits = precise ? 5 : 2
-        locationResult(String(format: "{\"latitude\":%.*f,\"longitude\":%.*f,\"accuracy\":\"%@\"}",
-                              digits, latest.coordinate.latitude, digits, latest.coordinate.longitude,
-                              precise ? "precise" : "approximate"))
+        let precision = precise ? 100_000.0 : 100.0
+        let latitude = (latest.coordinate.latitude * precision).rounded() / precision
+        let longitude = (latest.coordinate.longitude * precision).rounded() / precision
+        locationResult(json([
+            "latitude": latitude,
+            "longitude": longitude,
+            "accuracy": precise ? "precise" : "approximate"
+        ]))
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -189,7 +193,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
             guard AIPrivacyOptions.allowed("device") else { return "{\"error\":\"disabled_by_user\"}" }
             output = json(["model": UIDevice.current.model,
                            "system": UIDevice.current.systemVersion,
-                           "appearance": UITraitCollection.current.userInterfaceStyle == .dark ? "dark" : "light"])
+                           "appearance": UIScreen.main.traitCollection.userInterfaceStyle == .dark ? "dark" : "light"])
         case "get_calendar":
             output = await readCalendar(reminders: false)
         case "get_reminders":
