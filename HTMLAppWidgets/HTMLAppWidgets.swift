@@ -414,9 +414,6 @@ struct HTMLAppWidgetView: View {
                             }
                         }
                     }
-                }
-            }
-        }
     }
 
     @ViewBuilder
