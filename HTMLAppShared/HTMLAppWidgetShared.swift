@@ -15,6 +15,32 @@ enum HTMLAppSharedContainer {
     }
 }
 
+/// A widget link proves it was authored by the current App Group rather than
+/// trusting action IDs supplied by an arbitrary external URL.
+enum HTMLAppWidgetActionLink {
+    private static let secretKey = "htmlapp.widget.actionLinkKey.v1"
+
+    static func ensureSecret() {
+        guard HTMLAppSharedContainer.defaults.data(forKey: secretKey)?.count == 32 else {
+            let key = SymmetricKey(size: .bits256)
+            let bytes = key.withUnsafeBytes { Data($0) }
+            HTMLAppSharedContainer.defaults.set(bytes, forKey: secretKey)
+            return
+        }
+    }
+
+    static func signature(appID: String, widgetID: String,
+                          actionID: String, itemID: String?) -> String? {
+        guard let key = HTMLAppSharedContainer.defaults.data(forKey: secretKey), key.count == 32 else {
+            return nil
+        }
+        let message = [appID, widgetID, actionID, itemID ?? ""].joined(separator: "\\n")
+        let digest = HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
+                                                     using: SymmetricKey(data: key))
+        return Data(digest).base64Encoded()
+    }
+}
+
 struct HTMLAppWidgetAction: Codable, Hashable {
     var id: String
     var type: String
