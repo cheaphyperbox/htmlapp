@@ -200,6 +200,9 @@ final class GenerationMusic: ObservableObject {
                 } else if type == AVAudioSession.InterruptionType.began.rawValue {
                     self.isPlaying = false
                     self.updatePlaybackRate(0)
+                    if self.generationWanted {
+                        NotificationCenter.default.post(name: Self.playbackPausedNotification, object: nil)
+                    }
                 }
             }
         })
