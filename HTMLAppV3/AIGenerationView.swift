@@ -863,8 +863,16 @@ struct AIGenerationView: View {
         styleOptions = ForgeStylePreviewService.instantOptions(for: completeIdea, appearance: requestedAppearance)
         styleFeedbackNotice = nil
         HTMLAppFirstUseTips.show("mockups")
-        // All looks are available without a network round trip. Future AI
-        // enrichment must not block selection or overwrite a chosen look.
+        // Selection is immediately enabled. A single small AI content pass
+        // can enrich the three templates without delaying or replacing a choice.
+        generationTask = Task {
+            let enriched = await ForgeStylePreviewService.enrichedOptions(
+                for: completeIdea, appearance: requestedAppearance)
+            guard !Task.isCancelled, let enriched, selectedStyle == nil,
+                  !styleOptions.isEmpty, prompt.trimmingCharacters(in: .whitespacesAndNewlines) == idea
+            else { return }
+            styleOptions = enriched
+        }
     }
 
     private func skipStyleSelection() {
