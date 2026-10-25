@@ -216,7 +216,7 @@ assert 'handoffForgeToBackgroundURLSession()' in forge
 assert 'restoreCompletedBackgroundDraft()' in forge
 assert 'streamedBytes: session.streamedByteCount' in forge
 assert 'expectedBytes = 120_000.0' in continued
-assert 'compactBuildInstruction' in styles and 'selectedStyle.map { originalPrompt + "\\n\\n" + $0.compactBuildInstruction }' in forge
+assert 'buildInstruction' in styles and 'selectedStyle.map { originalPrompt + "\\n\\n" + $0.buildInstruction }' in forge
 assert 'preplanned: AIPlanningResult?' in ai and 'preparedStyleTask' in forge
 assert 'Low reasoning on supported OpenAI models' in settings
 assert 'host == "api.openai.com"' in ai and 'body["reasoning_effort"] = "low"' in ai
