@@ -73,13 +73,13 @@ final class ForgeBackgroundUpload: NSObject, URLSessionDataDelegate {
             let task = attachSession().uploadTask(with: request, fromFile: file)
             task.taskDescription = edit ? "HTMLApp AI edit" : "HTMLApp generation"
             task.resume()
-            AIDebugTraceStore.shared.append(
+            Task { @MainActor in AIDebugTraceStore.shared.append(
                 "BACKGROUND FORGE",
-                "A file-backed provider request was started. The completed result will be reviewed in HTMLApp.")
+                "A file-backed provider request was started. The completed result will be reviewed in HTMLApp.") }
             return true
         } catch {
-            AIDebugTraceStore.shared.append(
-                "BACKGROUND FORGE", "Could not start background generation: " + error.localizedDescription)
+            Task { @MainActor in AIDebugTraceStore.shared.append(
+                "BACKGROUND FORGE", "Could not start background generation: " + error.localizedDescription) }
             return false
         }
     }
@@ -90,7 +90,7 @@ final class ForgeBackgroundUpload: NSObject, URLSessionDataDelegate {
             for task in tasks { task.cancel() }
         }
         clearPending()
-        GenerationMusic.shared.stop()
+        Task { @MainActor in GenerationMusic.shared.stop() }
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -144,8 +144,8 @@ final class ForgeBackgroundUpload: NSObject, URLSessionDataDelegate {
         updated.phase = "Background result received"
         ForgeDraftCheckpointStore.save(updated)
         clearPending()
-        AIDebugTraceStore.shared.append(
-            "BACKGROUND FORGE", "A complete background response was saved for foreground review.")
+        Task { @MainActor in AIDebugTraceStore.shared.append(
+            "BACKGROUND FORGE", "A complete background response was saved for foreground review.") }
         NotificationCenter.default.post(name: Self.finishedNotification, object: nil)
         Task { @MainActor in
             GenerationMusic.shared.stop()
@@ -167,7 +167,7 @@ final class ForgeBackgroundUpload: NSObject, URLSessionDataDelegate {
             ForgeDraftCheckpointStore.save(checkpoint)
         }
         clearPending()
-        AIDebugTraceStore.shared.append("BACKGROUND FORGE", message)
+        Task { @MainActor in AIDebugTraceStore.shared.append("BACKGROUND FORGE", message) }
         NotificationCenter.default.post(name: Self.finishedNotification, object: nil)
         Task { @MainActor in GenerationMusic.shared.stop() }
     }
