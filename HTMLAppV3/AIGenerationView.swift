@@ -49,6 +49,8 @@ struct AIGenerationView: View {
     @State private var selectedStyleIndex = 0
     @State private var styleFailure: String?
     @State private var styleFeedback = ""
+    @State private var purposeGuess = ""
+    @State private var purposeEdited = false
     @State private var showingStyleFeedback = false
     @State private var styleFeedbackNotice: String?
     @State private var selectedStyle: ForgeStyleConcept?
@@ -373,8 +375,10 @@ struct AIGenerationView: View {
             if scenePhase == .background { handoffForgeToBackgroundURLSession() }
         }
         .onChange(of: prompt) { _ in
-            if quickModePolicy == "automatic" && !session.isWorking && !exploringStyles {
-                autoQuickReason = nil
+            if !session.isWorking && !exploringStyles {
+                if quickModePolicy == "automatic" { autoQuickReason = nil }
+                purposeGuess = ""
+                purposeEdited = false
             }
         }
         .onChange(of: dictation.transcribingOffline) { processing in
@@ -799,6 +803,15 @@ struct AIGenerationView: View {
                     }
                     .padding(12)
                     .background(.bar)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label("Who will use this app?", systemImage: "person.text.rectangle")
+                            .font(.caption.weight(.medium))
+                        TextField("Purpose — AI will suggest one, or edit it yourself", text: $purposeGuess)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: purposeGuess) { _ in purposeEdited = true }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
 
                     if !styleOptions.isEmpty {
                         HStack(spacing: 8) {
@@ -972,6 +985,15 @@ struct AIGenerationView: View {
                         ? await browserResearch.research(for: idea) : ""
                     let plan = try? await planning
                     return (report, plan)
+                }
+                if let preparedStyleTask {
+                    Task {
+                        let (_, result) = await preparedStyleTask.value
+                        guard !purposeEdited,
+                              prompt.trimmingCharacters(in: .whitespacesAndNewlines) == idea,
+                              !Task.isCancelled else { return }
+                        purposeGuess = result?.purpose ?? ""
+                    }
                 }
             }
             var failures: [String] = []
@@ -1565,7 +1587,10 @@ struct AIGenerationView: View {
         let pendingPreflight = preparedStylePrompt == originalPrompt ? preparedStyleTask : nil
         preparedStylePrompt = nil
         preparedStyleTask = nil
-        let designBrief = selectedStyle.map { originalPrompt + "\n\n" + $0.buildInstruction } ?? originalPrompt
+        let confirmedPurpose = purposeGuess.trimmingCharacters(in: .whitespacesAndNewlines)
+        let basePrompt = confirmedPurpose.isEmpty ? originalPrompt :
+            originalPrompt + "\n\nINTENDED AUDIENCE AND PURPOSE: " + confirmedPurpose
+        let designBrief = selectedStyle.map { basePrompt + "\n\n" + $0.buildInstruction } ?? basePrompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.beginDraft(prompt: originalPrompt)
