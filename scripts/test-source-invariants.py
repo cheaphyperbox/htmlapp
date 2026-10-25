@@ -191,7 +191,7 @@ assert 'isRecoverable(_ draft:' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'askForgeQuestion(for idea:' in source("HTMLAppV3/AIGenerationView.swift")
 assert '20_000_000_000' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'MOCKUP FIDELITY' in source("HTMLAppV3/AIGenerationView.swift")
-print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
 
 # Generation Music and QUICK! regression safeguards.
 music = source("HTMLAppV3/GenerationMusic.swift")
@@ -208,3 +208,25 @@ assert '!ForgeRunOptions.quick && AIHTMLAgent.needsWebResearch' in forge
 assert 'forceRegenerate: !ForgeRunOptions.quick &&' in ai
 assert 'ForgeStylePreviewService.enrichedOptions' in forge
 assert 'maxTokens: 900' in styles
+
+# iOS 26 continuous processing and file-backed background coding handoff.
+background = source("HTMLAppV3/ForgeBackgroundUpload.swift")
+continued = source("HTMLAppV3/HTMLAppForgeContinuedProcessing.swift")
+assert 'runs-on: macos-26' in workflow, "Build runner must support the iOS 26 SDK"
+assert 'UIApplicationDelegateAdaptor(HTMLAppBackgroundURLSessionDelegate.self)' in core
+assert 'URLSessionConfiguration.background' in background
+assert 'uploadTask(with: request, fromFile: file)' in background
+assert 'sessionSendsLaunchEvents = true' in background
+assert 'handleEventsForBackgroundURLSession' in background
+assert 'forge.backgroundUpload.pending' in background
+assert 'Background result received' in background
+assert 'handoffForgeToBackgroundURLSession()' in forge
+assert 'restoreCompletedBackgroundDraft()' in forge
+assert 'streamedBytes: session.streamedByteCount' in forge
+assert 'expectedBytes = 120_000.0' in continued
+assert 'compactBuildInstruction' in styles and 'selectedStyle.map { originalPrompt + "\\n\\n" + $0.compactBuildInstruction }' in forge
+assert 'preplanned: AIPlanningResult?' in ai and 'preparedStyleTask' in forge
+assert 'Low reasoning on supported OpenAI models' in settings
+assert 'host == "api.openai.com"' in ai and 'body["reasoning_effort"] = "low"' in ai
+
+print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
