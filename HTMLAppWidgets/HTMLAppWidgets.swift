@@ -372,6 +372,18 @@ struct HTMLAppWidgetView: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(items) { item in
+                    if (family == .systemMedium || family == .systemLarge || family == .systemExtraLarge),
+                       let action = item.action, let url = actionURL(action, itemID: item.id) {
+                        Link(destination: url) { widgetItemRow(item) }
+                    } else {
+                        widgetItemRow(item)
+                    }
+                }
+            }
+        }
+    }
+
+    private func widgetItemRow(_ item: HTMLAppWidgetItem) -> some View {
                     HStack(spacing: 7) {
                         if let symbol = item.systemSymbol, !symbol.isEmpty {
                             Image(systemName: symbol)
@@ -451,7 +463,24 @@ struct HTMLAppWidgetView: View {
         components.scheme = "htmlapp"
         components.host = "open"
         components.queryItems = [URLQueryItem(name: "id", value: entry.definition.appID)]
+        if entry.definition.openBehavior == "action", let action = entry.definition.action {
+            return actionURL(action, itemID: nil)
+        }
         return components.url
+    }
+
+    private func actionURL(_ action: HTMLAppWidgetAction, itemID: String?) -> URL? {
+        var parts = URLComponents()
+        parts.scheme = "htmlapp"
+        parts.host = "open"
+        var params = [
+            URLQueryItem(name: "id", value: entry.definition.appID),
+            URLQueryItem(name: "widget", value: entry.definition.widgetID),
+            URLQueryItem(name: "action", value: action.id)
+        ]
+        if let itemID { params.append(URLQueryItem(name: "item", value: itemID)) }
+        parts.queryItems = params
+        return parts.url
     }
 }
 
