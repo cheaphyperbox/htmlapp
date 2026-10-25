@@ -80,7 +80,6 @@ assert '"Start Generating"' in source("HTMLAppV3/AIGenerationView.swift")
 assert '"Choose a Look"' not in source("HTMLAppV3/AIGenerationView.swift")
 assert 'previewHTML)' in source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'ForgeStyleReferenceStore.save' in source("HTMLAppV3/AIGenerationView.swift")
-assert 'ForgeStylePreviewService.instantOptions' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppForgeActivityWidget()' in source("HTMLAppWidgets/HTMLAppWidgets.swift")
 assert 'Do not leave HTMLApp or turn off your phone for more than 20 seconds at a time for now.' in source("HTMLAppWidgets/HTMLAppForgeActivityWidget.swift")
 assert 'HTMLAppForgeActivityService.start' in source("HTMLAppV3/AIGenerationView.swift")
@@ -111,9 +110,8 @@ assert 'guard let root = webView.window?.rootViewController else {' in source("H
 assert 'Button("Skip and make app now")' not in source("HTMLAppV3/AIGenerationView.swift")
 assert 'Give feedback on all looks' not in source("HTMLAppV3/AIGenerationView.swift")
 
-assert 'return await withTaskGroup(of: ForgeStyleConcept?.self)' in source("HTMLAppV3/ForgeStylePreview.swift")
+assert 'withTaskGroup(of: (Int, ForgeStyleConcept?, String?).self)' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'return ForgeStyleConcept(id: index, name: variant.0' in source("HTMLAppV3/ForgeStylePreview.swift")
-assert 'offlinePreview(request: request, variant: index, appearance: appearance, seed: nil)' in source("HTMLAppV3/ForgeStylePreview.swift")
 style_source = source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'maxTokens: ForgeRunOptions.quick ? 6500 : (attempt == 0 ? 8500 : 12000)' in style_source, "Style mockups must have enough output capacity to finish after model reasoning"
 assert 'let config = attempt == 0 ? preferredConfig : recoveryConfig' in style_source, "Broken UI specialist responses must retry with the main model"
@@ -176,11 +174,7 @@ assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 styles = source("HTMLAppV3/ForgeStylePreview.swift")
 assert '"Immersive"' in styles and '"Action First"' in styles and '"Dashboard"' in styles
-assert 'private static func offlinePreview' in styles
 assert 'No fake iPhone frame' in styles
-assert 'Route Rep' in styles and 'Upper-body strength' in styles
-assert 'NearPath' in styles and 'Driving route' in styles
-assert 'Focus List' in styles and 'Pocket Ledger' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'coreWorkflowWarnings(prompt:' in source("HTMLAppV3/AIGenerationService.swift")
@@ -206,8 +200,6 @@ assert '          - audio' in project
 assert 'ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight' in forge
 assert '!ForgeRunOptions.quick && AIHTMLAgent.needsWebResearch' in forge
 assert 'forceRegenerate: !ForgeRunOptions.quick &&' in ai
-assert 'ForgeStylePreviewService.enrichedOptions' in forge
-assert 'maxTokens: 900' in styles
 
 # iOS 26 continuous processing and file-backed background coding handoff.
 background = source("HTMLAppV3/ForgeBackgroundUpload.swift")
@@ -241,3 +233,12 @@ assert 'presentQueuedFileImport()' in library
 assert 'DispatchQueue.main.asyncAfter(deadline: .now() + 0.45)' in library
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
+# AI styles must come entirely from complete provider HTML; never silently
+# substitute a static mockup or a short JSON-enriched local sketch.
+assert 'ForgeStylePreviewService.generateSingle' in forge
+assert 'ForgeStylePreviewService.instantOptions' not in forge
+assert 'offlinePreview(' not in styles
+assert 'enrichedOptions(' not in styles
+assert 'throw PreviewError.invalidResponse' in styles
+assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
