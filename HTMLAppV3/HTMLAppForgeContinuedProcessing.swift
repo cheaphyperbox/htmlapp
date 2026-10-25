@@ -57,7 +57,11 @@ enum HTMLAppForgeContinuedProcessing {
     static func update(phase: String, streamedBytes: Int) {
         currentTask?.updateTitle("HTMLApp Forge", subtitle: String(phase.prefix(80)))
         if let task = currentTask {
-            // A bounded byte-driven estimate, not a fabricated time counter.\n            // Progress remains below completion until the run actually finishes.\n            let expectedBytes = 120_000.0\n            let completed = Int64(min(95.0, max(5.0, Double(max(0, streamedBytes)) / expectedBytes * 90.0 + 5.0)))\n            task.progress.completedUnitCount = max(task.progress.completedUnitCount, completed)
+            // A bounded byte-driven estimate, not a fabricated time counter.
+            // Progress remains below completion until the run actually finishes.
+            let expectedBytes = 120_000.0
+            let completed = Int64(min(95.0, max(5.0, Double(max(0, streamedBytes)) / expectedBytes * 90.0 + 5.0)))
+            task.progress.completedUnitCount = max(task.progress.completedUnitCount, completed)
         }
     }
 
