@@ -45,6 +45,10 @@ enum HTMLAppWidgetLaunchStore {
               let json = String(data: data, encoding: .utf8) else { return nil }
         return """
         window.htmlappLaunch = \(json);
+        if (typeof window.htmlappLaunch.payload === 'string') {
+          try { window.htmlappLaunch.payload = JSON.parse(window.htmlappLaunch.payload); }
+          catch (_) { /* Plain strings remain strings. */ }
+        }
         window.dispatchEvent(new CustomEvent('htmlapplaunch', {detail: window.htmlappLaunch}));
         """
     }
