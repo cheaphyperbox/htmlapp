@@ -113,6 +113,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
             }
         }
         guard AIPrivacyOptions.allowed(key) else { return "{\"error\":\"disabled_by_user\"}" }
+        guard AIPrivacyOptions.allowed(key) else { return "{\"error\":\"disabled_by_user\"}" }
         guard permission else { return "{\"error\":\"permission_denied\"}" }
         if reminders {
             let values: [EKReminder] = await withCheckedContinuation { continuation in
