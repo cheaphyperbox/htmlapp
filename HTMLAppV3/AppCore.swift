@@ -1066,6 +1066,7 @@ final class AppStore: ObservableObject {
             return
         }
 
+        HTMLAppWidgetLaunchStore.receive(url: url, appID: app.id)
         guard let current = runningApp, current.id != app.id else {
             launch(app)
             return
