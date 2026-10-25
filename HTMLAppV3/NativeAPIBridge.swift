@@ -517,6 +517,18 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         resolve(id, value: ["values": HTMLAppPortableDataStore.all(appID: appID)])
     }
 
+    private func validWidgetAction(_ value: Any?) -> HTMLAppWidgetAction? {
+        guard let raw = value as? [String: Any],
+              let actionID = validGeneratedIdentifier(raw["id"] as? String),
+              let type = raw["type"] as? String,
+              ["open", "route", "event"].contains(type) else { return nil }
+        let route = raw["route"] as? String
+        guard route == nil || route!.count <= 120 else { return nil }
+        let payload = raw["payload"] as? String
+        guard payload == nil || payload!.utf8.count <= 2048 else { return nil }
+        return HTMLAppWidgetAction(id: actionID, type: type, route: route, payload: payload)
+    }
+
     private func configureWidget(id: String, args: [String: Any]) {
         guard let widgetID = validGeneratedIdentifier(args["id"] as? String),
               let snapshotArgs = args["snapshot"] as? [String: Any] else {
@@ -583,6 +595,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             lastRefreshAt: existing.first(where: { $0.widgetID == widgetID })?.lastRefreshAt,
             lastError: nil
         )
+        definition.action = validWidgetAction(args["action"])
+        if let behavior = args["openBehavior"] as? String, ["openApp", "action"].contains(behavior) {
+            definition.openBehavior = behavior
+        }
         if let requested = args["dataBindings"] as? [String: String] {
             let allowed: Set<String> = ["title", "subtitle", "value", "footer", "eyebrow", "unit", "progress"]
             let valid = requested.filter {
@@ -748,7 +764,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     value: value,
                     detail: detail,
                     systemSymbol: symbol,
-                    progress: progress
+                    progress: progress,
+                    action: validWidgetAction(raw["action"])
                 ))
             }
         }
@@ -787,6 +804,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         if let last = widget.lastRefreshAt { value["lastRefreshAt"] = last.timeIntervalSince1970 }
         if let error = widget.lastError { value["lastError"] = error }
         value["backgroundRefresh"] = widget.refresh != nil
+        value["openBehavior"] = widget.openBehavior ?? "openApp"
         return value
     }
 
@@ -1802,6 +1820,7 @@ enum HTMLNativeAPIScript {
         },
         device: {
           info: () => call('device.info'),
+          battery: () => call('device.battery'),
           keepAwake: (enabled = true) => call('device.keepAwake', { enabled: !!enabled }),
           brightness: (level) => call('device.brightness', level == null ? {} : { level: Number(level) }),
           torch: (enabled = true) => call('device.torch', { enabled: !!enabled })
