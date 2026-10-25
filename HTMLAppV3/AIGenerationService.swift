@@ -1576,6 +1576,19 @@ enum AIProviderClient {
             if let maxTokens {
                 body[tokenParameterOverride ?? "max_tokens"] = max(64, maxTokens)
             }
+            // Only the first-party OpenAI endpoint is known to support this
+            // parameter. Generic OpenAI-compatible proxies may reject it.
+            let host = URLComponents(string: config.apiURL)?.host?.lowercased()
+            let model = config.model.lowercased()
+            let reasoningModel = model.hasPrefix("gpt-5") ||
+                model.hasPrefix("gpt-6") || model.hasPrefix("o1") ||
+                model.hasPrefix("o3") || model.hasPrefix("o4")
+            if ForgeRunOptions.quick,
+               UserDefaults.standard.object(forKey: "ai.quickLowReasoning") as? Bool != false,
+               host == "api.openai.com", reasoningModel,
+               !model.contains("-pro") {
+                body["reasoning_effort"] = "low"
+            }
             return body
         case .anthropic:
             let list: [[String: String]] = messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] }
