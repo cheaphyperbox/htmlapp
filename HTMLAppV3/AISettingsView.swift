@@ -21,6 +21,7 @@ struct AIConfigurationSettingsView: View {
     @State private var requestDelay = AISettingsStore.requestDelaySeconds
     @State private var appearancePreference = AISettingsStore.appearancePreference
     @State private var saved = false
+    @State private var showAdvancedRoles = false
 
     var body: some View {
         Form {
@@ -108,6 +109,7 @@ struct AIConfigurationSettingsView: View {
             }
 
             Section("AI Specialists") {
+                DisclosureGroup("Advanced per-role overrides", isExpanded: $showAdvancedRoles) {
                 NavigationLink { AIRoleProviderSettingsView(role: .planner) } label: {
                     specialistLabel("Thinking", symbol: "brain", role: .planner)
                 }
@@ -126,8 +128,8 @@ struct AIConfigurationSettingsView: View {
                 NavigationLink { AIRoleProviderSettingsView(role: .verifier) } label: {
                     specialistLabel("QA Reviewer", symbol: "checkmark.shield", role: .verifier)
                 }
+                }
             }
-
             if developerMode {
             Section {
                 Stepper(value: $requestDelay, in: 0...60, step: 0.1) {
