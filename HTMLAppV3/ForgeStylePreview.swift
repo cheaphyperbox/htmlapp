@@ -33,6 +33,34 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable, Sendable {
             .prefix(16).map { ns.substring(with: $0.range).trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
+    /// Compact reference for the first coding pass. The complete mockup
+    /// remains available for the existing fidelity repair if needed.
+    var compactBuildInstruction: String {
+        let html = previewHTML as NSString
+        let regex = try? NSRegularExpression(
+            pattern: #"<(header|section|main|div|button|h1|h2)\\b[^>]*>"#,
+            options: .caseInsensitive
+        )
+        let structure = (regex?.matches(in: previewHTML,
+                                        range: NSRange(location: 0, length: html.length)) ?? [])
+            .prefix(25).map { html.substring(with: $0.range) }
+            .joined(separator: " → ")
+        return """
+        SELECTED STYLE: \(name) — \(summary)
+        Design: \(direction)
+        REQUIRED: Match the chosen look's initial hierarchy, dominant visual region,
+        action placement, card ordering, background, contrast, typography, shape,
+        border radius and navigation pattern. Implement functioning controls.
+        EXACT STYLE TOKENS:
+        \(Self.designTokens(previewHTML))
+        CSS VARIABLE DECLARATIONS:
+        \(visualTokenDeclarations.joined(separator: "; "))
+        ORDERED STRUCTURE:
+        \(structure)
+        Use these as a strict visual contract, not a generic layout suggestion.
+        """
+    }
+
     var buildInstruction: String {
         """
         VISUAL STYLE CHOSEN BY THE USER
