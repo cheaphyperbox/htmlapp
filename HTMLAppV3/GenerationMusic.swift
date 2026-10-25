@@ -62,6 +62,8 @@ final class GenerationMusic: ObservableObject {
     }
 
     func prefetch() {
+        // Changing the Settings URL must not cancel an active generation track.
+        guard !generationWanted else { return }
         guard let url = GenerationMusicSettings.validatedURL(GenerationMusicSettings.url) else {
             fail("Enter a valid audio file URL.")
             return
