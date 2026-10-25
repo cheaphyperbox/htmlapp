@@ -243,7 +243,7 @@ final class GenerationMusic: ObservableObject {
         guard generationWanted || isPreview else { return }
         if let player {
             do {
-                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
                 try AVAudioSession.sharedInstance().setActive(true)
                 if player.play() { isPlaying = true; status = "Playing"; updatePlaybackRate(1); return }
             } catch { }
