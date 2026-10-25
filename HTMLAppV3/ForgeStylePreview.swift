@@ -113,25 +113,42 @@ enum ForgeStylePreviewService {
         // The regular coder model retries incomplete specialist output;
         // no locally drawn replacement is ever returned.
         let recoveryConfig = AISettingsStore.configuration(for: .coder)
-        let directions = [
-            ("Immersive", "Large visual-first product layout", "Dominant product-specific visual or data feature, with overlaid contextual controls and an anchored action sheet"),
-            ("Action First", "Bold guided action layout", "Big functional call-to-action, expressive type and asymmetrical summary tiles, with a clear next step"),
-            ("Dashboard", "Compact information-first layout", "Realistic domain-specific metrics, a short ordered list or activity feed, and compact controls")
+        // Rotate entire visual systems, not just palettes. All three slots in
+        // one round use distinct compositions; subsequent rounds explore new
+        // combinations rather than repainting the same dashboard.
+        let archetypes: [(String, String, String)] = [
+            ("Editorial", "Immersive magazine-like layout",
+             "Large asymmetric hero typography, full-bleed visuals, editorial gutters. No card grid or tab bar."),
+            ("Workbench", "Precise professional workspace",
+             "Dense information architecture, split utility zones, tool rail and inline data. No hero banner or decorative tiles."),
+            ("Playful", "Expressive illustrated experience",
+             "Oversized rounded objects, bouncy layered shapes, staggered interactive story blocks. No table or traditional app header."),
+            ("Retro Terminal", "High-contrast console aesthetic",
+             "Monospace display, sharp frames, terminal-inspired labels and command strips. No floating pastel cards."),
+            ("Tactile", "Realistic depth and materials",
+             "Layered paper or enamel surfaces, tactile knobs and controls, restrained shadows. No generic dark glass dashboard."),
+            ("Type-First", "Minimal content-led design",
+             "Large disciplined type, whitespace, thin dividers and one accent. No hero illustration, gradients or card grid."),
+            ("Neo Brutalist", "Bold graphic poster UI",
+             "Hard outlines, offset shadows, loud accent blocks, irregular hierarchy and strong button geometry."),
+            ("Organic", "Soft calm fluid interface",
+             "Organic silhouettes, tonal surfaces, flowing spacing and understated controls, no square metric grid."),
+            ("Command Center", "Focused task-oriented utility",
+             "One powerful command area, compact supporting detail rail and keyboard-like action row. No banner or bottom tabs.")
         ]
-        let variant = directions[max(0, min(index, directions.count - 1))]
-        let diverseLayouts = [
-            "A full-bleed editorial canvas with one giant asymmetric feature, floating contextual controls, NO tab bar, NO card grid.",
-            "A utilitarian split-pane workspace with dense typography, left-aligned tool rail, visible data rows, NO hero banner, NO rounded dashboard cards.",
-            "A playful modular storyboard with oversized illustrated shapes, staggered steps, bottom action dock, NO compact table or conventional header."
-        ]
-        let layout = diverseLayouts[(max(0, regeneration) + index) % diverseLayouts.count]
-        let forbidden = diverseLayouts.enumerated().filter { $0.offset != (max(0, regeneration) + index) % diverseLayouts.count }.map(\.element).joined(separator: "\\n")
+        let round = max(0, regeneration)
+        let slot = max(0, min(index, 2))
+        let selectedIndex = (round * 3 + slot) % archetypes.count
+        let variant = archetypes[selectedIndex]
+        let competing = (0..<3).filter { $0 != slot }.map {
+            archetypes[(round * 3 + $0) % archetypes.count].0
+        }.joined(separator: ", ")
         let user = """
         App idea: \(String(request.prefix(2300)))
         Requested changes: \(String(feedback.prefix(650)))
-        Design: \(variant.0) — \(variant.2).
-        MANDATORY unique composition: \(layout)
-        Reject these other compositions: \(forbidden)
+        Design: \(variant.0) — \(variant.1).
+        MANDATORY composition: \(variant.2)
+        Other two looks in this round: \(competing). Do NOT imitate their layouts.
         Style regeneration round: \(regeneration). Invent a completely new visual identity, section organization and interaction pattern on each round.
         System appearance: \(appearance). Design in this light/dark mode unless the user explicitly requested another mode.
         Every visible element MUST be relevant to the described app.
@@ -142,7 +159,7 @@ enum ForgeStylePreviewService {
         placeholder sections such as 'My tasks' for unrelated products.
         Never put the entire prompt into the title. No generic "Your Space",
         "Overview", "Make progress your way", "Recent activity" or fake tabs.
-        Style \(index + 1) must differ in layout, section order, hierarchy,
+        Style \(slot + 1) must differ in layout, section order, hierarchy,
         map prominence, button placement and navigation — not merely colors.
         The selected layout archetype is mandatory.
         """
