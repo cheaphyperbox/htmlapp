@@ -98,7 +98,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "device.info", "device.keepAwake", "device.brightness", "device.torch",
+                    "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "bluetooth.scan", "tabs.configure", "tabs.select", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
@@ -123,6 +123,30 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                     return false
                 }()
+            ])
+        case "device.battery":
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let device = UIDevice.current
+            let level = device.batteryLevel
+            let state: String
+            switch device.batteryState {
+            case .charging: state = "charging"
+            case .full: state = "full"
+            case .unplugged: state = "unplugged"
+            default: state = "unknown"
+            }
+            let thermal: String
+            switch ProcessInfo.processInfo.thermalState {
+            case .nominal: thermal = "nominal"
+            case .fair: thermal = "fair"
+            case .serious: thermal = "serious"
+            case .critical: thermal = "critical"
+            @unknown default: thermal = "unknown"
+            }
+            resolve(id, value: [
+                "percentage": level < 0 ? NSNull() : NSNumber(value: Int((level * 100).rounded())),
+                "charging": state == "charging" || state == "full",
+                "batteryState": state, "thermalState": thermal
             ])
         case "device.brightness":
             withPermission(.displayControl, id: id) { [weak self] in
