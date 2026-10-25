@@ -1792,6 +1792,12 @@ Requested edit:
     }
 
     private func saveGeneratedApp() {
+        if AIPrivacyToolRunner.generatedHTMLContainsPrivateLocation(session.streamedHTML) {
+            changePrompt = "Remove hard-coded device coordinates. Read location only at runtime with user permission and preserve the chosen design."
+            showingChange = true
+            session.errorMessage = "This generated app appears to contain your private location. Ask AI to fix the source before saving."
+            return
+        }
         if demoMode {
             practiceStep = 5
             showPracticeEditNotice = true
