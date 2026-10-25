@@ -372,12 +372,12 @@ enum ForgeQuickClassifier {
         let complexity = ["multi-feature", "multiple screens", "dashboard", "calendar",
                           "bluetooth", "camera", "share with", "production", "polished",
                           "detailed design", "native api", "real-time", "realtime"]
-        if complexity.contains { text.contains($0) } {
+        if complexity.contains(where: { text.contains($0) }) {
             return (false, "Complex app: polished generation")
         }
         let simple = ["quick prototype", "simple timer", "just a", "basic counter",
                       "quickly make", "simple calculator", "rough prototype"]
-        if simple.contains { text.contains($0) } {
+        if simple.contains(where: { text.contains($0) }) {
             return (true, "Simple request: fast generation")
         }
         guard !AISettingsStore.quickModel.isEmpty else {
@@ -391,7 +391,8 @@ enum ForgeQuickClassifier {
                 config: config,
                 system: """
                 Choose the generation quality tier for this HTML app request.
-                Reply as JSON only: {"mode":"fast"|"polished","reason":"short explanation"}.
+                Reply as a JSON object only with mode ("fast" or "polished") and a short reason.
+                Example: {"mode":"polished","reason":"Multiple screens and data handling"}.
                 fast: small, simple, urgent, throwaway prototype with 1-2 features.
                 polished: shared, design-intensive, multi-screen, native capabilities,
                 complex state or production usage. If unsure, select polished.
