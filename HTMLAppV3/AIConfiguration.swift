@@ -255,7 +255,7 @@ RESEARCH RESULTS
 
     static var requestDelaySeconds: Double {
         get {
-            if UserDefaults.standard.object(forKey: requestDelayKey) == nil { return 0.2 }
+            if UserDefaults.standard.object(forKey: requestDelayKey) == nil { return 0 }
             return max(0, min(60, UserDefaults.standard.double(forKey: requestDelayKey)))
         }
         set {
