@@ -106,6 +106,9 @@ final class GenerationMusic: ObservableObject {
             await Task.yield()
             do {
                 let file = try await Self.cachedAudio(from: url)
+                // Give Forge dictation's session teardown time to finish
+                // before activating music; the preview remains immediate.
+                if !preview { try await Task.sleep(nanoseconds: 150_000_000) }
                 try Task.checkCancellation()
                 guard requestID == identifier, (preview ? isPreview : generationWanted) else { return }
                 try activateAndPlay(file)
