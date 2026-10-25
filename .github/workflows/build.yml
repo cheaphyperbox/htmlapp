@@ -42,6 +42,19 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure iOS SDK and simulator runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          # macOS 26 runner images can have Xcode installed without the
+          # corresponding iOS platform components.
+          if ! xcrun --sdk iphoneos --show-sdk-path >/dev/null 2>&1; then
+            echo "Installing missing iOS platform for the selected Xcode."
+            xcodebuild -downloadPlatform iOS
+          fi
+          xcodebuild -showsdks
+          xcrun simctl list runtimes available || true
+
       - name: Install XcodeGen
         shell: bash
         run: |
