@@ -623,17 +623,6 @@ struct AIGenerationView: View {
             }
 
             Section {
-                if developerMode {
-                    HStack {
-                        Label(AISettingsStore.configuration.model, systemImage: "cpu")
-                            .lineLimit(1)
-                        Spacer()
-                        Text(AISettingsStore.isUIOverhaulEnabled ? "UI polish on" : "UI polish off")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                }
-
                 VStack(alignment: .leading, spacing: 6) {
                     Picker("App testing", selection: $forgeTestMode) {
                         ForEach(ForgeTestMode.allCases) { mode in
@@ -649,11 +638,13 @@ struct AIGenerationView: View {
                     Text("Practice mode: the actual Forge progress and editing screens are shown with a prebuilt calculator. No AI, mockup, or save request will occur.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if existingApp == nil {
+                    if quickModePolicy == "manual" {
                     Toggle(isOn: $quickMode) {
                         Label("QUICK!", systemImage: "bolt.fill")
                             .font(.headline)
                     }
                     .disabled(AISettingsStore.quickModel.isEmpty)
+                    }
                     if quickModePolicy == "automatic" && !AISettingsStore.quickModel.isEmpty {
                         Text(quickMode ? "Auto: Fast — tap to override" : "Auto: Polished — tap to override")
                             .font(.caption.weight(.semibold))
