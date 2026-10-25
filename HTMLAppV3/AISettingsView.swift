@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AIConfigurationSettingsView: View {
     @AppStorage("developerMode") private var developerMode = false
-    @AppStorage("ai.quickMode.policy") private var quickModePolicy = "manual"
+    @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
     @AppStorage("generationMusic.url") private var musicURL = ""
