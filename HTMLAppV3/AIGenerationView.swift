@@ -372,6 +372,11 @@ struct AIGenerationView: View {
             // the iOS background task still has time to submit it.
             if scenePhase == .background { handoffForgeToBackgroundURLSession() }
         }
+        .onChange(of: prompt) { _ in
+            if quickModePolicy == "automatic" && !session.isWorking && !exploringStyles {
+                autoQuickReason = nil
+            }
+        }
         .onChange(of: dictation.transcribingOffline) { processing in
             if !processing && generateAfterVoiceTranscription {
                 generateAfterVoiceTranscription = false
@@ -1490,6 +1495,18 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        if quickModePolicy == "automatic" && autoQuickReason == nil &&
+           !AISettingsStore.quickModel.isEmpty && !demoMode && !session.isWorking {
+            let source = prompt
+            generationTask = Task {
+                let choice = await ForgeQuickClassifier.decide(for: source)
+                guard !Task.isCancelled else { return }
+                quickMode = choice.fast
+                autoQuickReason = choice.reason
+                generateApp()
+            }
+            return
+        }
         if !questionAlreadyAsked && selectedStyle == nil && existingApp == nil &&
            !demoMode && shortcutSource != "widget" && shortcutGenerationNonce == 0 &&
            prompt.count > 90 && (prompt.lowercased().contains("design") ||
