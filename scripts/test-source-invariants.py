@@ -97,7 +97,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.20"' in release
+assert 'compiledVersion = "1.6.21"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
