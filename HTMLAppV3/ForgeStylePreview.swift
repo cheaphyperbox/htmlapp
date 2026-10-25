@@ -104,7 +104,7 @@ enum ForgeStylePreviewService {
     }
 
     static func enrichedOptions(for request: String, appearance: String) async -> [ForgeStyleConcept]? {
-        let config = await ForgeRunOptions.$quick.withValue(true) {
+        let config = ForgeRunOptions.$quick.withValue(true) {
             AISettingsStore.configuration(for: .planner)
         }
         guard config.isConfigured else { return nil }
@@ -248,7 +248,7 @@ enum ForgeStylePreviewService {
         }
         return ForgeStyleConcept(id: index, name: variant.0,
             summary: variant.1 + " (offline preview)",
-            direction: variant.2, previewHTML: offlinePreview(request: request, variant: index, appearance: appearance))
+            direction: variant.2, previewHTML: offlinePreview(request: request, variant: index, appearance: appearance, seed: nil))
     }
 
     private static func extractHTML(_ raw: String) -> String? {
