@@ -216,6 +216,11 @@ struct AIConfigurationSettingsView: View {
         AISettingsStore.verifierModel = verifierModel
         AISettingsStore.requestDelaySeconds = requestDelay
         AISettingsStore.appearancePreference = appearancePreference
+        if musicEnabled && GenerationMusicSettings.validatedURL(musicURL) != nil &&
+           !generationMusic.isGenerationActive && !generationMusic.isPreview {
+            // Prepare the real audible track before the user locks the screen.
+            generationMusic.prefetch()
+        }
 
         guard showConfirmation else { return }
         saved = true
