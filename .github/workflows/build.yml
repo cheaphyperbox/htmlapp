@@ -129,8 +129,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find HTMLAppV3 HTMLAppWidgets HTMLAppShared HTMLApp -name '*.swift' -type f -print0 |
+          # Parse app/library files together, but not the standalone icon
+          # generator script: it legitimately contains top-level statements.
+          find HTMLAppV3 HTMLAppWidgets HTMLAppShared HTMLApp -name '*.swift' -type f \
+            ! -path 'HTMLApp/GenerateAppIcon.swift' -print0 |
             xargs -0 xcrun swiftc -frontend -parse
+          xcrun swiftc -frontend -parse HTMLApp/GenerateAppIcon.swift
 
       - name: Generate Xcode project
         shell: bash
