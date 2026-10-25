@@ -27,6 +27,11 @@ struct AIResearchPlan: Sendable {
 struct AIPlanningResult: Sendable {
     var brief: String
     var research: AIResearchPlan
+    var purpose: String = ""
+    var assumptions: [String] = []
+    var impliedFeatures: [String] = []
+    var capabilities: [String] = []
+    var recommendedMode: String? = nil
 }
 
 enum ForgeTestMode: String, CaseIterable, Identifiable {
@@ -1875,7 +1880,11 @@ You are HTMLApp Forge's combined product-planning and capability-research planne
 
 \(ForgeProductContract.rules)
 
-Return exactly one <brief>...</brief>, followed by zero or more:
+Return exactly one <brief>...</brief>, a one-line <purpose>who, where, why</purpose>, followed by zero or more:
+<assumption>reversible assumption to confirm (at most 3)</assumption>
+<implied_feature>feature, reason and confidence (at most 3)</implied_feature>
+<capability>specific device or public API capability needed</capability>
+<mode>fast or polished</mode>
 <device_query>concise capability query</device_query>
 <query>concise public/web API discovery query</query>
 
@@ -1909,7 +1918,12 @@ Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reason
                 research: AIResearchPlan(
                     publicQueries: plannedValues("query", in: text),
                     deviceQueries: plannedValues("device_query", in: text)
-                )
+                ),
+                purpose: String(value("purpose", in: text).trimmed.prefix(220)),
+                assumptions: Array(plannedValues("assumption", in: text).prefix(3)),
+                impliedFeatures: Array(plannedValues("implied_feature", in: text).prefix(3)),
+                capabilities: Array(plannedValues("capability", in: text).prefix(10)),
+                recommendedMode: value("mode", in: text).trimmed
             )
         } catch {
             await MainActor.run {
