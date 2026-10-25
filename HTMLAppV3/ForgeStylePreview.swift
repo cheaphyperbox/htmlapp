@@ -67,6 +67,45 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable, Sendable {
 }
 
 enum ForgeStylePreviewService {
+    private struct PreviewSeed: Decodable {
+        let brand: String
+        let headline: String
+        let action: String
+        let records: [String]
+        let accent: String
+    }
+
+    static func enrichedOptions(for request: String, appearance: String) async -> [ForgeStyleConcept]? {
+        let config = await ForgeRunOptions.$quick.withValue(true) {
+            AISettingsStore.configuration(for: .planner)
+        }
+        guard config.isConfigured else { return nil }
+        do {
+            let raw = try await AIProviderClient.complete(
+                config: config,
+                system: """
+                Return ONE small JSON object only: {"brand":"short name","headline":"short product-specific headline","action":"primary action","records":["realistic example 1","example 2","example 3"],"accent":"#RRGGBB"}.
+                Identify the real product from the request. All content must be specific to its purpose. No explanations or markdown.
+                """,
+                messages: [("user", String(request.prefix(750)))],
+                timeout: 12, maxTokens: 900, retryOnTransient: false
+            )
+            guard let open = raw.firstIndex(of: "{"), let close = raw.lastIndex(of: "}"),
+                  open < close, let data = String(raw[open...close]).data(using: .utf8),
+                  let seed = try? JSONDecoder().decode(PreviewSeed.self, from: data),
+                  (2...34).contains(seed.brand.count), (5...90).contains(seed.headline.count),
+                  (2...35).contains(seed.action.count),
+                  seed.records.count >= 3,
+                  seed.records.prefix(3).allSatisfy({ (2...55).contains($0.count) }),
+                  seed.accent.range(of: #"^#[0-9a-fA-F]{6}$"#, options: .regularExpression) != nil
+            else { return nil }
+            return instantOptions(for: request, appearance: appearance, seed: seed)
+        } catch {
+            // Local styles remain available; enrichment failure is nonblocking.
+            return nil
+        }
+    }
+
     enum PreviewError: LocalizedError {
         case invalidResponse
         var errorDescription: String? {
@@ -74,7 +113,15 @@ enum ForgeStylePreviewService {
         }
     }
 
+    private static func instantOptions(for request: String, appearance: String, seed: PreviewSeed) -> [ForgeStyleConcept] {
+        options(for: request, appearance: appearance, seed: seed)
+    }
+
     static func instantOptions(for request: String, appearance: String) -> [ForgeStyleConcept] {
+        options(for: request, appearance: appearance, seed: nil)
+    }
+
+    private static func options(for request: String, appearance: String, seed: PreviewSeed?) -> [ForgeStyleConcept] {
         let directions = [
             ("Immersive", "Large visual-first product layout", "Dominant product-specific visual or data feature, with overlaid contextual controls and an anchored action sheet"),
             ("Action First", "Bold guided action layout", "Big functional call-to-action, expressive type and asymmetrical summary tiles, with a clear next step"),
@@ -83,7 +130,7 @@ enum ForgeStylePreviewService {
         return directions.enumerated().map { index, variant in
             ForgeStyleConcept(id: index, name: variant.0, summary: variant.1,
                               direction: variant.2,
-                              previewHTML: offlinePreview(request: request, variant: index, appearance: appearance))
+                              previewHTML: offlinePreview(request: request, variant: index, appearance: appearance, seed: seed))
         }
     }
 
@@ -196,7 +243,7 @@ enum ForgeStylePreviewService {
         return "<!DOCTYPE html>\n" + html
     }
 
-    static func offlinePreview(request: String, variant: Int, appearance: String) -> String {
+    private static func offlinePreview(request: String, variant: Int, appearance: String, seed: PreviewSeed?) -> String {
         let query = request.lowercased()
         let dark = query.contains("dark mode") || query.contains("dark theme") ||
             (!query.contains("light mode") && !query.contains("light theme") && appearance == "dark")
@@ -224,6 +271,10 @@ enum ForgeStylePreviewService {
             brand = "NearPath"; eyebrow = "PLACES NEAR YOU"; headline = "Your next stop, sorted."
             action = "Find nearest"; first = "Closest destination"; second = "Driving route"
             third = "Estimated arrival"; metric = "Location needed"
+        } else if ["calculator", "arithmetic", "maths", "math"].contains(where: query.contains) {
+            brand = "Sumline"; eyebrow = "CALCULATOR"; headline = "Calculate anything."
+            action = "Calculate"; first = "12 × 8 = 96"; second = "240 ÷ 6 = 40"
+            third = "18 + 24 = 42"; metric = "0"
         } else if ["habit", "routine", "streak"].contains(where: query.contains) {
             brand = "Ritual"; eyebrow = "TODAY'S RHYTHM"; headline = "Keep your streak alive."
             action = "Mark habit done"; first = "Morning stretch"; second = "Read for 15 minutes"
@@ -255,9 +306,13 @@ enum ForgeStylePreviewService {
                 .replacingOccurrences(of: ">", with: "&gt;")
                 .replacingOccurrences(of: "\"", with: "&quot;")
         }
-        let title = escaped(brand), label = escaped(eyebrow), hero = escaped(headline)
-        let cta = escaped(action), row1 = escaped(first), row2 = escaped(second)
-        let row3 = escaped(third), stat = escaped(metric)
+        let title = escaped(seed?.brand ?? brand), label = escaped(eyebrow)
+        let hero = escaped(seed?.headline ?? headline)
+        let cta = escaped(seed?.action ?? action)
+        let row1 = escaped(seed?.records[0] ?? first)
+        let row2 = escaped(seed?.records[1] ?? second)
+        let row3 = escaped(seed?.records[2] ?? third), stat = escaped(metric)
+        let overrideAccent = seed?.accent ?? accent
         let content: String
         switch variant {
         case 0:
@@ -290,7 +345,7 @@ enum ForgeStylePreviewService {
         <!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <meta name="color-scheme" content="\(dark ? "dark" : "light")">
         <style>*{box-sizing:border-box}body{margin:0;padding:16px;font-family:-apple-system,system-ui,sans-serif;
-        background:var(--bg);color:var(--ink)}:root{--bg:\(background);--card:\(card);--ink:\(ink);--accent:\(accent)}
+        background:var(--bg);color:var(--ink)}:root{--bg:\(background);--card:\(card);--ink:\(ink);--accent:\(overrideAccent)}
         h1{font-size:clamp(29px,6vw,46px);letter-spacing:-.045em;line-height:1.09}
         h2{font-size:22px;margin:5px 0 13px}small,.eyebrow{font-size:11px;letter-spacing:.15em;font-weight:800;opacity:.75}
         p{line-height:1.45;opacity:.75}button,.search{background:var(--accent);color:white;border:0;border-radius:16px;padding:16px;font-weight:800}
