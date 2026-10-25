@@ -14,7 +14,8 @@ struct OnboardingView: View {
     @State private var demoStage = -1
     @State private var demoEdit = ""
     @StateObject private var demoDictation = ForgeDictation()
-    private let numberOfSteps = 13
+    private let numberOfSteps = 6
+    private var tutorialStep: Int { [2, 3, 7, 8, 11, 12][min(max(step, 0), 5)] }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,9 +28,14 @@ struct OnboardingView: View {
                     }
                 }
                 Spacer()
-                Text("STEP \(step + 1) OF \(numberOfSteps)")
-                    .font(.caption.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 7) {
+                    ForEach(0..<numberOfSteps, id: \.self) { index in
+                        Circle()
+                            .fill(index == step ? Color.accentColor : Color.secondary.opacity(0.22))
+                            .frame(width: 8, height: 8)
+                    }
+                }
+                .accessibilityLabel("Onboarding page \(step + 1) of \(numberOfSteps)")
                 Spacer()
                 if step < numberOfSteps - 1 {
                     Button("Skip Setup") { complete = true }
@@ -40,15 +46,12 @@ struct OnboardingView: View {
             .padding(.top, 15)
             .padding(.bottom, 12)
 
-            ProgressView(value: Double(step + 1), total: Double(numberOfSteps))
-                .tint(.accentColor)
-                .padding(.horizontal, 22)
-                .padding(.bottom, 10)
+            Spacer().frame(height: 10)
 
             if step == numberOfSteps - 1 {
                 VStack {
                     HTMLAppFirstRunPermissionsView(onFinished: { complete = true })
-                    Button("Skip This Step") { complete = true }
+                    Button("Not Now") { complete = true }
                         .padding(.vertical, 12)
                 }
             } else {
@@ -100,9 +103,7 @@ struct OnboardingView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        Button("Skip This Step") { advance() }
-                            .font(.subheadline)
-                            .padding(.vertical, 4)
+
                     }
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
@@ -129,61 +130,40 @@ struct OnboardingView: View {
 
     private var title: String {
         switch step {
-        case 0: return "Welcome to HTMLApp"
-        case 1: return "Your app Library"
-        case 2: return "Make an app with AI"
-        case 3: return "Change anything later"
-        case 4: return "Find and organize apps"
-        case 5: return "Make apps without AI"
-        case 6: return "Test and fix your app"
-        case 7: return "Permissions and widgets"
-        case 8: return "Sharing and backups"
-        case 9: return "Settings and help"
-        case 10: return "Test your microphone"
-        case 11: return "Practice making a calculator"
+        case 0: return "Describe it. Get an app."
+        case 1: return "Edit anything with AI"
+        case 2: return "Apps, widgets and permissions"
+        case 3: return "Your library, your data"
+        case 4: return "Practice and connect AI"
         default: return "Optional permissions"
         }
     }
 
     private var detail: String {
         switch step {
-        case 0: return "Create, collect, and customize small apps right on your iPhone or iPad. You can skip anything and learn as you go."
-        case 1: return "All your saved apps live here. Choose the way you want to see them."
-        case 2: return "Describe what you want. Forge can design a few looks and create the app for you. Connecting an AI provider is optional until you want to generate."
-        case 3: return "Press and hold a saved app to see its shortcuts. You can also edit its code or ask AI to make changes."
-        case 4: return "Search for your creations, make folders, choose list or grid, and sort your Library."
-        case 5: return "Import an HTML file, write code yourself, or save a website. No AI account needed."
-        case 6: return "Try your app before saving. Choose Skip, Fast, or Balanced testing and fix broken buttons."
-        case 7: return "Control what an app may access. Some apps can publish Home Screen widgets."
-        case 8: return "Send apps nearby, export code, back up personal data, or add an app to Home Screen."
-        case 9: return "Adjust your preferences, read debug logs, or replay this tutorial whenever you want."
-        case 10: return "Hold the microphone and say a short sentence. If Apple cannot transcribe it, try the free Whisper offline fallback."
-        case 11: return "Try a safe sample AI generation, play with a real calculator, and practice asking for edits. This lesson does not use your API or save an app."
-        default: return "Choose optional iOS permissions. Each can be skipped and changed later."
+        case 0: return "Describe your idea and Forge builds a real HTML app."
+        case 1: return "Test the result, ask for edits, or long-press a saved app."
+        case 2: return "Add apps to Home Screen and control native access."
+        case 3: return "Organize folders, share apps and keep backups."
+        case 4: return "Try a working calculator, then optionally connect an AI provider."
+        default: return "Choose optional iOS permissions; you can change them later."
         }
     }
 
     private var symbol: String {
         switch step {
-        case 0: return "square.stack.3d.up.fill"
-        case 1: return "square.grid.2x2.fill"
-        case 2: return "sparkles"
-        case 3: return "hand.tap.fill"
-        case 4: return "magnifyingglass"
-        case 5: return "chevron.left.forwardslash.chevron.right"
-        case 6: return "checkmark.shield"
-        case 7: return "square.grid.2x2"
-        case 8: return "square.and.arrow.up"
-        case 9: return "gearshape.2"
-        case 10: return "mic.circle.fill"
-        case 11: return "plus.forwardslash.minus"
+        case 0: return "sparkles"
+        case 1: return "hand.tap.fill"
+        case 2: return "apps.iphone"
+        case 3: return "square.grid.2x2.fill"
+        case 4: return "plus.forwardslash.minus"
         default: return "hand.raised"
         }
     }
 
     @ViewBuilder
     private var tutorialContent: some View {
-        switch step {
+        switch tutorialStep {
         case 0:
             tutorialRow("1", "Create or import", "Tap + in your Library to generate with AI, import HTML, or save a website.", symbol: "plus.circle.fill", tint: .blue)
             tutorialRow("2", "Open and use", "Tap a saved app to launch it. Its files and settings remain in your Library.", symbol: "play.rectangle.fill", tint: .purple)
@@ -351,6 +331,8 @@ struct OnboardingView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Start Hands-On Forge Practice") { showForgePractice = true }
                     .buttonStyle(.borderedProminent)
+                Button("Connect AI Provider (Optional)") { showAISetup = true }
+                    .buttonStyle(.bordered)
             }
         default:
             tutorialRow("1", "Send to a friend", "Open Share with Nearby Devices on the sending device. The other device chooses Receive. Accept the connection and the app imports automatically.", symbol: "dot.radiowaves.left.and.right", tint: .blue)
