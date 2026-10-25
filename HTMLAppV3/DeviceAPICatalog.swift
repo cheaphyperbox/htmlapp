@@ -308,7 +308,7 @@ enum HTMLAppDeviceAPIResearch {
               }
             });
             """,
-            constraints: "A saved app can publish up to 8 widget definitions, including custom colors, text, images, progress, row lists and ring layouts. The supported Home Screen and Lock Screen widget uses the latest primary snapshot; the broken manual selection gallery has been removed. For a chosen app to appear, publish its widget as primary. Refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript. Minimum requested interval is 15 minutes, but iOS controls actual delivery. Keep content glanceable; no continuous background HTML execution."
+            constraints: "Widget actions: definition.action or snapshot.items[i].action = {id,type: open|route|event,route?,payload?}; definition.openBehavior = openApp|action. Medium/large list rows can each open their own action. On launch, await HTMLAppNative.launch.get() or listen for htmlapplaunch; resolve route and payload from the host, never trust a URL payload. A saved app can publish up to 8 widget definitions, including custom colors, text, images, progress, row lists and ring layouts. The supported Home Screen and Lock Screen widget uses the latest primary snapshot; the broken manual selection gallery has been removed. For a chosen app to appear, publish its widget as primary. Refresh supports public HTTPS GET JSON only, with no embedded secrets or arbitrary JavaScript. Minimum requested interval is 15 minutes, but iOS controls actual delivery. Keep content glanceable; no continuous background HTML execution."
         ),
         .init(
             id: "live.activities",
