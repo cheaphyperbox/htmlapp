@@ -4,6 +4,7 @@ import WidgetKit
 
 @main
 struct HTMLAppMain: App {
+    @UIApplicationDelegateAdaptor(HTMLAppBackgroundURLSessionDelegate.self) private var backgroundURLDelegate
     @StateObject private var store = AppStore()
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @AppStorage("htmlapp.lastOpenedVersion") private var lastOpenedVersion = ""
@@ -32,6 +33,7 @@ struct HTMLAppMain: App {
         }
         #endif
         HTMLAppBackgroundCoordinator.shared.schedule()
+        ForgeBackgroundUpload.shared.reconnectIfNeeded()
     }
 
     var body: some Scene {
