@@ -1614,10 +1614,14 @@ struct AIGenerationView: View {
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this request can be resolved against HTMLApp's internal device API catalog.")
             }
             guard !Task.isCancelled else { return }
+            let privacyReport = await AIPrivacyToolRunner.research(
+                originalPrompt, config: AISettingsStore.configuration(for: .research))
+            guard !Task.isCancelled else { return }
+            let combinedResearch = [webReport, privacyReport].filter { !$0.isEmpty }.joined(separator: "\n\n")
             await session.generate(
                 prompt: designBrief,
                 originalUserPrompt: originalPrompt,
-                researchReport: webReport,
+                researchReport: combinedResearch,
                 preplanned: preplanned
             )
             guard session.errorMessage == nil,
@@ -1724,7 +1728,11 @@ Requested edit:
                 AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this edit does not require public-web research; the internal device API catalog remains available.")
             }
             guard !Task.isCancelled else { return }
-            await session.revise(change: change, researchReport: webReport,
+            let privacyReport = await AIPrivacyToolRunner.research(
+                researchRequest, config: AISettingsStore.configuration(for: .research))
+            guard !Task.isCancelled else { return }
+            let combinedResearch = [webReport, privacyReport].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            await session.revise(change: change, researchReport: combinedResearch,
                                 styleInstruction: selectedStyle?.buildInstruction)
             guard session.errorMessage == nil else {
                 lastFailedChange = change
