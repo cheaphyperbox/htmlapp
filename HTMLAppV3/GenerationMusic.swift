@@ -165,7 +165,10 @@ final class GenerationMusic: ObservableObject {
         controls.pauseCommand.isEnabled = true
         if remoteStopToken == nil {
             remoteStopToken = controls.stopCommand.addTarget { [weak self] _ in
-                Task { @MainActor in self?.stop() }
+                Task { @MainActor in
+                    self?.pause()
+                    self?.stop()
+                }
                 return .success
             }
         }
