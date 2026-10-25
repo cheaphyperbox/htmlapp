@@ -645,17 +645,6 @@ struct AIGenerationView: View {
                     }
                     .disabled(AISettingsStore.quickModel.isEmpty)
                     }
-                    if quickModePolicy == "automatic" && !AISettingsStore.quickModel.isEmpty {
-                        Text(quickMode ? "Auto: Fast — tap to override" : "Auto: Polished — tap to override")
-                            .font(.caption.weight(.semibold))
-                        if let autoQuickReason {
-                            Text(autoQuickReason).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Text(AISettingsStore.quickModel.isEmpty
-                         ? "Set a QUICK! model in Settings → AI & Creation to enable faster, streamlined generation."
-                         : "Uses \(AISettingsStore.quickModel) for every AI role in this run. Optional expensive stages may be skipped.")
-                        .font(.caption).foregroundStyle(.secondary)
                     if AISettingsStore.isUIOverhaulEnabled {
                         Toggle("Extra UI overhaul for this run", isOn: $polishThisRun)
                             .font(.subheadline)
