@@ -74,6 +74,19 @@ enum ForgeStylePreviewService {
         }
     }
 
+    static func instantOptions(for request: String, appearance: String) -> [ForgeStyleConcept] {
+        let directions = [
+            ("Immersive", "Large visual-first product layout", "Dominant product-specific visual or data feature, with overlaid contextual controls and an anchored action sheet"),
+            ("Action First", "Bold guided action layout", "Big functional call-to-action, expressive type and asymmetrical summary tiles, with a clear next step"),
+            ("Dashboard", "Compact information-first layout", "Realistic domain-specific metrics, a short ordered list or activity feed, and compact controls")
+        ]
+        return directions.enumerated().map { index, variant in
+            ForgeStyleConcept(id: index, name: variant.0, summary: variant.1,
+                              direction: variant.2,
+                              previewHTML: offlinePreview(request: request, variant: index, appearance: appearance))
+        }
+    }
+
     /// Standalone HTML avoids fragile JSON-escaping of markup, CSS and scripts.
     /// Each slot gets a fast attempt plus one compact retry. The deterministic
     /// fallback keeps all three distinct choices available if a provider fails.
@@ -183,7 +196,7 @@ enum ForgeStylePreviewService {
         return "<!DOCTYPE html>\n" + html
     }
 
-    private static func offlinePreview(request: String, variant: Int, appearance: String) -> String {
+    static func offlinePreview(request: String, variant: Int, appearance: String) -> String {
         let query = request.lowercased()
         let dark = query.contains("dark mode") || query.contains("dark theme") ||
             (!query.contains("light mode") && !query.contains("light theme") && appearance == "dark")
