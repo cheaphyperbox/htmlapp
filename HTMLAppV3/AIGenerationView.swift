@@ -194,6 +194,7 @@ struct AIGenerationView: View {
             ) {
                 Button("Discard and Close", role: .destructive) {
                     generationTask?.cancel()
+                    ForgeBackgroundUpload.shared.cancel()
                     preparedStyleTask?.cancel()
                     preparedStyleTask = nil
                     preparedStylePrompt = nil
@@ -297,6 +298,7 @@ struct AIGenerationView: View {
                 if shortcutGenerationNonce == 0 { showDraftRecovery = true }
             }
             acceptShortcutRequest(shortcutGenerationNonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? prompt)
+            restoreCompletedBackgroundDraft()
         }
         .onChange(of: shortcutGenerationNonce) { nonce in
             // Library sends a new nonce even if this screen is already open.
@@ -305,6 +307,9 @@ struct AIGenerationView: View {
             acceptShortcutRequest(nonce, incoming: UserDefaults.standard.string(forKey: "htmlapp.shortcut.activeIdea") ?? activeShortcutPrompt)
         }
         .interactiveDismissDisabled(true)
+        .onReceive(NotificationCenter.default.publisher(for: ForgeBackgroundUpload.finishedNotification)) { _ in
+            restoreCompletedBackgroundDraft()
+        }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppForgeBackgroundExpired"))) { _ in
             guard !demoMode else { return }
             session.persistCheckpoint()
@@ -323,6 +328,9 @@ struct AIGenerationView: View {
             if !demoMode && session.isWorking { session.persistCheckpoint() }
         }
         .onChange(of: scenePhase) { value in
+            if value == .active {
+                restoreCompletedBackgroundDraft()
+            }
             if value != .active {
                 microphoneRecordingTask?.cancel()
                 microphoneCapturing = false
@@ -336,6 +344,7 @@ struct AIGenerationView: View {
                     dictation.stop()
                 }
                 persistDraftForBackground()
+                if value == .background { handoffForgeToBackgroundURLSession() }
             }
         }
         .onChange(of: dictation.transcribingOffline) { processing in
@@ -1297,7 +1306,7 @@ struct AIGenerationView: View {
 
     private func endForgeActivity(onlyIf expected: String? = nil) {
         guard let job = forgeActivityJobID, expected == nil || expected == job else { return }
-        GenerationMusic.shared.stop()
+        if !ForgeBackgroundUpload.shared.isActive { GenerationMusic.shared.stop() }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             HTMLAppForgeContinuedProcessing.finish(success: session.errorMessage == nil && session.phase == "Ready to review")
@@ -1667,6 +1676,7 @@ Requested edit:
         preparedStyleTask?.cancel()
         preparedStyleTask = nil
         preparedStylePrompt = nil
+        ForgeBackgroundUpload.shared.cancel()
         endForgeActivity()
         session.keepCurrentPartialDraft()
         generationTask?.cancel()
@@ -1718,6 +1728,10 @@ Requested edit:
     private func continueRecoveredDraft() {
         guard let draft = recoverableDraft else { return }
         resumeRecoveredDraft()
+        if draft.phase == "Background result received" {
+            generationTask = Task { await session.verifyCurrent() }
+            return
+        }
         if draft.existingAppID == nil {
             // A provider's old streaming connection cannot be resumed after
             // process death. Reissue the original prompt rather than
@@ -1737,6 +1751,61 @@ Requested edit:
         if existingApp == nil { prompt = draft.originalPrompt }
         recoverableDraft = nil
         uiPolishNotice = "Recovered the local draft. AI work was not restarted automatically."
+    }
+
+    /// Foreground streaming cannot be transferred into a background
+    /// URLSession. Start one complete file-backed request when the app
+    /// actually backgrounds, then preserve its result for foreground QA.
+    private func handoffForgeToBackgroundURLSession() {
+        guard !demoMode, session.isWorking, !ForgeBackgroundUpload.shared.isActive else { return }
+        let config = AISettingsStore.configuration
+        let isEdit = !changePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let system: String
+        let message: String
+        if isEdit {
+            system = AIHTMLAgent.patchSystemPrompt(research: browserResearch.lastReport)
+            message = """
+            CURRENT APP:
+            <htmlapp_existing>
+            \(session.streamedHTML)
+            </htmlapp_existing>
+            REQUESTED CHANGE:
+            \(changePrompt)
+            Return the usual complete HTMLApp patch response.
+            """
+        } else {
+            system = AIHTMLAgent.systemPrompt(research: browserResearch.lastReport)
+            let idea = session.refinedBrief.isEmpty ? prompt : session.refinedBrief
+            message = selectedStyle.map { idea + "\n\n" + $0.buildInstruction } ?? idea
+        }
+        session.persistCheckpoint()
+        guard ForgeBackgroundUpload.shared.start(
+            config: config, system: system, messages: [("user", message)], edit: isEdit
+        ) else { return }
+        let previous = generationTask
+        previous?.cancel()
+        Task { @MainActor in
+            await previous?.value
+            session.isWorking = false
+            session.phase = "Continuing in background"
+        }
+    }
+
+    /// The finished response is never executed in the background. Verify and
+    /// render the app only after returning to a foreground Forge view.
+    private func restoreCompletedBackgroundDraft() {
+        guard scenePhase == .active, !session.isWorking,
+              let draft = ForgeDraftCheckpointStore.load(),
+              draft.phase == "Background result received",
+              draft.existingAppID == existingApp?.id ||
+                  (existingApp == nil && draft.existingAppID == nil)
+        else { return }
+        session.restore(checkpoint: draft, existingIcon: existingApp?.favicon)
+        recoverableDraft = nil
+        showDraftRecovery = false
+        uiPolishNotice = "Background generation finished. Checking your app before review."
+        generationTask = Task { await session.verifyCurrent() }
     }
 
     private func persistDraftForBackground() {
