@@ -11,18 +11,18 @@ concurrency:
 jobs:
   build:
     name: Build HTMLApp IPA
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode (prefer 26, fallback to 16.4)
+      - name: Select Xcode with iOS 26 SDK
         shell: bash
         run: |
           set -euo pipefail
           XCODE_PATH=""
-          for candidate in /Applications/Xcode_26*.app /Applications/Xcode_16.4.app /Applications/Xcode.app; do
+          for candidate in /Applications/Xcode_26*.app /Applications/Xcode.app; do
             if [ -d "$candidate" ]; then
               XCODE_PATH="$candidate"
               break
@@ -36,6 +36,11 @@ jobs:
           echo "Using $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode / {split($2, v, "."); print v[1]; exit}')"
+          if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
+            echo "Xcode 26 or newer is required to compile BGContinuedProcessingTask."
+            exit 1
+          fi
 
       - name: Install XcodeGen
         shell: bash
