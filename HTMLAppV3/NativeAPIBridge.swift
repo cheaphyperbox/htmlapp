@@ -1073,7 +1073,6 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         // the loadFileRepresentation completion returns; hopping to MainActor
         // first lets iOS delete the file before HTMLApp can import it.
         let group = DispatchGroup()
-        let lock = NSLock()
         var imported: [[String: Any]] = []
         for result in results {
             let provider = result.itemProvider
@@ -1104,7 +1103,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                         if let item = self.importFile(url: staging, namespace: "photos",
                                                       preferredName: provider.suggestedName,
                                                       typeIdentifier: typeIdentifier) {
-                            lock.lock(); imported.append(item); lock.unlock()
+                            imported.append(item)
                         }
                         try? FileManager.default.removeItem(at: staging)
                         group.leave()
