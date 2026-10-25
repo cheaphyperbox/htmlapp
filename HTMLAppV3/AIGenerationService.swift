@@ -273,7 +273,7 @@ final class AIGenerationSession: ObservableObject {
         }
     }
 
-    func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "") async {
+    func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "", preplanned: AIPlanningResult? = nil) async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         editingExistingApp = false
@@ -304,11 +304,17 @@ final class AIGenerationSession: ObservableObject {
                 } else {
                     visualReference = ""
                 }
-                let planning = try await optionalStage("Prompt improvement") {
-                    try await AIHTMLAgent.planPrompt(
-                        originalUserPrompt ?? prompt,
-                        config: AISettingsStore.configuration(for: .planner)
-                    )
+                let planning: AIPlanningResult?
+                if let preplanned {
+                    planning = preplanned
+                    AIDebugTraceStore.shared.append("PREFLIGHT", "Reused prompt planning prepared while choosing a look.")
+                } else {
+                    planning = try await optionalStage("Prompt improvement") {
+                        try await AIHTMLAgent.planPrompt(
+                            originalUserPrompt ?? prompt,
+                            config: AISettingsStore.configuration(for: .planner)
+                        )
+                    }
                 }
                 if let planning {
                 improved = planning.brief + visualReference
