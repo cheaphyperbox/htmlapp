@@ -37,8 +37,11 @@ jobs:
           fi
           echo "Using $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
-          xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode / {split($2, v, "."); print v[1]; exit}')"
+          # Capture output once. Piping xcodebuild directly to awk with
+          # early exit can crash Xcode with NSFileHandle broken pipe (134).
+          XCODE_VERSION_OUTPUT="$(xcodebuild -version)"
+          printf '%s\n' "$XCODE_VERSION_OUTPUT"
+          XCODE_MAJOR="$(printf '%s\n' "$XCODE_VERSION_OUTPUT" | awk '/^Xcode / {split($2, v, "."); print v[1]}')"
           if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
             echo "Xcode 26 or newer is required to compile BGContinuedProcessingTask."
             exit 1
