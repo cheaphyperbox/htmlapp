@@ -103,7 +103,11 @@ struct HTMLAppMain: App {
                     }
                 }
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
-                    HTMLAppHomeScreenGuide(appName: app.name, profileURL: store.pendingWebClipProfileURL)
+                    HTMLAppHomeScreenGuide(
+                        appName: app.name, appID: app.id, profileURL: store.pendingWebClipProfileURL,
+                        openInSafari: { store.openWebClipProfileInSafari(for: app) },
+                        exportProfile: { store.exportProfile(for: app) }
+                    )
                 }
                 .alert("Library recovery needed", isPresented: $store.showLibraryRecoveryAlert) {
                     Button("Keep Library Protected", role: .cancel) {
@@ -1077,11 +1081,18 @@ final class AppStore: ObservableObject {
     }
 
     func installWebClip(for app: SavedHTMLApp) {
+        // Display instructions immediately; the ephemeral loopback listener
+        // must start when Safari is opened, not while the user reads the guide.
+        pendingWebClipProfileURL = nil
+        pendingWebClipGuideApp = app
+    }
+
+    func openWebClipProfileInSafari(for app: SavedHTMLApp) {
         LocalProfileDownload.shared.start(profile: WebClipProfile.mobileConfigData(for: app)) { [weak self] result in
             switch result {
             case .success(let url):
                 self?.pendingWebClipProfileURL = url
-                self?.pendingWebClipGuideApp = app
+                UIApplication.shared.open(url)
             case .failure(let error):
                 self?.errorMessage = "Could not prepare the Home Screen profile: \(error.localizedDescription)"
             }
