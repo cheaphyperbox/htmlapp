@@ -52,6 +52,7 @@ struct LibraryView: View {
     @State private var showWebsiteImporter = false
     @State private var nearbyTransferRoute: NearbyTransferRoute?
     @State private var pendingImport: HTMLFileImportPayload?
+    @State private var queuedFileImport: HTMLFileImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
     @State private var refreshingID: String?
@@ -147,6 +148,9 @@ struct LibraryView: View {
         }
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
+        .onChange(of: importingFile) { showing in
+            if !showing { presentQueuedFileImport() }
+        }
         .fullScreenCover(item: $nearbyTransferRoute) { route in
             NavigationStack {
                 NearbyAppTransferView(appIDs: route.appIDs)
@@ -679,14 +683,24 @@ struct LibraryView: View {
                 return
             }
             let payload = HTMLFileImportPayload(fileName: url.lastPathComponent, html: html)
-            // Allow the Files picker to dismiss before presenting the app's
-            // destination picker; simultaneous sheets can drop the tap.
-            Task { @MainActor in
-                await Task.yield()
-                pendingImport = payload
-            }
+            // iOS 16 can silently drop a second sheet while the system Files
+            // picker is dismissing. Stage the result, then present after
+            // the fileImporter state has returned to false.
+            queuedFileImport = payload
+            presentQueuedFileImport()
         } catch {
             store.errorMessage = "Couldn't open the selected file: \(error.localizedDescription)"
+        }
+    }
+
+    private func presentQueuedFileImport() {
+        guard !importingFile, queuedFileImport != nil else { return }
+        // The dismissal animation needs more than a single main-actor yield
+        // on iOS 16; a short deferral avoids presenting over UIDocumentPicker.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            guard !importingFile, let payload = queuedFileImport else { return }
+            queuedFileImport = nil
+            pendingImport = payload
         }
     }
 
