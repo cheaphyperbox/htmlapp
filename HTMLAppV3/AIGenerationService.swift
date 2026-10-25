@@ -1414,6 +1414,34 @@ enum AIProviderClient {
         throw lastError ?? AIGenerationError.provider("The AI request failed.")
     }
 
+    // File-backed request for iOS background URLSession. The Authorization
+    // header stays on the request; the persisted body contains no API key.
+    static func backgroundUploadRequest(
+        config: AIProviderConfiguration, system: String, messages: [(String, String)]
+    ) throws -> (URLRequest, URL) {
+        guard let endpoint = config.endpointURL(),
+              endpoint.scheme?.lowercased() == "https" else {
+            throw AIGenerationError.invalidEndpoint
+        }
+        let body = requestBody(config: config, system: system, messages: messages,
+                               stream: false, maxTokens: 24_000)
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ForgeBackgroundUploads", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(UUID().uuidString + ".json")
+        try data.write(to: file, options: .atomic)
+        var request = makeRequest(config: config, endpoint: endpoint, timeout: 600)
+        request.timeoutInterval = 600
+        return (request, file)
+    }
+
+    static func backgroundResponseText(_ data: Data, type: AIProviderConfiguration.Compatibility) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let text = responseText(object, type: type).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
     static func stream(config: AIProviderConfiguration, system: String, messages: [(String, String)], maxTokens: Int? = nil) async throws -> AsyncThrowingStream<String, Error> {
         await AIRequestGate.shared.waitIfNeeded()
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
