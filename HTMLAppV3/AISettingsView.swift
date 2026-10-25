@@ -2,6 +2,10 @@ import SwiftUI
 
 struct AIConfigurationSettingsView: View {
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("generationMusic.enabled") private var musicEnabled = false
+    @AppStorage("generationMusic.url") private var musicURL = ""
+    @AppStorage("generationMusic.volume") private var musicVolume = 0.6
+    @ObservedObject private var generationMusic = GenerationMusic.shared
     @State private var compatibility = AISettingsStore.compatibility
     @State private var apiURL = AISettingsStore.apiURL
     @State private var apiKey = AISettingsStore.apiKey
@@ -69,6 +73,33 @@ struct AIConfigurationSettingsView: View {
                 Text("QUICK! Generation")
             }
 
+            Section {
+                Toggle("Play music while generating", isOn: $musicEnabled)
+                TextField("Audio file URL (https://…)", text: $musicURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .submitLabel(.done)
+                    .onSubmit { generationMusic.prefetch() }
+                HStack {
+                    Text("Volume")
+                    Slider(value: $musicVolume, in: 0...1)
+                        .onChange(of: musicVolume) { _ in generationMusic.applyVolume() }
+                }
+                Button(generationMusic.isPreview ? "Stop preview" : "Play preview") {
+                    generationMusic.togglePreview()
+                }
+                .disabled(GenerationMusicSettings.validatedURL(musicURL) == nil ||
+                          (generationMusic.isPlaying && !generationMusic.isPreview))
+                Text(generationMusic.status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Generation Music")
+            } footer: {
+                Text("Link to any audio file (MP3, M4A, WAV…). It downloads once, then loops during every app generation or edit and stops when the run finishes.")
+            }
+
             Section("AI Specialists") {
                 NavigationLink { AIRoleProviderSettingsView(role: .planner) } label: {
                     specialistLabel("Thinking", symbol: "brain", role: .planner)
@@ -128,6 +159,7 @@ struct AIConfigurationSettingsView: View {
         .navigationTitle("AI & Creation")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
+            generationMusic.stopPreview()
             if !apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !coderModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 save(showConfirmation: false)
