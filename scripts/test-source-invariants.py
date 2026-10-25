@@ -113,7 +113,7 @@ assert 'Give feedback on all looks' not in source("HTMLAppV3/AIGenerationView.sw
 
 assert 'return await withTaskGroup(of: ForgeStyleConcept?.self)' in source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'return ForgeStyleConcept(id: index, name: variant.0' in source("HTMLAppV3/ForgeStylePreview.swift")
-assert 'offlinePreview(request: request, variant: index, appearance: appearance)' in source("HTMLAppV3/ForgeStylePreview.swift")
+assert 'offlinePreview(request: request, variant: index, appearance: appearance, seed: nil)' in source("HTMLAppV3/ForgeStylePreview.swift")
 style_source = source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'maxTokens: ForgeRunOptions.quick ? 6500 : (attempt == 0 ? 8500 : 12000)' in style_source, "Style mockups must have enough output capacity to finish after model reasoning"
 assert 'let config = attempt == 0 ? preferredConfig : recoveryConfig' in style_source, "Broken UI specialist responses must retry with the main model"
