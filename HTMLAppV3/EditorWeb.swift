@@ -232,6 +232,10 @@ struct HTMLWebView: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "htmlappRuntimeError")
         coordinator.shutdown()
         uiView.stopLoading()
+        // After returning to the Library, warm the next WebContent process.
+        if coordinator.appID != "PREVIEW" {
+            Task { @MainActor in HTMLAppWebWarmup.prime() }
+        }
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
