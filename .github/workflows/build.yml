@@ -125,6 +125,13 @@ jobs:
       - name: Test JavaScript widget rejection diagnostics
         run: node scripts/test-widget-bridge.js
 
+      - name: Check Swift source syntax before dependency compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          find HTMLAppV3 HTMLAppWidgets HTMLAppShared HTMLApp -name '*.swift' -type f -print0 |
+            xargs -0 xcrun swiftc -frontend -parse
+
       - name: Generate Xcode project
         shell: bash
         run: |
