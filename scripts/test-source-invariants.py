@@ -216,7 +216,7 @@ assert 'handoffForgeToBackgroundURLSession()' in forge
 assert 'restoreCompletedBackgroundDraft()' in forge
 assert 'streamedBytes: session.streamedByteCount' in forge
 assert 'expectedBytes = 120_000.0' in continued
-assert 'buildInstruction' in styles and 'selectedStyle.map { originalPrompt + "\\n\\n" + $0.buildInstruction }' in forge
+assert 'buildInstruction' in styles and 'selectedStyle.map { basePrompt + "\\n\\n" + $0.buildInstruction }' in forge
 assert 'preplanned: AIPlanningResult?' in ai and 'preparedStyleTask' in forge
 assert 'Low reasoning on supported OpenAI models' in settings
 assert 'host == "api.openai.com"' in ai and 'body["reasoning_effort"] = "low"' in ai
@@ -289,5 +289,8 @@ assert 'HTMLAppWebWarmup.prime()' in web_source
 assert 'numberOfSteps = 6' in source("HTMLAppV3/OnboardingSettings.swift")
 assert 'ForgeQuickClassifier.decide(for:' in forge
 assert 'ai.quickMode.policy' in source("HTMLAppV3/AISettingsView.swift")
+
+assert 'purposeGuess' in forge and 'INTENDED AUDIENCE AND PURPOSE:' in forge
+assert '<purpose>who, where, why</purpose>' in ai
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
