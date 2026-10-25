@@ -32,6 +32,7 @@ final class GenerationMusic: ObservableObject {
     @Published private(set) var status = "Ready"
     @Published private(set) var isPlaying = false
     @Published private(set) var isPreview = false
+    @Published private(set) var isGenerationActive = false
 
     private var player: AVAudioPlayer?
     private var loadTask: Task<Void, Never>?
@@ -45,6 +46,7 @@ final class GenerationMusic: ObservableObject {
         stopPreview()
         guard GenerationMusicSettings.enabled else { return }
         generationWanted = true
+        isGenerationActive = true
         begin(preview: false)
     }
 
@@ -164,7 +166,9 @@ final class GenerationMusic: ObservableObject {
     }
 
     func stop() {
+        let hadMusicSession = generationWanted || isPreview || player != nil || loadTask != nil
         generationWanted = false
+        isGenerationActive = false
         isPreview = false
         requestID = UUID()
         loadTask?.cancel()
@@ -174,10 +178,12 @@ final class GenerationMusic: ObservableObject {
         isPlaying = false
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-        } catch {
-            AIDebugTraceStore.shared.append("GENERATION MUSIC", "Audio session deactivation was unavailable.")
+        if hadMusicSession {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } catch {
+                AIDebugTraceStore.shared.append("GENERATION MUSIC", "Audio session deactivation was unavailable.")
+            }
         }
         status = "Ready"
     }
