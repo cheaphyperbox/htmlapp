@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.17"
-    static let compiledBuild = "24"
+    static let compiledVersion = "1.6.18"
+    static let compiledBuild = "25"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.18" { return [
+            Entry(id: "generation-music", title: "Generation Music", description: "Play your own linked audio during Forge creation and editing, with cached playback, volume and preview controls.", symbol: "music.note", tint: .purple),
+            Entry(id: "quick-performance", title: "Faster QUICK! creation", description: "QUICK! avoids optional web research and extra specialist icon regeneration.", symbol: "bolt.fill", tint: .orange),
+            Entry(id: "instant-style-choices", title: "Instant style choices", description: "Three looks are immediately available while a small AI request can refine their product labels.", symbol: "paintpalette.fill", tint: .blue)
+        ] }
         if version == "1.6.17" { return [
             Entry(id: "complete-style-mockups", title: "Complete AI style previews", description: "Forge gives preview models enough output budget to finish their HTML and retries incomplete specialist results using the main app model.", symbol: "paintpalette.fill", tint: .purple),
             Entry(id: "preview-debug", title: "Clearer provider diagnostics", description: "AI Debug now shows response finish reasons and token usage when the provider includes them, helping identify truncated mockups.", symbol: "waveform.path.ecg.rectangle", tint: .blue)
