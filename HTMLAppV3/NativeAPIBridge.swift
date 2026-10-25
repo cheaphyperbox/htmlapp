@@ -524,7 +524,16 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
               ["open", "route", "event"].contains(type) else { return nil }
         let route = raw["route"] as? String
         guard route == nil || route!.count <= 120 else { return nil }
-        let payload = raw["payload"] as? String
+        let payload: String?
+        if let text = raw["payload"] as? String {
+            payload = text
+        } else if let object = raw["payload"], JSONSerialization.isValidJSONObject(object),
+                  let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+                  let text = String(data: data, encoding: .utf8) {
+            payload = text
+        } else {
+            payload = nil
+        }
         guard payload == nil || payload!.utf8.count <= 2048 else { return nil }
         return HTMLAppWidgetAction(id: actionID, type: type, route: route, payload: payload)
     }
@@ -759,7 +768,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 let symbol = (raw["systemSymbol"] as? String).map { String($0.prefix(80)) }
                 let progress = (raw["progress"] as? NSNumber).map { min(max($0.doubleValue, 0), 1) }
                 items.append(.init(
-                    id: (raw["id"] as? String).flatMap(validGeneratedIdentifier) ?? "item-(index)",
+                    id: (raw["id"] as? String).flatMap(validGeneratedIdentifier) ?? "item-\(index)",
                     label: label,
                     value: value,
                     detail: detail,
