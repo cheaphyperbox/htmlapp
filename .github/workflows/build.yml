@@ -21,13 +21,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The runner can contain multiple Xcode 26 releases. Prefer the
+          # newest instead of accidentally selecting Xcode_26.0.1 first.
           XCODE_PATH=""
-          for candidate in /Applications/Xcode_26*.app /Applications/Xcode.app; do
-            if [ -d "$candidate" ]; then
-              XCODE_PATH="$candidate"
-              break
-            fi
-          done
+          while IFS= read -r candidate; do
+            if [ -d "$candidate" ]; then XCODE_PATH="$candidate"; break; fi
+          done < <(printf '%s\n' /Applications/Xcode_26*.app | sort -Vr)
+          if [ -z "$XCODE_PATH" ] && [ -d /Applications/Xcode.app ]; then
+            XCODE_PATH=/Applications/Xcode.app
+          fi
           if [ -z "$XCODE_PATH" ]; then
             echo "No supported Xcode installation was found."
             ls -1 /Applications | grep Xcode || true
@@ -54,6 +56,23 @@ jobs:
           fi
           xcodebuild -showsdks
           xcrun simctl list runtimes available || true
+
+      - name: Verify selected Xcode has an iOS device platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          # -showsdks succeeds even when Xcode's device platform is missing.
+          # Check the platform bundle directly and let xcodebuild install it.
+          DEVELOPER_DIR="$(xcode-select -p)"
+          PLATFORM="$DEVELOPER_DIR/Platforms/iPhoneOS.platform"
+          if [ ! -d "$PLATFORM" ]; then
+            echo "The selected Xcode lacks the iPhoneOS platform; downloading it."
+            xcodebuild -downloadPlatform iOS
+          fi
+          if [ ! -d "$PLATFORM" ]; then
+            echo "::error::Selected Xcode has no iPhoneOS platform."
+            exit 1
+          fi
 
       - name: Install XcodeGen
         shell: bash
@@ -93,6 +112,18 @@ jobs:
           xcodegen generate
           test -d "HTMLApp.xcodeproj"
           ls -la
+
+      - name: Validate device build destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project HTMLApp.xcodeproj -scheme HTMLApp -showdestinations > /tmp/htmlapp-build-destinations.txt 2>&1
+          cat /tmp/htmlapp-build-destinations.txt
+          if ! grep -Eq 'platform:iOS,.*(Any iOS Device|generic:1)' /tmp/htmlapp-build-destinations.txt; then
+            echo "::warning::Generic iOS destination not listed; attempting iOS platform installation."
+            xcodebuild -downloadPlatform iOS
+          fi
+          xcodebuild -project HTMLApp.xcodeproj -scheme HTMLApp -showdestinations
 
       - name: Test widget storage and provider timelines
         shell: bash
