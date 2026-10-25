@@ -36,6 +36,7 @@ struct AIGenerationView: View {
     @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
     @State private var quickMode = false
+    @State private var polishThisRun = false
     @State private var exploringStyles = false
     @State private var styleOptions: [ForgeStyleConcept] = []
     @State private var selectedStyleIndex = 0
@@ -601,6 +602,12 @@ struct AIGenerationView: View {
                          ? "Set a QUICK! model in Settings → AI & Creation to enable faster, streamlined generation."
                          : "Uses \(AISettingsStore.quickModel) for every AI role in this run. Optional expensive stages may be skipped.")
                         .font(.caption).foregroundStyle(.secondary)
+                    if AISettingsStore.isUIOverhaulEnabled {
+                        Toggle("Extra UI overhaul for this run", isOn: $polishThisRun)
+                            .font(.subheadline)
+                        Text("Optional. Adds a separate visual refinement pass; leave off for faster generation.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Toggle("Let me choose how it looks first", isOn: $stylePickerEnabled)
                         .font(.subheadline)
                     Text(stylePickerEnabled
@@ -1530,7 +1537,7 @@ Requested edit:
             lastFailedChange = nil
             changePrompt = ""
             showingChange = true
-            if session.wantsUIPolish && selectedStyle == nil {
+            if session.wantsUIPolish && selectedStyle == nil && polishThisRun {
                 await runOptionalUIPolish(originalPrompt: session.refinedBrief.isEmpty ? change : session.refinedBrief)
             } else {
                 uiPolishNotice = "This was a focused edit; no additional UI redesign was needed."
@@ -1543,7 +1550,7 @@ Requested edit:
     }
 
     private func runOptionalUIPolish(originalPrompt: String) async {
-        guard AISettingsStore.isUIOverhaulEnabled, !ForgeRunOptions.quick else { return }
+        guard AISettingsStore.isUIOverhaulEnabled, polishThisRun, !ForgeRunOptions.quick else { return }
         let functionalHTML = session.streamedHTML
         session.isWorking = true
         session.phase = "Polishing the interface"
