@@ -621,6 +621,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
         if appID != "PREVIEW" {
             do {
+                HTMLAppWidgetActionLink.ensureSecret()
                 _ = try HTMLAppWidgetStore.saveVerified(definition)
                 if let bindings = definition.dataBindings {
                     for storageKey in Set(bindings.values) {
