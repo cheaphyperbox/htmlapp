@@ -108,6 +108,14 @@ struct AIConfigurationSettingsView: View {
                 Text("Link to any audio file (MP3, M4A, WAV…). It downloads once, then loops during every app generation or edit and stops when the run finishes.")
             }
 
+            Section("AI & Personal Data") {
+                NavigationLink {
+                    AIPrivacySettingsView()
+                } label: {
+                    Label("AI Generation Privacy", systemImage: "hand.raised.shield")
+                }
+            }
+
             Section("AI Specialists") {
                 DisclosureGroup("Advanced per-role overrides", isExpanded: $showAdvancedRoles) {
                 NavigationLink { AIRoleProviderSettingsView(role: .planner) } label: {
