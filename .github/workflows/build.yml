@@ -119,7 +119,7 @@ jobs:
           set -euo pipefail
           xcodebuild -project HTMLApp.xcodeproj -scheme HTMLApp -showdestinations > /tmp/htmlapp-build-destinations.txt 2>&1
           cat /tmp/htmlapp-build-destinations.txt
-          if ! grep -Eq 'platform:iOS,.*(Any iOS Device|generic:1)' /tmp/htmlapp-build-destinations.txt; then
+          if ! awk '/Available destinations/{active=1;next} /Ineligible destinations/{active=0} active && /platform:iOS,/ && /Any iOS Device/ {found=1} END{exit !found}' /tmp/htmlapp-build-destinations.txt; then
             echo "::warning::Generic iOS destination not listed; attempting iOS platform installation."
             xcodebuild -downloadPlatform iOS
           fi
