@@ -202,6 +202,12 @@ struct HTMLWebView: UIViewRepresentable {
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
 
+        if let context = HTMLAppWidgetLaunchStore.take(appID: appID),
+           let script = HTMLAppWidgetLaunchStore.javascript(for: context) {
+            controller.addUserScript(WKUserScript(source: script,
+                injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+
         let webView = WKWebView(frame: .zero, configuration: configuration)
         HTMLAppWebWarmup.release()
         context.coordinator.attach(webView, initialHTML: html)
@@ -254,6 +260,7 @@ struct HTMLWebView: UIViewRepresentable {
         private var localNetworkBridge: HTMLLocalNetworkBridge?
         private var downloadDestinations: [ObjectIdentifier: URL] = [:]
         private var blobTransfers: [String: BlobTransfer] = [:]
+        private var launchObserver: NSObjectProtocol?
 
         init(appID: String, onJavaScriptError: ((String) -> Void)?) {
             self.appID = appID
@@ -270,6 +277,8 @@ struct HTMLWebView: UIViewRepresentable {
         }
 
         func shutdown() {
+            if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
+            launchObserver = nil
             localNetworkBridge?.shutdown()
             localNetworkBridge = nil
         }
