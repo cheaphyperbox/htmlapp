@@ -372,12 +372,12 @@ enum ForgeQuickClassifier {
         let complexity = ["multi-feature", "multiple screens", "dashboard", "calendar",
                           "bluetooth", "camera", "share with", "production", "polished",
                           "detailed design", "native api", "real-time", "realtime"]
-        if complexity.contains(where: text.contains) {
+        if complexity.contains { text.contains($0) } {
             return (false, "Complex app: polished generation")
         }
         let simple = ["quick prototype", "simple timer", "just a", "basic counter",
                       "quickly make", "simple calculator", "rough prototype"]
-        if simple.contains(where: text.contains) {
+        if simple.contains { text.contains($0) } {
             return (true, "Simple request: fast generation")
         }
         guard !AISettingsStore.quickModel.isEmpty else {
