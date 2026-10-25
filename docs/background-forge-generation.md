@@ -1,3 +1,29 @@
+# Current on-device background handoff (HTMLApp 1.6.18)
+
+HTMLApp now has a file-backed `URLSessionConfiguration.background` coding request
+path for backgrounded Forge work. Foreground work retains streaming and live
+preview. When the app enters the background during an active generation or edit,
+HTMLApp saves a checkpoint, submits a non-streaming request using the configured
+AI provider and cancels the foreground stream. This may start a new provider
+request, so the provider may charge for both requests. It is not a server worker.
+
+The system can continue the upload and download the response while HTMLApp is
+suspended, subject to iOS scheduling and network conditions. The app delegate
+reconnects to the background session after a system relaunch. A complete response
+is written into the existing Forge draft checkpoint, with a local purpose-aware
+icon-script fallback if necessary. WebKit verification and icon rendering happen
+only after foreground return. A local notification is attempted if notifications
+were already authorized. A failed, incomplete or rejected background response
+leaves the earlier checkpoint for recovery.
+
+The earlier `beginBackgroundTask` grace period remains, as does the iOS 26
+`BGContinuedProcessingTask` integration. None of these can guarantee completion,
+especially after a user force-quits the app, or with a non-HTTPS provider. The
+server-worker architecture below is an older future proposal and is **not**
+implemented or required.
+
+---
+
 # Background Forge generation and editing: implementation plan
 
 ## Product contract
