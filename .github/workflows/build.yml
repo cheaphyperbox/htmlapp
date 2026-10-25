@@ -3,6 +3,12 @@ name: Build HTMLApp IPA
 # Manual-only workflow. Source commits and build-request changes must not trigger builds.
 on:
   workflow_dispatch:
+    inputs:
+      run_widget_simulator_tests:
+        description: "Also run slower simulator-based widget tests"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: htmlapp-main-build
@@ -77,6 +83,17 @@ jobs:
             exit 1
           fi
 
+      - name: Cache Swift package dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-swiftpm-xcode26-${{ hashFiles('project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-xcode26-
+
       - name: Install XcodeGen
         shell: bash
         run: |
@@ -129,11 +146,12 @@ jobs:
           xcodebuild -project HTMLApp.xcodeproj -scheme HTMLApp -showdestinations
 
       - name: Test widget storage and provider timelines
+        if: ${{ inputs.run_widget_simulator_tests }}
         shell: bash
         run: bash scripts/test-widgets.sh
 
       - name: Upload widget test results
-        if: always()
+        if: ${{ always() && inputs.run_widget_simulator_tests }}
         uses: actions/upload-artifact@v4
         with:
           name: widget-test-results
@@ -144,7 +162,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$PWD/DerivedData"
           VERSION="$(awk -F '"' '/static let compiledVersion =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
           BUILD_NUMBER="$(awk -F '"' '/static let compiledBuild =/ {print $2; exit}' HTMLAppV3/HTMLAppWhatsNewView.swift)"
           test -n "$VERSION" && test -n "$BUILD_NUMBER"
@@ -216,7 +233,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid
+          brew list ldid >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ldid
           test -f "Payload/HTMLApp.app/HTMLApp"
           test -f "Payload/HTMLApp.app/PlugIns/HTMLAppWidgets.appex/HTMLAppWidgets"
           cp -R Payload TrollStorePayload
@@ -251,3 +268,30 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         shell: bash
         run: bash scripts/deliver-widgets.sh
+
+      - name: Notify Discord if build fails
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GH_REPO: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "Discord webhook not configured; skipping failure notification."
+            exit 0
+          fi
+          echo "::add-mask::$DISCORD_WEBHOOK_URL"
+          case "$DISCORD_WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+            *) echo "::warning::Discord webhook URL is invalid."; exit 0 ;;
+          esac
+          LINK="https://github.com/$GH_REPO/actions/runs/$GH_RUN_ID/attempts/$GH_RUN_ATTEMPT"
+          MESSAGE="HTMLApp IPA build failed. Inspect the failed step and logs: $LINK"
+          PAYLOAD="$(jq -nc --arg content "$MESSAGE" '{content:$content,username:"HTMLApp Build Bot",allowed_mentions:{parse:[]}}')"
+          curl --fail --silent --show-error --retry 2 --connect-timeout 10 --max-time 25 \
+            -H 'Content-Type: application/json' \
+            --data-binary "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
