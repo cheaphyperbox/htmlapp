@@ -918,14 +918,15 @@ struct AIGenerationView: View {
         preparedStyleTask?.cancel()
         preparedStyleTask = nil
         preparedStylePrompt = nil
-        exploringStyles = false
-        selectedStyleIndex = 0
-        styleFailure = nil
         selectedStyle = nil
-        let completeIdea = idea + (styleFeedback.isEmpty ? "" : "\nStyle feedback: " + styleFeedback)
-        styleOptions = ForgeStylePreviewService.instantOptions(for: completeIdea, appearance: requestedAppearance)
-        if !(quickMode && !AISettingsStore.quickModel.isEmpty) &&
-           !AIHTMLAgent.canSkipPreflight(for: idea) {
+        selectedStyleIndex = 0
+        styleOptions = []
+        styleFailure = nil
+        styleFeedbackNotice = nil
+        exploringStyles = true
+        let feedback = styleFeedback
+        let quick = quickMode && !AISettingsStore.quickModel.isEmpty
+        if !quick && !AIHTMLAgent.canSkipPreflight(for: idea) {
             preparedStylePrompt = idea
             preparedStyleTask = Task {
                 async let planning = AIHTMLAgent.planPrompt(
@@ -936,17 +937,45 @@ struct AIGenerationView: View {
                 return (report, plan)
             }
         }
-        styleFeedbackNotice = nil
-        HTMLAppFirstUseTips.show("mockups")
-        // Selection is immediately enabled. A single small AI content pass
-        // can enrich the three templates without delaying or replacing a choice.
         generationTask = Task {
-            let enriched = await ForgeStylePreviewService.enrichedOptions(
-                for: completeIdea, appearance: requestedAppearance)
-            guard !Task.isCancelled, let enriched, selectedStyle == nil,
-                  !styleOptions.isEmpty, prompt.trimmingCharacters(in: .whitespacesAndNewlines) == idea
-            else { return }
-            styleOptions = enriched
+            var failures: [String] = []
+            await withTaskGroup(of: (Int, ForgeStyleConcept?, String?).self) { group in
+                for index in 0..<3 {
+                    group.addTask {
+                        do {
+                            let concept = try await ForgeRunOptions.$quick.withValue(quick) {
+                                try await ForgeStylePreviewService.generateSingle(
+                                    for: idea, feedback: feedback, index: index,
+                                    appearance: requestedAppearance)
+                            }
+                            return (index, concept, nil)
+                        } catch {
+                            return (index, nil, error.localizedDescription)
+                        }
+                    }
+                }
+                for await (index, concept, error) in group {
+                    if Task.isCancelled { group.cancelAll(); break }
+                    if let concept {
+                        styleOptions.append(concept)
+                        styleOptions.sort { $0.id < $1.id }
+                        selectedStyleIndex = min(selectedStyleIndex, styleOptions.count - 1)
+                    } else {
+                        failures.append("Look \(index + 1): \(error ?? "No complete HTML returned")")
+                    }
+                }
+            }
+            guard !Task.isCancelled else { return }
+            exploringStyles = false
+            if styleOptions.isEmpty {
+                styleFailure = failures.joined(separator: "\n")
+            } else {
+                HTMLAppFirstUseTips.show("mockups")
+                if !failures.isEmpty {
+                    styleFeedbackNotice = failures.joined(separator: "\n") +
+                        "\nRetry to generate missing AI looks."
+                }
+            }
         }
     }
 
