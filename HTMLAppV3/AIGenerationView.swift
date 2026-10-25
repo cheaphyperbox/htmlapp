@@ -41,6 +41,9 @@ struct AIGenerationView: View {
     @State private var preparedStylePrompt: String?
     @State private var preparedStyleTask: Task<(String, AIPlanningResult?), Never>?
     @State private var styleOptions: [ForgeStyleConcept] = []
+    @State private var styleRegenerationRound = 0
+    @State private var runtimeErrors: [String] = []
+    @State private var showingRuntimeErrors = false
     @State private var selectedStyleIndex = 0
     @State private var styleFailure: String?
     @State private var styleFeedback = ""
@@ -899,6 +902,7 @@ struct AIGenerationView: View {
                 Button("Regenerate All Looks") {
                     if !styleFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         styleFeedbackNotice = "Using your feedback for all three new mockups."
+                        styleRegenerationRound += 1
                         exploreStyleOptions()
                     }
                 }
@@ -946,7 +950,7 @@ struct AIGenerationView: View {
                             let concept = try await ForgeRunOptions.$quick.withValue(quick) {
                                 try await ForgeStylePreviewService.generateSingle(
                                     for: idea, feedback: feedback, index: index,
-                                    appearance: requestedAppearance)
+                                    appearance: requestedAppearance, regeneration: styleRegenerationRound)
                             }
                             return (index, concept, nil)
                         } catch {
@@ -1058,7 +1062,10 @@ struct AIGenerationView: View {
                 } else {
                     HTMLWebView(
                         html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
-                        appID: existingApp?.id ?? "PREVIEW"
+                        appID: existingApp?.id ?? "PREVIEW",
+                        onJavaScriptError: { error in
+                            if !runtimeErrors.contains(error) { runtimeErrors.append(error) }
+                        }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -1141,6 +1148,33 @@ struct AIGenerationView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .coordinateSpace(name: "forgeEditSurface")
+            .overlay(alignment: .bottomTrailing) {
+                if !session.isWorking && !session.streamedHTML.isEmpty && !runtimeErrors.isEmpty {
+                    Button {
+                        showingRuntimeErrors = true
+                    } label: {
+                        Label("\(runtimeErrors.count)", systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption.bold())
+                            .padding(11)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    .accessibilityLabel("JavaScript errors. Review and fix.")
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 125)
+                }
+            }
+            .alert("JavaScript errors detected", isPresented: $showingRuntimeErrors) {
+                Button("Ask AI to Fix") {
+                    changePrompt = "Fix these JavaScript errors without changing the chosen visual style:\n" +
+                        runtimeErrors.prefix(8).joined(separator: "\n")
+                    runtimeErrors = []
+                    showingChange = true
+                    applyAIChange()
+                }
+                Button("Later", role: .cancel) {}
+            } message: {
+                Text(runtimeErrors.prefix(5).joined(separator: "\n"))
+            }
             .overlay(alignment: .topLeading) {
                 if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty && !saving {
                     voiceEditBubble(in: proxy.size)
@@ -1476,6 +1510,7 @@ struct AIGenerationView: View {
             return
         }
         dictation.stop()
+        runtimeErrors = []
         startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
