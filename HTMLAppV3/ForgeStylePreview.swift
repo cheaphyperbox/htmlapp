@@ -154,14 +154,11 @@ enum ForgeStylePreviewService {
         """
         for attempt in 0..<(ForgeRunOptions.quick ? 1 : 2) {
             try Task.checkCancellation()
+            let config = attempt == 0 ? preferredConfig : recoveryConfig
             do {
-                let config = attempt == 0 ? preferredConfig : recoveryConfig
                 let raw = try await AIProviderClient.complete(
                     config: config, system: system, messages: [("user", user)],
                     timeout: ForgeRunOptions.quick ? 55 : (attempt == 0 ? 75 : 90),
-                    // Reasoning-capable OpenAI-compatible models may spend
-                    // most of max_tokens internally. Small limits yielded
-                    // only 190–270 visible characters on iOS 16.2.
                     maxTokens: ForgeRunOptions.quick ? 6500 : (attempt == 0 ? 8500 : 12000),
                     retryOnTransient: false
                 )
@@ -169,7 +166,21 @@ enum ForgeStylePreviewService {
                     return ForgeStyleConcept(id: index, name: variant.0,
                         summary: variant.1, direction: variant.2, previewHTML: html)
                 }
-                throw PreviewError.invalidResponse
+                let detail = "Look \(index + 1), attempt \(attempt + 1), model \(config.model): incomplete HTML (\(raw.count) characters)."
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append("STYLE MOCKUP", detail)
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let detail = "Look \(index + 1), attempt \(attempt + 1), model \(config.model): \(error.localizedDescription)"
+                await MainActor.run {
+                    AIDebugTraceStore.shared.append("STYLE MOCKUP", detail)
+                }
+            }
+        }
+        try Task.checkCancellation()
+        throw PreviewError.invalidResponse
     }
 
     private static func extractHTML(_ raw: String) -> String? {
