@@ -229,4 +229,15 @@ assert 'preplanned: AIPlanningResult?' in ai and 'preparedStyleTask' in forge
 assert 'Low reasoning on supported OpenAI models' in settings
 assert 'host == "api.openai.com"' in ai and 'body["reasoning_effort"] = "low"' in ai
 
+# Native Photos and Files import regressions.
+native = source("HTMLAppV3/NativeAPIBridge.swift")
+library = source("HTMLAppV3/LibraryUI.swift")
+assert 'loadFileRepresentation(forTypeIdentifier:' in native
+assert 'FileManager.default.copyItem(at: url, to: staging)' in native
+assert 'loadDataRepresentation(forTypeIdentifier:' in native
+assert 'photo_import_failed' in native
+assert 'queuedFileImport = payload' in library
+assert 'presentQueuedFileImport()' in library
+assert 'DispatchQueue.main.asyncAfter(deadline: .now() + 0.45)' in library
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
