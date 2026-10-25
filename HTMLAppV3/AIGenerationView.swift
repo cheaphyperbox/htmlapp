@@ -926,6 +926,7 @@ struct AIGenerationView: View {
         styleFeedbackNotice = nil
         exploringStyles = true
         let feedback = styleFeedback
+        let regenerationRound = styleRegenerationRound
         let quick = quickMode && !AISettingsStore.quickModel.isEmpty
         if !quick && !AIHTMLAgent.canSkipPreflight(for: idea) {
             preparedStylePrompt = idea
@@ -947,7 +948,7 @@ struct AIGenerationView: View {
                             let concept = try await ForgeRunOptions.$quick.withValue(quick) {
                                 try await ForgeStylePreviewService.generateSingle(
                                     for: idea, feedback: feedback, index: index,
-                                    appearance: requestedAppearance, regeneration: styleRegenerationRound)
+                                    appearance: requestedAppearance, regeneration: regenerationRound)
                             }
                             return (index, concept, nil)
                         } catch {
