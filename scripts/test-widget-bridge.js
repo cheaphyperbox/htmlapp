@@ -58,6 +58,18 @@ vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,c
   assert.equal(brightnessCall.args.level, 0.4);
   window.__htmlappNativeResolve(brightnessCall.id, true, { level: 0.4 });
   assert.equal((await brightnessPromise).level, 0.4);
+  const batteryPromise = window.HTMLAppNative.device.battery();
+  const batteryCall = messages.shift();
+  assert.equal(batteryCall.method, 'device.battery');
+  window.__htmlappNativeResolve(batteryCall.id, true, {
+    percentage: 78, charging: true, batteryState: 'charging', thermalState: 'nominal'
+  });
+  assert.equal((await batteryPromise).percentage, 78);
+  window.htmlappLaunch = {source:'widget',widgetId:'focus-streak',
+      actionId:'open-today',type:'route',route:'today'};
+  const launch = await window.HTMLAppNative.launch.get();
+  assert.equal(launch.route, 'today');
+  assert.equal(await window.HTMLAppNative.launch.get(), null);
   let selectedTab = null;
   window.HTMLAppNative.tabs.onSelect(id => { selectedTab = id; });
   const tabs = window.HTMLAppNative.tabs.configure([
