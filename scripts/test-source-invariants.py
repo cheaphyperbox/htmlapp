@@ -293,4 +293,39 @@ assert 'ai.quickMode.policy' in source("HTMLAppV3/AISettingsView.swift")
 assert 'purposeGuess' in forge and 'INTENDED AUDIENCE AND PURPOSE:' in forge
 assert '<purpose>who, where, why</purpose>' in ai
 
+
+# AI privacy permissions are opt-in and revalidated on each tool call.
+privacy = source("HTMLAppV3/AIPrivacyTools.swift")
+privacy_ui = source("HTMLAppV3/AIPrivacySettingsView.swift")
+assert 'AIPrivacyOptions.allowed' in privacy
+assert 'aiPrivacy.location' in privacy and 'aiPrivacy.http' in privacy_ui
+assert 'readCalendar(reminders:' in privacy and 'get_location' in privacy
+assert 'httpGet(_ raw:' in privacy and 'PublicWebBrowser.isAllowed(url)' in privacy
+assert 'httpShouldSetCookies = false' in privacy and 'completionHandler(nil)' in privacy
+assert 'get_clipboard' not in privacy and 'clipboard' not in privacy_ui.lower()
+assert 'AIPrivacyToolRunner.research(' in forge
+assert 'AIPrivacySettingsView()' in source("HTMLAppV3/AISettingsView.swift")
+
+# Widget actions are resolved against persisted definitions with signed URLs.
+widget_shared = source("HTMLAppShared/HTMLAppWidgetShared.swift")
+widget_render = source("HTMLAppWidgets/HTMLAppWidgets.swift")
+widget_launch = source("HTMLAppV3/HTMLAppWidgetLaunch.swift")
+assert 'struct HTMLAppWidgetAction:' in widget_shared
+assert 'HTMLAppWidgetActionLink.signature' in widget_render
+assert 'HMAC<SHA256>' in widget_shared
+assert 'difference == 0' in widget_launch
+assert 'definition.snapshot.items?' in widget_launch
+assert 'window.htmlappLaunch' in widget_launch
+assert 'HTMLAppWidgetLaunchStore.receive(url: url, appID: app.id)' in core
+assert 'HTMLAppWidgetLaunchStore.take(appID: appID)' in web_source
+assert 'case "device.battery":' in native
+assert 'battery: () => call(\'device.battery\')' in native
+assert 'launch:' in native and 'window.htmlappLaunch = null' in native
+assert 'device.battery' in source("HTMLAppV3/DeviceAPICatalog.swift")
+
+# The creation screen does not show the Quick toggle in Automatic mode.
+assert 'if quickModePolicy == "manual" {' in forge
+assert 'Label(AISettingsStore.configuration.model' not in forge
+assert 'Text(AISettingsStore.isUIOverhaulEnabled ?' not in forge
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
