@@ -92,7 +92,7 @@ struct AIConfigurationSettingsView: View {
                     generationMusic.togglePreview()
                 }
                 .disabled((!generationMusic.isPreview && GenerationMusicSettings.validatedURL(musicURL) == nil) ||
-                          (generationMusic.isPlaying && !generationMusic.isPreview))
+                          generationMusic.isGenerationActive)
                 Text(generationMusic.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
