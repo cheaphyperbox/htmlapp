@@ -38,7 +38,7 @@ struct ForgeStyleConcept: Identifiable, Equatable, Codable, Sendable {
     var compactBuildInstruction: String {
         let html = previewHTML as NSString
         let regex = try? NSRegularExpression(
-            pattern: #"<(header|section|main|div|button|h1|h2)\\b[^>]*>"#,
+            pattern: #"<(header|section|main|div|button|h1|h2)\b[^>]*>"#,
             options: .caseInsensitive
         )
         let structure = (regex?.matches(in: previewHTML,
