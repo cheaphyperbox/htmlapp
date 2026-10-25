@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import AVFoundation
 import CryptoKit
+import MediaPlayer
 
 enum GenerationMusicSettings {
     static var enabled: Bool { UserDefaults.standard.bool(forKey: "generationMusic.enabled") }
@@ -37,6 +38,8 @@ final class GenerationMusic: ObservableObject {
     private var player: AVAudioPlayer?
     private var loadTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
+    private var remoteStopToken: Any?
+    private var remotePlayToken: Any?
     private var generationWanted = false
     private var requestID = UUID()
 
@@ -132,6 +135,30 @@ final class GenerationMusic: ObservableObject {
         isPlaying = true
         status = "Playing"
         observeAudioSession()
+        configureNowPlaying()
+    }
+
+    private func configureNowPlaying() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: "Generation Music",
+            MPMediaItemPropertyArtist: "HTMLApp",
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0
+        ]
+        let controls = MPRemoteCommandCenter.shared()
+        controls.stopCommand.isEnabled = true
+        controls.playCommand.isEnabled = true
+        if remoteStopToken == nil {
+            remoteStopToken = controls.stopCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.stop() }
+                return .success
+            }
+        }
+        if remotePlayToken == nil {
+            remotePlayToken = controls.playCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.resume() }
+                return .success
+            }
+        }
     }
 
     private func observeAudioSession() {
@@ -181,6 +208,14 @@ final class GenerationMusic: ObservableObject {
         isPlaying = false
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
+        let controls = MPRemoteCommandCenter.shared()
+        if let remoteStopToken { controls.stopCommand.removeTarget(remoteStopToken) }
+        if let remotePlayToken { controls.playCommand.removeTarget(remotePlayToken) }
+        remoteStopToken = nil
+        remotePlayToken = nil
+        controls.stopCommand.isEnabled = false
+        controls.playCommand.isEnabled = false
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         if hadMusicSession {
             do {
                 try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
