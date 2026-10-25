@@ -1069,28 +1069,77 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             return
         }
 
+        // PHPicker owns the temporary representation. It must be copied before
+        // the loadFileRepresentation completion returns; hopping to MainActor
+        // first lets iOS delete the file before HTMLApp can import it.
         let group = DispatchGroup()
         let lock = NSLock()
         var imported: [[String: Any]] = []
         for result in results {
-            guard let typeIdentifier = result.itemProvider.registeredTypeIdentifiers.first else { continue }
+            let provider = result.itemProvider
+            let typeIdentifier = provider.registeredTypeIdentifiers.first(where: {
+                UTType($0)?.conforms(to: .image) == true
+            }) ?? provider.registeredTypeIdentifiers.first(where: {
+                UTType($0)?.conforms(to: .movie) == true
+            }) ?? provider.registeredTypeIdentifiers.first
+            guard let typeIdentifier else { continue }
+
             group.enter()
-            result.itemProvider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, _ in
-                Task { @MainActor in
-                    defer { group.leave() }
-                    guard let self, let url else { return }
-                    if let item = self.importFile(url: url, namespace: "photos", preferredName: result.itemProvider.suggestedName, typeIdentifier: typeIdentifier) {
-                        lock.lock()
-                        imported.append(item)
-                        lock.unlock()
+            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, fileError in
+                guard let self else { group.leave(); return }
+                // This callback is not MainActor-isolated. Copy bytes immediately
+                // into a durable staging file owned by HTMLApp.
+                let staging = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("htmlapp-photo-" + UUID().uuidString)
+                    .appendingPathExtension(UTType(typeIdentifier)?.preferredFilenameExtension ?? "jpg")
+                var staged = false
+                if let url {
+                    do {
+                        try FileManager.default.copyItem(at: url, to: staging)
+                        staged = true
+                    } catch { }
+                }
+                if staged {
+                    Task { @MainActor in
+                        if let item = self.importFile(url: staging, namespace: "photos",
+                                                      preferredName: provider.suggestedName,
+                                                      typeIdentifier: typeIdentifier) {
+                            lock.lock(); imported.append(item); lock.unlock()
+                        }
+                        try? FileManager.default.removeItem(at: staging)
+                        group.leave()
+                    }
+                } else {
+                    // Some iCloud-backed and converted representations can be
+                    // delivered as data but not as a readable temporary file.
+                    provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
+                        Task { @MainActor in
+                            if let data, !data.isEmpty {
+                                do {
+                                    try data.write(to: staging, options: .atomic)
+                                    if let item = self.importFile(url: staging, namespace: "photos",
+                                                                  preferredName: provider.suggestedName,
+                                                                  typeIdentifier: typeIdentifier) {
+                                        imported.append(item)
+                                    }
+                                } catch { }
+                            }
+                            try? FileManager.default.removeItem(at: staging)
+                            group.leave()
+                        }
                     }
                 }
+                _ = fileError
             }
         }
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
-            if imported.isEmpty { self.reject(id, code: "photo_import_failed", message: "The selected media could not be imported.") }
-            else { self.resolve(id, value: imported) }
+            if imported.isEmpty {
+                self.reject(id, code: "photo_import_failed",
+                            message: "The selected media could not be imported. Try downloading it from iCloud Photos and selecting it again.")
+            } else {
+                self.resolve(id, value: imported)
+            }
         }
     }
 
