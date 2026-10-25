@@ -35,7 +35,9 @@ struct AIGenerationView: View {
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
+    @AppStorage("ai.quickMode.policy") private var quickModePolicy = "manual"
     @State private var quickMode = false
+    @State private var autoQuickReason: String?
     @State private var polishThisRun = false
     @State private var exploringStyles = false
     @State private var preparedStylePrompt: String?
@@ -643,6 +645,13 @@ struct AIGenerationView: View {
                             .font(.headline)
                     }
                     .disabled(AISettingsStore.quickModel.isEmpty)
+                    if quickModePolicy == "automatic" && !AISettingsStore.quickModel.isEmpty {
+                        Text(quickMode ? "Auto: Fast — tap to override" : "Auto: Polished — tap to override")
+                            .font(.caption.weight(.semibold))
+                        if let autoQuickReason {
+                            Text(autoQuickReason).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Text(AISettingsStore.quickModel.isEmpty
                          ? "Set a QUICK! model in Settings → AI & Creation to enable faster, streamlined generation."
                          : "Uses \(AISettingsStore.quickModel) for every AI role in this run. Optional expensive stages may be skipped.")
@@ -941,19 +950,25 @@ struct AIGenerationView: View {
         exploringStyles = true
         let feedback = styleFeedback
         let regenerationRound = styleRegenerationRound
-        let quick = quickMode && !AISettingsStore.quickModel.isEmpty
-        if !quick && !AIHTMLAgent.canSkipPreflight(for: idea) {
-            preparedStylePrompt = idea
-            preparedStyleTask = Task {
-                async let planning = AIHTMLAgent.planPrompt(
-                    idea, config: AISettingsStore.configuration(for: .planner))
-                let report = AIHTMLAgent.needsWebResearch(for: idea)
-                    ? await browserResearch.research(for: idea) : ""
-                let plan = try? await planning
-                return (report, plan)
-            }
-        }
         generationTask = Task {
+            if quickModePolicy == "automatic" && !AISettingsStore.quickModel.isEmpty {
+                let choice = await ForgeQuickClassifier.decide(for: idea)
+                guard !Task.isCancelled else { return }
+                quickMode = choice.fast
+                autoQuickReason = choice.reason
+            }
+            let quick = quickMode && !AISettingsStore.quickModel.isEmpty
+            if !quick && !AIHTMLAgent.canSkipPreflight(for: idea) {
+                preparedStylePrompt = idea
+                preparedStyleTask = Task {
+                    async let planning = AIHTMLAgent.planPrompt(
+                        idea, config: AISettingsStore.configuration(for: .planner))
+                    let report = AIHTMLAgent.needsWebResearch(for: idea)
+                        ? await browserResearch.research(for: idea) : ""
+                    let plan = try? await planning
+                    return (report, plan)
+                }
+            }
             var failures: [String] = []
             await withTaskGroup(of: (Int, ForgeStyleConcept?, String?).self) { group in
                 for index in 0..<3 {
