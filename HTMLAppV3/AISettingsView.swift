@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AIConfigurationSettingsView: View {
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
     @AppStorage("generationMusic.url") private var musicURL = ""
     @AppStorage("generationMusic.volume") private var musicVolume = 0.6
@@ -67,7 +68,8 @@ struct AIConfigurationSettingsView: View {
                 TextField("QUICK! model name", text: $quickModel)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                Text("Optional: use a smaller, faster model on your main provider for planning, coding, research, icons, previews and verification during a QUICK! run. Normal specialist settings are unchanged.")
+                Toggle("Low reasoning on supported OpenAI models", isOn: $quickLowReasoning)
+                Text("Optional: use a smaller, faster model on your main provider for planning, coding, research, icons, previews and verification during a QUICK! run. Low reasoning is sent only to supported direct OpenAI models, never generic compatible proxies. Normal specialist settings are unchanged.")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("QUICK! Generation")
