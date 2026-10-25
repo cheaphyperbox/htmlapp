@@ -1274,6 +1274,7 @@ struct AIGenerationView: View {
     }
 
     private func startForgeActivity(edit: Bool) {
+        GenerationMusic.shared.start()
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             HTMLAppForgeContinuedProcessing.begin(edit: edit)
@@ -1288,6 +1289,7 @@ struct AIGenerationView: View {
 
     private func endForgeActivity(onlyIf expected: String? = nil) {
         guard let job = forgeActivityJobID, expected == nil || expected == job else { return }
+        GenerationMusic.shared.stop()
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             HTMLAppForgeContinuedProcessing.finish(success: session.errorMessage == nil && session.phase == "Ready to review")
@@ -1431,10 +1433,10 @@ struct AIGenerationView: View {
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let webReport: String
-            if AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
+            if ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
                 session.phase = "Generating live preview"
                 webReport = ""
-                AIDebugTraceStore.shared.append("WEB RESEARCH", "Skipped because this appears to be a simple local app request.")
+                AIDebugTraceStore.shared.append("WEB RESEARCH", ForgeRunOptions.quick ? "Skipped for a QUICK! run." : "Skipped because this appears to be a simple local app request.")
             } else if AIHTMLAgent.needsWebResearch(for: originalPrompt) {
                 session.phase = "Planning web research"
                 webReport = await browserResearch.research(for: originalPrompt)
@@ -1542,7 +1544,7 @@ Requested edit:
 \(change)
 """
             let webReport: String
-            if AIHTMLAgent.needsWebResearch(for: researchRequest) {
+            if !ForgeRunOptions.quick && AIHTMLAgent.needsWebResearch(for: researchRequest) {
                 session.phase = "Planning web research"
                 webReport = await browserResearch.research(for: researchRequest)
                 AIDebugTraceStore.shared.append("WEB RESEARCH", webReport.isEmpty ? "No browser research result." : webReport)
