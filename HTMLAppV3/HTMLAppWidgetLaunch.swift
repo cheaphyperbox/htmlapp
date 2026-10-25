@@ -15,6 +15,16 @@ enum HTMLAppWidgetLaunchStore {
               let definition = HTMLAppWidgetStore.definitions(appID: appID)
                 .first(where: { $0.widgetID == widgetID }) else { return }
         let itemID = items.first(where: { $0.name == "item" })?.value
+        guard let signed = items.first(where: { $0.name == "signature" })?.value,
+              let expected = HTMLAppWidgetActionLink.signature(
+                appID: appID, widgetID: widgetID, actionID: actionID, itemID: itemID),
+              let givenData = Data(base64Encoded: signed),
+              let expectedData = Data(base64Encoded: expected),
+              givenData.count == expectedData.count else { return }
+        // Constant-time comparison avoids relying on user-controlled URI values.
+        var difference: UInt8 = 0
+        for (left, right) in zip(givenData, expectedData) { difference |= left ^ right }
+        guard difference == 0 else { return }
         let action: HTMLAppWidgetAction?
         if let itemID {
             action = definition.snapshot.items?.first(where: { $0.id == itemID })?.action
