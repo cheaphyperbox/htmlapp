@@ -1592,10 +1592,30 @@ enum AIProviderClient {
             return body
         case .anthropic:
             let list: [[String: String]] = messages.map { ["role": $0.0 == "assistant" ? "assistant" : "user", "content": $0.1] }
+            var systemValue: Any = system
+            // Only the official Anthropic API is guaranteed to understand
+            // cache_control. Keep the stable contract before dynamic research.
+            if URLComponents(string: config.apiURL)?.host?.lowercased() == "api.anthropic.com",
+               system.count >= 1024 {
+                let separators = ["\\n\\nUSER VISUAL TASTE", "\\n\\nRESEARCH RESULTS",
+                                  "\\n\\nHTMLAPP RESEARCH", "\\n\\nUSER REQUEST"]
+                let cut = separators.compactMap { system.range(of: $0)?.lowerBound }.min() ?? system.endIndex
+                let prefix = String(system[..<cut])
+                if prefix.count >= 1024 {
+                    var blocks: [[String: Any]] = [[
+                        "type": "text", "text": prefix,
+                        "cache_control": ["type": "ephemeral"]
+                    ]]
+                    if cut != system.endIndex {
+                        blocks.append(["type": "text", "text": String(system[cut...])])
+                    }
+                    systemValue = blocks
+                }
+            }
             return [
                 "model": config.model,
                 "max_tokens": maxTokens.map { max(64, $0) } ?? 32000,
-                "system": system,
+                "system": systemValue,
                 "messages": list,
                 "stream": stream
             ]
