@@ -38,6 +38,8 @@ struct AIGenerationView: View {
     @State private var quickMode = false
     @State private var polishThisRun = false
     @State private var exploringStyles = false
+    @State private var preparedStylePrompt: String?
+    @State private var preparedStyleTask: Task<(String, AIPlanningResult?), Never>?
     @State private var styleOptions: [ForgeStyleConcept] = []
     @State private var selectedStyleIndex = 0
     @State private var styleFailure: String?
@@ -699,6 +701,9 @@ struct AIGenerationView: View {
                     HStack(spacing: 10) {
                         Button {
                             generationTask?.cancel()
+                            preparedStyleTask?.cancel()
+                            preparedStyleTask = nil
+                            preparedStylePrompt = nil
                             exploringStyles = false
                             styleOptions = []
                             styleFailure = nil
@@ -862,12 +867,27 @@ struct AIGenerationView: View {
         let requestedAppearance = colorScheme == .dark ? "dark" : "light"
         guard !idea.isEmpty else { return }
         generationTask?.cancel()
+        preparedStyleTask?.cancel()
+        preparedStyleTask = nil
+        preparedStylePrompt = nil
         exploringStyles = false
         selectedStyleIndex = 0
         styleFailure = nil
         selectedStyle = nil
         let completeIdea = idea + (styleFeedback.isEmpty ? "" : "\nStyle feedback: " + styleFeedback)
         styleOptions = ForgeStylePreviewService.instantOptions(for: completeIdea, appearance: requestedAppearance)
+        if !(quickMode && !AISettingsStore.quickModel.isEmpty) &&
+           !AIHTMLAgent.canSkipPreflight(for: idea) {
+            preparedStylePrompt = idea
+            preparedStyleTask = Task {
+                async let planning = AIHTMLAgent.planPrompt(
+                    idea, config: AISettingsStore.configuration(for: .planner))
+                let report = AIHTMLAgent.needsWebResearch(for: idea)
+                    ? await browserResearch.research(for: idea) : ""
+                let plan = try? await planning
+                return (report, plan)
+            }
+        }
         styleFeedbackNotice = nil
         HTMLAppFirstUseTips.show("mockups")
         // Selection is immediately enabled. A single small AI content pass
@@ -884,6 +904,9 @@ struct AIGenerationView: View {
 
     private func skipStyleSelection() {
         generationTask?.cancel()
+        preparedStyleTask?.cancel()
+        preparedStyleTask = nil
+        preparedStylePrompt = nil
         exploringStyles = false
         styleOptions = []
         selectedStyleIndex = 0
@@ -1354,7 +1377,7 @@ struct AIGenerationView: View {
             return
         }
         HTMLAppFirstUseTips.show("generation")
-        guard !session.isWorking && !browserResearch.isBrowsing else { return }
+        guard !session.isWorking && (!browserResearch.isBrowsing || preparedStyleTask != nil) else { return }
         if demoMode {
             practiceStep = 1
             milestones.reset()
@@ -1381,6 +1404,9 @@ struct AIGenerationView: View {
         dictation.stop()
         lastFailedChange = nil
         let originalPrompt = prompt
+        let pendingPreflight = preparedStylePrompt == originalPrompt ? preparedStyleTask : nil
+        preparedStylePrompt = nil
+        preparedStyleTask = nil
         let designBrief = selectedStyle.map { originalPrompt + "\n\n" + $0.buildInstruction } ?? originalPrompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
@@ -1407,7 +1433,11 @@ struct AIGenerationView: View {
                 AIDebugTraceStore.shared.finish(outcome: outcome + (session.errorMessage.map { ": " + $0 } ?? ""))
             }
             let webReport: String
-            if ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
+            var preplanned: AIPlanningResult?
+            if let pendingPreflight {
+                (webReport, preplanned) = await pendingPreflight.value
+                AIDebugTraceStore.shared.append("PREFLIGHT", "Used preparation started during style selection.")
+            } else if ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalPrompt) {
                 session.phase = "Generating live preview"
                 webReport = ""
                 AIDebugTraceStore.shared.append("WEB RESEARCH", ForgeRunOptions.quick ? "Skipped for a QUICK! run." : "Skipped because this appears to be a simple local app request.")
@@ -1424,7 +1454,8 @@ struct AIGenerationView: View {
             await session.generate(
                 prompt: designBrief,
                 originalUserPrompt: originalPrompt,
-                researchReport: webReport
+                researchReport: webReport,
+                preplanned: preplanned
             )
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
