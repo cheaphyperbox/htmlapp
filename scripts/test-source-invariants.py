@@ -253,3 +253,13 @@ assert 'offlinePreview(' not in styles
 assert 'enrichedOptions(' not in styles
 assert 'throw PreviewError.invalidResponse' in styles
 assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
+
+# Regression coverage for divergent AI looks and in-preview JavaScript errors.
+assert 'styleRegenerationRound += 1' in forge
+assert 'regeneration: styleRegenerationRound' in forge
+assert 'MANDATORY unique composition:' in styles and 'diverseLayouts' in styles
+assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
+assert 'Button("Ask AI to Fix")' in forge
+web_source = source("HTMLAppV3/EditorWeb.swift")
+assert 'htmlappRuntimeError' in web_source and "unhandledrejection" in web_source
+assert 'onJavaScriptError?(' in web_source
