@@ -1597,8 +1597,8 @@ enum AIProviderClient {
             // cache_control. Keep the stable contract before dynamic research.
             if URLComponents(string: config.apiURL)?.host?.lowercased() == "api.anthropic.com",
                system.count >= 1024 {
-                let separators = ["\\n\\nUSER VISUAL TASTE", "\\n\\nRESEARCH RESULTS",
-                                  "\\n\\nHTMLAPP RESEARCH", "\\n\\nUSER REQUEST"]
+                let separators = ["\n\nUSER VISUAL TASTE", "\n\nRESEARCH RESULTS",
+                                  "\n\nHTMLAPP RESEARCH", "\n\nUSER REQUEST"]
                 let cut = separators.compactMap { system.range(of: $0)?.lowerBound }.min() ?? system.endIndex
                 let prefix = String(system[..<cut])
                 if prefix.count >= 1024 {
