@@ -1557,6 +1557,7 @@ struct AIGenerationView: View {
         }
         dictation.stop()
         runtimeErrors = []
+        AIPrivacyToolRunner.resetLocationTracking()
         startForgeActivity(edit: false)
         milestones.reset()
         workTracker.begin(kind: "New app", appKey: existingApp?.id ?? draftWorkID)
