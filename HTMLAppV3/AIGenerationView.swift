@@ -103,7 +103,9 @@ struct AIGenerationView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if existingApp == nil && (exploringStyles || !styleOptions.isEmpty || styleFailure != nil) {
+                if ForgeBackgroundUpload.shared.isActive {
+                    backgroundForgePendingView
+                } else if existingApp == nil && (exploringStyles || !styleOptions.isEmpty || styleFailure != nil) {
                     styleSelectionView
                 } else if session.streamedHTML.isEmpty && !session.isWorking && !browserResearch.isBrowsing {
                     promptView
@@ -123,7 +125,7 @@ struct AIGenerationView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         if demoMode { generationTask?.cancel(); dismiss(); return }
-                        if exploringStyles || !styleOptions.isEmpty || styleFailure != nil || session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
+                        if ForgeBackgroundUpload.shared.isActive || exploringStyles || !styleOptions.isEmpty || styleFailure != nil || session.isWorking || browserResearch.isBrowsing || !session.streamedHTML.isEmpty {
                             showCancelConfirmation = true
                         } else {
                             AIDebugTraceStore.shared.finish(outcome: "Canceled before starting")
@@ -309,6 +311,10 @@ struct AIGenerationView: View {
         .interactiveDismissDisabled(true)
         .onReceive(NotificationCenter.default.publisher(for: ForgeBackgroundUpload.finishedNotification)) { _ in
             restoreCompletedBackgroundDraft()
+            if let draft = ForgeDraftCheckpointStore.load(), draft.phase == "Background request failed" {
+                session.phase = "Background request failed"
+                uiPolishNotice = "The background request could not finish. Your previous draft was kept."
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppForgeBackgroundExpired"))) { _ in
             guard !demoMode else { return }
@@ -712,6 +718,28 @@ struct AIGenerationView: View {
             selectedStyle = nil
             generateApp()
         }
+    }
+
+    private var backgroundForgePendingView: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: "icloud.and.arrow.up")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.tint)
+            Text("Generating in background")
+                .font(.title2.bold())
+            Text("Your AI provider is finishing a background request. HTMLApp will save the result as a draft for review. You can lock your screen or return later.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            ProgressView()
+            Text("On return, Forge will check the completed HTML before saving.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(24)
     }
 
     private var styleSelectionView: some View {
@@ -1397,7 +1425,8 @@ struct AIGenerationView: View {
             return
         }
         HTMLAppFirstUseTips.show("generation")
-        guard !session.isWorking && (!browserResearch.isBrowsing || preparedStyleTask != nil) else { return }
+        guard !ForgeBackgroundUpload.shared.isActive, !session.isWorking &&
+              (!browserResearch.isBrowsing || preparedStyleTask != nil) else { return }
         if demoMode {
             practiceStep = 1
             milestones.reset()
@@ -1540,7 +1569,8 @@ struct AIGenerationView: View {
             showingChange = false
             return
         }
-        guard !session.isWorking && !browserResearch.isBrowsing else { return }
+        guard !ForgeBackgroundUpload.shared.isActive, !session.isWorking,
+              !browserResearch.isBrowsing else { return }
         startForgeActivity(edit: true)
         milestones.reset()
         workTracker.begin(kind: "AI edit", appKey: existingApp?.id ?? draftWorkID)
