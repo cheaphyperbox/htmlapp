@@ -362,3 +362,51 @@ enum KeychainValueStore {
     }
 }
 
+
+enum ForgeQuickClassifier {
+    /// The user can override this recommendation with the QUICK! toggle.
+    /// Failures and timeouts never silently select the lower-quality path.
+    @MainActor
+    static func decide(for prompt: String) async -> (fast: Bool, reason: String) {
+        let text = prompt.lowercased()
+        let complexity = ["multi-feature", "multiple screens", "dashboard", "calendar",
+                          "bluetooth", "camera", "share with", "production", "polished",
+                          "detailed design", "native api", "real-time", "realtime"]
+        if complexity.contains(where: text.contains) {
+            return (false, "Complex app: polished generation")
+        }
+        let simple = ["quick prototype", "simple timer", "just a", "basic counter",
+                      "quickly make", "simple calculator", "rough prototype"]
+        if simple.contains(where: text.contains) {
+            return (true, "Simple request: fast generation")
+        }
+        guard !AISettingsStore.quickModel.isEmpty else {
+            return (false, "No fast model is configured")
+        }
+        let config = ForgeRunOptions.$quick.withValue(true) {
+            AISettingsStore.configuration(for: .planner)
+        }
+        do {
+            let raw = try await AIProviderClient.complete(
+                config: config,
+                system: """
+                Choose the generation quality tier for this HTML app request.
+                Reply as JSON only: {"mode":"fast"|"polished","reason":"short explanation"}.
+                fast: small, simple, urgent, throwaway prototype with 1-2 features.
+                polished: shared, design-intensive, multi-screen, native capabilities,
+                complex state or production usage. If unsure, select polished.
+                """,
+                messages: [("user", String(prompt.prefix(850)))],
+                timeout: 6, maxTokens: 80, retryOnTransient: false
+            )
+            guard let first = raw.firstIndex(of: "{"), let last = raw.lastIndex(of: "}"),
+                  let data = String(raw[first...last]).data(using: .utf8),
+                  let response = try JSONSerialization.jsonObject(with: data) as? [String: String]
+            else { return (false, "Automatic classifier returned no decision") }
+            return (response["mode"] == "fast",
+                    String((response["reason"] ?? "Automatic assessment").prefix(90)))
+        } catch {
+            return (false, "Classifier unavailable: polished generation")
+        }
+    }
+}
