@@ -80,7 +80,7 @@ assert '"Start Generating"' in source("HTMLAppV3/AIGenerationView.swift")
 assert '"Choose a Look"' not in source("HTMLAppV3/AIGenerationView.swift")
 assert 'previewHTML)' in source("HTMLAppV3/ForgeStylePreview.swift")
 assert 'ForgeStyleReferenceStore.save' in source("HTMLAppV3/AIGenerationView.swift")
-assert 'withTaskGroup' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'ForgeStylePreviewService.instantOptions' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppForgeActivityWidget()' in source("HTMLAppWidgets/HTMLAppWidgets.swift")
 assert 'Do not leave HTMLApp or turn off your phone for more than 20 seconds at a time for now.' in source("HTMLAppWidgets/HTMLAppForgeActivityWidget.swift")
 assert 'HTMLAppForgeActivityService.start' in source("HTMLAppV3/AIGenerationView.swift")
@@ -192,3 +192,19 @@ assert 'askForgeQuestion(for idea:' in source("HTMLAppV3/AIGenerationView.swift"
 assert '20_000_000_000' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'MOCKUP FIDELITY' in source("HTMLAppV3/AIGenerationView.swift")
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
+# Generation Music and QUICK! regression safeguards.
+music = source("HTMLAppV3/GenerationMusic.swift")
+settings = source("HTMLAppV3/AISettingsView.swift")
+forge = source("HTMLAppV3/AIGenerationView.swift")
+assert 'GenerationMusic.shared.start()' in forge and 'GenerationMusic.shared.stop()' in forge
+assert 'GenerationMusic.shared.stopPreview()' not in forge
+assert 'generationMusic.stopPreview()' in settings
+assert 'generationMusic.enabled' in settings and 'generationMusic.volume' in settings
+assert 'AVAudioPlayer' in music and 'numberOfLoops = -1' in music
+assert '          - audio' in project
+assert 'ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight' in forge
+assert '!ForgeRunOptions.quick && AIHTMLAgent.needsWebResearch' in forge
+assert 'forceRegenerate: !ForgeRunOptions.quick &&' in ai
+assert 'ForgeStylePreviewService.enrichedOptions' in forge
+assert 'maxTokens: 900' in styles
