@@ -135,6 +135,19 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "Treat hardware details as hints, not identity or authentication signals."
         ),
         .init(
+            id: "device.battery",
+            title: "Battery charge and thermal status",
+            keywords: ["charging", "plugged in", "battery percentage", "battery state", "thermal state", "overheating", "power"],
+            purpose: "Adapt a generated HTML app to current battery charge, external power and device thermal pressure.",
+            api: "await HTMLAppNative.device.battery()",
+            example: """
+            const power = await HTMLAppNative.device.battery();
+            console.log(power.percentage, power.charging, power.batteryState, power.thermalState);
+            // percentage is null when iOS cannot measure the battery.
+            """,
+            constraints: "These are live device hints, not continuous background listeners. Poll sparingly while visible; percentage can be null and thermalState may be unknown."
+        ),
+        .init(
             id: "device.keepAwake",
             title: "Keep the screen awake",
             keywords: ["idle timer", "screen awake", "prevent sleep", "presentation", "timer", "workout", "reader"],
