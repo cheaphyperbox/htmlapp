@@ -30,6 +30,7 @@ enum GenerationMusicSettings {
 @MainActor
 final class GenerationMusic: ObservableObject {
     static let shared = GenerationMusic()
+    static let playbackPausedNotification = Notification.Name("HTMLApp.GenerationMusicPaused")
     @Published private(set) var status = "Ready"
     @Published private(set) var isPlaying = false
     @Published private(set) var isPreview = false
@@ -136,7 +137,7 @@ final class GenerationMusic: ObservableObject {
 
     private func activateAndPlay(_ file: URL) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try session.setCategory(.playback, mode: .default, options: [])
         try session.setActive(true)
         let audio = try AVAudioPlayer(contentsOf: file)
         audio.numberOfLoops = -1
@@ -189,8 +190,26 @@ final class GenerationMusic: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let type = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
-                if type == AVAudioSession.InterruptionType.ended.rawValue, self.generationWanted || self.isPreview {
-                    self.resume()
+                if type == AVAudioSession.InterruptionType.ended.rawValue {
+                    let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+                    if AVAudioSession.InterruptionOptions(rawValue: rawOptions).contains(.shouldResume) {
+                        self.resume()
+                    } else {
+                        self.pause()
+                    }
+                } else if type == AVAudioSession.InterruptionType.began.rawValue {
+                    self.isPlaying = false
+                    self.updatePlaybackRate(0)
+                }
+            }
+        })
+        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification,
+                                           object: AVAudioSession.sharedInstance(), queue: .main) { [weak self] notification in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let rawReason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+                if rawReason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue {
+                    self.pause()
                 }
             }
         })
@@ -205,6 +224,9 @@ final class GenerationMusic: ObservableObject {
         isPlaying = false
         status = "Paused"
         updatePlaybackRate(0)
+        if generationWanted {
+            NotificationCenter.default.post(name: Self.playbackPausedNotification, object: nil)
+        }
     }
 
     private func updatePlaybackRate(_ rate: Double) {
