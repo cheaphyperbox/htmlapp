@@ -1818,6 +1818,13 @@ enum HTMLNativeAPIScript {
           search: (query = '') => call('symbols.search', { query: String(query) }),
           render: (name) => call('symbols.render', { name: String(name || '') })
         },
+        launch: {
+          get: () => {
+            const context = window.htmlappLaunch || null;
+            window.htmlappLaunch = null;
+            return Promise.resolve(context);
+          }
+        },
         device: {
           info: () => call('device.info'),
           battery: () => call('device.battery'),
