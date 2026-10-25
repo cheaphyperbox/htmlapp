@@ -351,6 +351,19 @@ final class AIGenerationSession: ObservableObject {
                 }
             }
 
+            // Pre-design an icon while the coding model streams. An invalid
+            // speculative icon is ignored in favor of the existing repair path.
+            let iconWorker: Task<String?, Never>? = ForgeRunOptions.quick ? nil : Task {
+                do {
+                    return try await AIHTMLAgent.generateIconScript(
+                        html: "", originalPrompt: self.originalPrompt,
+                        previousScript: "", config: AISettingsStore.configuration(for: .icon)
+                    )
+                } catch {
+                    return nil
+                }
+            }
+            defer { iconWorker?.cancel() }
             let systemPrompt = AIHTMLAgent.systemPrompt(research: lastResearch)
             var full = ""
             var recoveredFromStream: AIGenerationOutput?
@@ -444,11 +457,21 @@ final class AIGenerationSession: ObservableObject {
             apply(final, partial: false)
             let finalAssets = await refineGeneratedAssets(final.assetScripts)
             await installGeneratedAssets(finalAssets)
+            var speculativeIconAccepted = false
+            if iconScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let candidate = await iconWorker?.value, !candidate.isEmpty,
+               AIHTMLAgent.iconQualityIssue(candidate) == nil,
+               let rendered = await AIIconRenderer.render(script: candidate) {
+                iconScript = candidate
+                renderedIconData = rendered
+                speculativeIconAccepted = true
+                AIDebugTraceStore.shared.append("ICON", "Used an icon generated alongside the app.")
+            }
             _ = try await optionalStage("App icon") {
                 try await self.ensureValidIcon(
                     config: AISettingsStore.configuration(for: .icon),
                     // Reuse a valid coding-agent draft unless a separate icon artist is selected.
-                    forceRegenerate: !ForgeRunOptions.quick && (AISettingsStore.usesSpecialistProvider(for: .icon) ||
+                    forceRegenerate: !ForgeRunOptions.quick && !speculativeIconAccepted && (AISettingsStore.usesSpecialistProvider(for: .icon) ||
                         AISettingsStore.iconModel != AISettingsStore.model)
                 )
             }
