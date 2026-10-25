@@ -256,7 +256,7 @@ assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
 
 # Regression coverage for divergent AI looks and in-preview JavaScript errors.
 assert 'styleRegenerationRound += 1' in forge
-assert 'regeneration: styleRegenerationRound' in forge
+assert 'regeneration: regenerationRound' in forge
 assert 'MANDATORY unique composition:' in styles and 'diverseLayouts' in styles
 assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
 assert 'Button("Ask AI to Fix")' in forge
