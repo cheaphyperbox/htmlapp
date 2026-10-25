@@ -15,6 +15,20 @@ enum HTMLAppSharedContainer {
     }
 }
 
+struct HTMLAppWidgetAction: Codable, Hashable {
+    var id: String
+    var type: String
+    var route: String?
+    var payload: String?
+
+    init(id: String, type: String = "open", route: String? = nil, payload: String? = nil) {
+        self.id = id
+        self.type = type
+        self.route = route
+        self.payload = payload
+    }
+}
+
 struct HTMLAppWidgetItem: Codable, Hashable, Identifiable {
     var id: String
     var label: String
@@ -22,6 +36,7 @@ struct HTMLAppWidgetItem: Codable, Hashable, Identifiable {
     var detail: String?
     var systemSymbol: String?
     var progress: Double?
+    var action: HTMLAppWidgetAction? = nil
 
     init(
         id: String = UUID().uuidString,
@@ -29,7 +44,8 @@ struct HTMLAppWidgetItem: Codable, Hashable, Identifiable {
         value: String,
         detail: String? = nil,
         systemSymbol: String? = nil,
-        progress: Double? = nil
+        progress: Double? = nil,
+        action: HTMLAppWidgetAction? = nil
     ) {
         self.id = id
         self.label = label
@@ -37,6 +53,7 @@ struct HTMLAppWidgetItem: Codable, Hashable, Identifiable {
         self.detail = detail
         self.systemSymbol = systemSymbol
         self.progress = progress
+        self.action = action
     }
 }
 
@@ -102,6 +119,8 @@ struct HTMLAppWidgetDefinition: Codable, Hashable, Identifiable {
     var lastError: String?
     /// Optional explicit portable-data key mappings for fields shown in the widget.
     var dataBindings: [String: String]? = nil
+    var action: HTMLAppWidgetAction? = nil
+    var openBehavior: String? = nil
 
     var id: String { appID + "::" + widgetID }
 
