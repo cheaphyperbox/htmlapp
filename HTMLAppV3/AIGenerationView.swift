@@ -35,7 +35,7 @@ struct AIGenerationView: View {
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("forgeTestMode") private var forgeTestMode = ForgeTestMode.fast.rawValue
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
-    @AppStorage("ai.quickMode.policy") private var quickModePolicy = "manual"
+    @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @State private var quickMode = false
     @State private var autoQuickReason: String?
     @State private var polishThisRun = false
