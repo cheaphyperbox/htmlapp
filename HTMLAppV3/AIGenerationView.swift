@@ -845,67 +845,19 @@ struct AIGenerationView: View {
     private func exploreStyleOptions() {
         HTMLAppFirstUseTips.show("firstAI")
         let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let useQuickModel = quickMode && !AISettingsStore.quickModel.isEmpty
         let requestedAppearance = colorScheme == .dark ? "dark" : "light"
-        guard !idea.isEmpty, !exploringStyles else { return }
+        guard !idea.isEmpty else { return }
         generationTask?.cancel()
-        exploringStyles = true
-        let traceConfig = ForgeRunOptions.$quick.withValue(useQuickModel) {
-            AISettingsStore.configuration
-        }
-        AIDebugTraceStore.shared.begin(originalPrompt: "STYLE PREVIEWS\n" + idea,
-                                       config: traceConfig)
-        styleOptions = []
+        exploringStyles = false
         selectedStyleIndex = 0
         styleFailure = nil
         selectedStyle = nil
-        generationTask = Task {
-            let started = Date()
-            let feedback = styleFeedback
-            var errors: [String] = []
-            await withTaskGroup(of: (Int, ForgeStyleConcept?, String?).self) { group in
-                for index in 0..<3 {
-                    group.addTask {
-                        do {
-                            let result = try await ForgeRunOptions.$quick.withValue(useQuickModel) {
-                                try await ForgeStylePreviewService.generateSingle(
-                                    for: idea, feedback: feedback, index: index,
-                                    appearance: requestedAppearance
-                                )
-                            }
-                            return (index, result, nil)
-                        } catch {
-                            return (index, nil, error.localizedDescription)
-                        }
-                    }
-                }
-                for await (index, option, failure) in group {
-                    if Task.isCancelled { group.cancelAll(); break }
-                    if let option {
-                        styleOptions.append(option)
-                        styleOptions.sort { $0.id < $1.id }
-                        if let chosen = selectedStyle, styleOptions.contains(where: { $0.id == chosen.id }) {
-                            selectedStyleIndex = styleOptions.firstIndex(where: { $0.id == chosen.id }) ?? 0
-                        } else {
-                            selectedStyleIndex = min(selectedStyleIndex, styleOptions.count - 1)
-                        }
-                    } else if let failure { errors.append("Style \(index + 1): \(failure)") }
-                    if debugTrace.isActive {
-                        AIDebugTraceStore.shared.append("STYLE MOCKUP", "Completed slot \(index + 1) at \(String(format: "%.1f", Date().timeIntervalSince(started)))s.")
-                    }
-                }
-            }
-            if Task.isCancelled { return }
-            exploringStyles = false
-            if !styleOptions.isEmpty { HTMLAppFirstUseTips.show("mockups") }
-            let offlineCount = styleOptions.filter { $0.summary.contains("(offline preview)") }.count
-            styleFeedbackNotice = offlineCount > 0
-                ? "\(offlineCount) look(s) used local fallback sketches because the style AI did not return usable HTML. Check your style model in Settings or the AI debug trace."
-                : nil
-            if styleOptions.isEmpty {
-                styleFailure = errors.first ?? "No previews could be generated."
-            }
-        }
+        let completeIdea = idea + (styleFeedback.isEmpty ? "" : "\nStyle feedback: " + styleFeedback)
+        styleOptions = ForgeStylePreviewService.instantOptions(for: completeIdea, appearance: requestedAppearance)
+        styleFeedbackNotice = nil
+        HTMLAppFirstUseTips.show("mockups")
+        // All looks are available without a network round trip. Future AI
+        // enrichment must not block selection or overwrite a chosen look.
     }
 
     private func skipStyleSelection() {
