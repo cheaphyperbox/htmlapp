@@ -194,6 +194,9 @@ struct AIGenerationView: View {
             ) {
                 Button("Discard and Close", role: .destructive) {
                     generationTask?.cancel()
+                    preparedStyleTask?.cancel()
+                    preparedStyleTask = nil
+                    preparedStylePrompt = nil
                     endForgeActivity()
                     dictation.stop()
                     AIDebugTraceStore.shared.finish(outcome: "Discarded")
@@ -223,6 +226,9 @@ struct AIGenerationView: View {
             .confirmationDialog("Resume Forge draft?", isPresented: $showDraftRecovery, titleVisibility: .visible) {
                 Button("Continue Generation") { continueRecoveredDraft() }
                 Button("Discard Draft", role: .destructive) {
+                    preparedStyleTask?.cancel()
+                    preparedStyleTask = nil
+                    preparedStylePrompt = nil
                     ForgeDraftCheckpointStore.clear()
                     recoverableDraft = nil
                     generationTask?.cancel()
@@ -305,6 +311,11 @@ struct AIGenerationView: View {
             generationTask?.cancel()
         }
         .onDisappear {
+            if !session.isWorking {
+                preparedStyleTask?.cancel()
+                preparedStyleTask = nil
+                preparedStylePrompt = nil
+            }
             if demoMode { generationTask?.cancel() }
             microphoneRecordingTask?.cancel(); dictation.cancel()
             // Do not cancel the generation merely because the view disappears.
@@ -1653,6 +1664,9 @@ Requested edit:
     }
 
     private func stopKeepingDraft() {
+        preparedStyleTask?.cancel()
+        preparedStyleTask = nil
+        preparedStylePrompt = nil
         endForgeActivity()
         session.keepCurrentPartialDraft()
         generationTask?.cancel()
