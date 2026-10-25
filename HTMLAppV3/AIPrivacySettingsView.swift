@@ -24,7 +24,7 @@ struct AIPrivacySettingsView: View {
             } header: {
                 Text("AI Generation Privacy")
             } footer: {
-                Text("All permissions default to off. AI tools check these switches each time. iOS permission is also required for location, calendar and reminders. Results from approved tools may be sent to your configured AI provider. No clipboard data is exposed.")
+                Text("All permissions default to off. AI tools check these switches each time. iOS permission is also required for location, calendar and reminders. Results from approved tools may be sent to your configured AI provider.")
             }
             Section("Web API limits") {
                 Text("Public HTTPS GET only. Local or private hosts and redirects are blocked. Eight requests maximum, eight seconds per request and 200 KB per response.")
