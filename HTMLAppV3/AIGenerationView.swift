@@ -1427,7 +1427,7 @@ struct AIGenerationView: View {
         let pendingPreflight = preparedStylePrompt == originalPrompt ? preparedStyleTask : nil
         preparedStylePrompt = nil
         preparedStyleTask = nil
-        let designBrief = selectedStyle.map { originalPrompt + "\n\n" + $0.buildInstruction } ?? originalPrompt
+        let designBrief = selectedStyle.map { originalPrompt + "\n\n" + $0.compactBuildInstruction } ?? originalPrompt
         uiPolishNotice = nil
         AIDebugTraceStore.shared.begin(originalPrompt: originalPrompt, config: AISettingsStore.configuration)
         session.beginDraft(prompt: originalPrompt)
@@ -1781,7 +1781,7 @@ Requested edit:
             if !session.refinedBrief.isEmpty {
                 message = session.refinedBrief
             } else {
-                message = selectedStyle.map { prompt + "\n\n" + $0.buildInstruction } ?? prompt
+                message = selectedStyle.map { prompt + "\n\n" + $0.compactBuildInstruction } ?? prompt
             }
         }
         session.persistCheckpoint()
