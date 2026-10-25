@@ -137,8 +137,9 @@ enum HTMLAppResponsiveViewport {
 struct HTMLWebView: UIViewRepresentable {
     let html: String
     let appID: String
+    var onJavaScriptError: ((String) -> Void)? = nil
 
-    func makeCoordinator() -> Coordinator { Coordinator(appID: appID) }
+    func makeCoordinator() -> Coordinator { Coordinator(appID: appID, onJavaScriptError: onJavaScriptError) }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -186,6 +187,20 @@ struct HTMLWebView: UIViewRepresentable {
         controller.add(context.coordinator, name: "htmlappDownload")
         controller.add(context.coordinator, name: "htmlappNative")
         controller.add(context.coordinator, name: "htmlappNetwork")
+        if onJavaScriptError != nil {
+            controller.add(context.coordinator, name: "htmlappRuntimeError")
+            controller.addUserScript(WKUserScript(source: """
+            (() => {
+              const report = (kind, detail) => {
+                try { window.webkit.messageHandlers.htmlappRuntimeError.postMessage({
+                  kind: kind, detail: String(detail || "Unknown error").slice(0, 600)
+                }); } catch (_) {}
+              };
+              window.addEventListener('error', e => report('JavaScript', e.message || e.error?.message), true);
+              window.addEventListener('unhandledrejection', e => report('Promise', e.reason?.message || e.reason), true);
+            })();
+            """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         HTMLAppWebWarmup.release()
@@ -214,6 +229,7 @@ struct HTMLWebView: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "htmlappDownload")
         controller.removeScriptMessageHandler(forName: "htmlappNative")
         controller.removeScriptMessageHandler(forName: "htmlappNetwork")
+        controller.removeScriptMessageHandler(forName: "htmlappRuntimeError")
         coordinator.shutdown()
         uiView.stopLoading()
     }
@@ -225,6 +241,7 @@ struct HTMLWebView: UIViewRepresentable {
         }
 
         let appID: String
+        var onJavaScriptError: ((String) -> Void)?
         var lastHTML = ""
         private weak var webView: WKWebView?
         private var nativePermissions: NativePermissionCoordinator?
@@ -234,7 +251,10 @@ struct HTMLWebView: UIViewRepresentable {
         private var downloadDestinations: [ObjectIdentifier: URL] = [:]
         private var blobTransfers: [String: BlobTransfer] = [:]
 
-        init(appID: String) { self.appID = appID }
+        init(appID: String, onJavaScriptError: ((String) -> Void)?) {
+            self.appID = appID
+            self.onJavaScriptError = onJavaScriptError
+        }
 
         func attach(_ webView: WKWebView, initialHTML: String) {
             self.webView = webView
@@ -327,6 +347,12 @@ struct HTMLWebView: UIViewRepresentable {
 
             case "htmlappNetwork":
                 localNetworkBridge?.handle(body)
+
+            case "htmlappRuntimeError":
+                guard onJavaScriptError != nil else { return }
+                let detail = (body["detail"] as? String ?? "Unknown error").prefix(600)
+                let kind = (body["kind"] as? String ?? "JavaScript").prefix(30)
+                onJavaScriptError?("\(kind): \(detail)")
 
             default:
                 break
