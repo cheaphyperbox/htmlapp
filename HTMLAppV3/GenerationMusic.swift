@@ -40,6 +40,7 @@ final class GenerationMusic: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var remoteStopToken: Any?
     private var remotePlayToken: Any?
+    private var remotePauseToken: Any?
     private var generationWanted = false
     private var requestID = UUID()
 
@@ -104,6 +105,16 @@ final class GenerationMusic: ObservableObject {
         isPreview = preview
         if !preview { generationWanted = true }
         status = "Loading…"
+        // A locally cached track can begin synchronously, before the user
+        // locks the display or iOS suspends network download callbacks.
+        if let cached = Self.existingCachedAudio(from: url) {
+            do {
+                try activateAndPlay(cached)
+                return
+            } catch {
+                fail(error.localizedDescription)
+            }
+        }
         loadTask = Task {
             // Yield to let the caller close the microphone audio session first.
             await Task.yield()
@@ -129,6 +140,7 @@ final class GenerationMusic: ObservableObject {
         try session.setActive(true)
         let audio = try AVAudioPlayer(contentsOf: file)
         audio.numberOfLoops = -1
+        audio.prepareToPlay()
         audio.volume = GenerationMusicSettings.volume
         guard audio.play() else { throw NSError(domain: "GenerationMusic", code: 1, userInfo: [NSLocalizedDescriptionKey: "The audio could not start playing."]) }
         player = audio
@@ -142,14 +154,23 @@ final class GenerationMusic: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: "Generation Music",
             MPMediaItemPropertyArtist: "HTMLApp",
-            MPNowPlayingInfoPropertyPlaybackRate: 1.0
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0,
+            MPMediaItemPropertyPlaybackDuration: player?.duration ?? 0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: player?.currentTime ?? 0
         ]
         let controls = MPRemoteCommandCenter.shared()
         controls.stopCommand.isEnabled = true
         controls.playCommand.isEnabled = true
+        controls.pauseCommand.isEnabled = true
         if remoteStopToken == nil {
             remoteStopToken = controls.stopCommand.addTarget { [weak self] _ in
                 Task { @MainActor in self?.stop() }
+                return .success
+            }
+        }
+        if remotePauseToken == nil {
+            remotePauseToken = controls.pauseCommand.addTarget { [weak self] _ in
+                Task { @MainActor in self?.pause() }
                 return .success
             }
         }
@@ -178,13 +199,28 @@ final class GenerationMusic: ObservableObject {
         })
     }
 
+    private func pause() {
+        guard player != nil else { return }
+        player?.pause()
+        isPlaying = false
+        status = "Paused"
+        updatePlaybackRate(0)
+    }
+
+    private func updatePlaybackRate(_ rate: Double) {
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        info[MPNowPlayingInfoPropertyPlaybackRate] = rate
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player?.currentTime ?? 0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
     private func resume() {
         guard generationWanted || isPreview else { return }
         if let player {
             do {
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
                 try AVAudioSession.sharedInstance().setActive(true)
-                if player.play() { isPlaying = true; status = "Playing"; return }
+                if player.play() { isPlaying = true; status = "Playing"; updatePlaybackRate(1); return }
             } catch { }
         }
         begin(preview: isPreview)
@@ -211,10 +247,13 @@ final class GenerationMusic: ObservableObject {
         let controls = MPRemoteCommandCenter.shared()
         if let remoteStopToken { controls.stopCommand.removeTarget(remoteStopToken) }
         if let remotePlayToken { controls.playCommand.removeTarget(remotePlayToken) }
+        if let remotePauseToken { controls.pauseCommand.removeTarget(remotePauseToken) }
         remoteStopToken = nil
         remotePlayToken = nil
+        remotePauseToken = nil
         controls.stopCommand.isEnabled = false
         controls.playCommand.isEnabled = false
+        controls.pauseCommand.isEnabled = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         if hadMusicSession {
             do {
@@ -237,6 +276,15 @@ final class GenerationMusic: ObservableObject {
             .appendingPathComponent("GenerationMusic", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
+    }
+
+    nonisolated private static func existingCachedAudio(from url: URL) -> URL? {
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        let key = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
+        let ext = ["mp3", "m4a", "wav", "aac", "caf"].contains(url.pathExtension.lowercased()) ? url.pathExtension.lowercased() : "mp3"
+        guard let directory = try? cacheDirectory() else { return nil }
+        let file = directory.appendingPathComponent(key + "." + ext)
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 
     nonisolated private static func cachedAudio(from url: URL) async throws -> URL {
