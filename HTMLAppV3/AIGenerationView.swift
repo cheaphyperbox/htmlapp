@@ -900,11 +900,8 @@ struct AIGenerationView: View {
             .alert("Feedback for all three looks", isPresented: $showingStyleFeedback) {
                 TextField("What should be different?", text: $styleFeedback)
                 Button("Regenerate All Looks") {
-                    if !styleFeedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        styleFeedbackNotice = "Using your feedback for all three new mockups."
-                        styleRegenerationRound += 1
-                        exploreStyleOptions()
-                    }
+                    styleRegenerationRound += 1
+                    exploreStyleOptions()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -1064,7 +1061,7 @@ struct AIGenerationView: View {
                         html: session.streamedHTML.isEmpty ? loadingHTML : session.streamedHTML,
                         appID: existingApp?.id ?? "PREVIEW",
                         onJavaScriptError: { error in
-                            if !runtimeErrors.contains(error) { runtimeErrors.append(error) }
+                            if !runtimeErrors.contains(error) && runtimeErrors.count < 30 { runtimeErrors.append(error) }
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1636,6 +1633,7 @@ struct AIGenerationView: View {
         }
         guard !ForgeBackgroundUpload.shared.isActive, !session.isWorking,
               !browserResearch.isBrowsing else { return }
+        runtimeErrors = []
         startForgeActivity(edit: true)
         milestones.reset()
         workTracker.begin(kind: "AI edit", appKey: existingApp?.id ?? draftWorkID)
