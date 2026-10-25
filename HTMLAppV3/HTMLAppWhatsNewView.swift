@@ -30,6 +30,12 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.21" { return [
+            Entry(id: "ai-privacy", title: "AI Generation Privacy", description: "Control whether Forge may use location, date, device, calendar, reminders or public HTTPS research. All permissions default off.", symbol: "hand.raised.shield.fill", tint: .blue),
+            Entry(id: "widget-actions", title: "Actionable app widgets", description: "Generated widgets can open specific screens or deliver validated action context through signed links.", symbol: "square.grid.2x2.fill", tint: .purple),
+            Entry(id: "battery-thermal", title: "Battery and thermal APIs", description: "HTML apps can read charging status, battery percentage and thermal state.", symbol: "battery.100percent.bolt", tint: .green),
+            Entry(id: "clean-forge", title: "Simpler creation screen", description: "Quick mode controls appear only when Manual policy is selected; debug model and UI polish status labels are hidden.", symbol: "slider.horizontal.3", tint: .orange)
+        ] }
         if version == "1.6.20" { return [
             Entry(id: "background-music", title: "Longer background playback", description: "Generation Music uses primary audio playback and safer background request handoffs when audio is interrupted.", symbol: "music.note", tint: .purple),
             Entry(id: "auto-fast", title: "Automatic Quick mode", description: "Choose Manual or Automatic AI speed selection, with the option to override the recommendation.", symbol: "bolt.fill", tint: .orange),
