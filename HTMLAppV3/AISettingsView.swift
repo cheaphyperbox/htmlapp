@@ -91,7 +91,7 @@ struct AIConfigurationSettingsView: View {
                 Button(generationMusic.isPreview ? "Stop preview" : "Play preview") {
                     generationMusic.togglePreview()
                 }
-                .disabled(GenerationMusicSettings.validatedURL(musicURL) == nil ||
+                .disabled((!generationMusic.isPreview && GenerationMusicSettings.validatedURL(musicURL) == nil) ||
                           (generationMusic.isPlaying && !generationMusic.isPreview))
                 Text(generationMusic.status)
                     .font(.caption)
