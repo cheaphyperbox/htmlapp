@@ -106,7 +106,7 @@ enum ForgeStylePreviewService {
     /// Each slot requests a complete document and retries with the coder model
     /// if necessary. Incomplete provider output is reported, not substituted.
     static func generateSingle(for request: String, feedback: String = "", index: Int,
-                               appearance: String = "light") async throws -> ForgeStyleConcept {
+                               appearance: String = "light", regeneration: Int = 0) async throws -> ForgeStyleConcept {
         let preferredConfig = AISettingsStore.isUIOverhaulEnabled
             ? AISettingsStore.configuration(for: .ui)
             : AISettingsStore.configuration(for: .planner)
@@ -119,10 +119,20 @@ enum ForgeStylePreviewService {
             ("Dashboard", "Compact information-first layout", "Realistic domain-specific metrics, a short ordered list or activity feed, and compact controls")
         ]
         let variant = directions[max(0, min(index, directions.count - 1))]
+        let diverseLayouts = [
+            "A full-bleed editorial canvas with one giant asymmetric feature, floating contextual controls, NO tab bar, NO card grid.",
+            "A utilitarian split-pane workspace with dense typography, left-aligned tool rail, visible data rows, NO hero banner, NO rounded dashboard cards.",
+            "A playful modular storyboard with oversized illustrated shapes, staggered steps, bottom action dock, NO compact table or conventional header."
+        ]
+        let layout = diverseLayouts[(max(0, regeneration) + index) % diverseLayouts.count]
+        let forbidden = diverseLayouts.enumerated().filter { $0.offset != (max(0, regeneration) + index) % diverseLayouts.count }.map(\.element).joined(separator: "\\n")
         let user = """
         App idea: \(String(request.prefix(2300)))
         Requested changes: \(String(feedback.prefix(650)))
         Design: \(variant.0) — \(variant.2).
+        MANDATORY unique composition: \(layout)
+        Reject these other compositions: \(forbidden)
+        Style regeneration round: \(regeneration). Invent a completely new visual identity, section organization and interaction pattern on each round.
         System appearance: \(appearance). Design in this light/dark mode unless the user explicitly requested another mode.
         Every visible element MUST be relevant to the described app.
         Invent a concrete brand name, realistic starter records, and a meaningful
@@ -145,6 +155,8 @@ enum ForgeStylePreviewService {
         Use responsive mobile-first styling. Design a visually complete
         preview with domain-relevant content, different shapes and hierarchy.
         Three styles share the objective but must not share a template.
+        No generic app dashboard, repeated card stacks or copied header/footer.
+        Follow the mandatory composition even when it differs from your default style.
         No external resources, external CSS, scripts, JSON, explanation or Markdown.
         No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island
         or home indicator. The iOS host already provides system chrome.
