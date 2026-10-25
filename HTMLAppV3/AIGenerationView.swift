@@ -401,6 +401,13 @@ struct AIGenerationView: View {
         .onChange(of: session.iconScript) { script in
             workTracker.updateVolume(script.utf8.count, stage: .icon)
         }
+        .onChange(of: session.streamedByteCount) { bytes in
+            #if compiler(>=6.2)
+            if #available(iOS 26.0, *) {
+                HTMLAppForgeContinuedProcessing.update(phase: session.phase, streamedBytes: bytes)
+            }
+            #endif
+        }
         .onChange(of: session.streamedHTML) { html in
             milestones.inspectHTML(html)
         }
@@ -424,7 +431,7 @@ struct AIGenerationView: View {
             if phase.localizedCaseInsensitiveContains("overhaul") || phase.localizedCaseInsensitiveContains("polish") { HTMLAppFirstUseTips.show("polish") }
             #if compiler(>=6.2)
             if #available(iOS 26.0, *) {
-                HTMLAppForgeContinuedProcessing.update(phase: phase)
+                HTMLAppForgeContinuedProcessing.update(phase: phase, streamedBytes: session.streamedByteCount)
             }
             #endif
             if let job = forgeActivityJobID {
