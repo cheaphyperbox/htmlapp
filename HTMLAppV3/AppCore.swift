@@ -242,6 +242,7 @@ final class AppStore: ObservableObject {
     private let folderRecordsDefaultsKey = "htmlapp.libraryFolderRecords.v2"
     private let legacyFolderDefaultsKey = "htmlapp.libraryFolders"
     private var pendingInsertionFolderID: String?
+    private var deferredLaunchSave: Task<Void, Never>?
 
     var orderedApps: [SavedHTMLApp] {
         apps.filter { $0.isFavorite == true } + apps.filter { $0.isFavorite != true }
@@ -582,8 +583,16 @@ final class AppStore: ObservableObject {
         }
 
         apps[index].lastOpenedAt = Date()
-        save()
+        // Loading an app must not synchronously re-encode, validate and
+        // backup the entire library before its WebView can appear.
         runningApp = apps[index]
+        deferredLaunchSave?.cancel()
+        deferredLaunchSave = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 700_000_000) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            self?.save()
+        }
 
         if apps[index].websiteSourceURL != nil {
             let appID = apps[index].id
