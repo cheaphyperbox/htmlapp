@@ -15,7 +15,21 @@ if not any(r.startswith(('com.apple.CoreSimulator.SimRuntime.iOS-16-', 'com.appl
     choices=[(r,d) for r,ds in s.items() for d in ds if d['isAvailable'] and 'iOS' in r]
     if choices: print(sorted(choices,key=lambda x:x[0],reverse=True)[0][1]['udid'])
 PY
+# A simulator can appear in simctl but still be ineligible in the
+# selected Xcode (for example, when the iOS runtime is not installed).
+# Don't block the device IPA build on a missing optional test runtime.
+destinations="$(xcodebuild -project HTMLApp.xcodeproj -scheme HTMLAppWidgetTests -showdestinations 2>&1)"
+available="${destinations%%Ineligible destinations*}"
+tested=0
 while IFS= read -r udid; do
+  [ -n "$udid" ] || continue
+  if ! printf '%s' "$available" | grep -Fq "$udid"; then
+    echo "::warning::Skipping widget simulator $udid: not eligible for selected Xcode."
+    continue
+  fi
+  tested=$((tested + 1))
   xcodebuild -project HTMLApp.xcodeproj -scheme HTMLAppWidgetTests -destination "platform=iOS Simulator,id=$udid" -resultBundlePath "WidgetTests-$udid.xcresult" CODE_SIGNING_ALLOWED=NO test
 done < /tmp/htmlapp-destinations.txt
-test -s /tmp/htmlapp-destinations.txt
+if [ "$tested" -eq 0 ]; then
+  echo "::warning::No eligible iOS simulator is installed; widget simulator tests skipped. Device build will still run."
+fi
