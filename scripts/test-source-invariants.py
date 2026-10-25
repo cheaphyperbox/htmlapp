@@ -173,7 +173,7 @@ settings_source = source("HTMLAppV3/AISettingsView.swift")
 assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 styles = source("HTMLAppV3/ForgeStylePreview.swift")
-assert '"Immersive"' in styles and '"Action First"' in styles and '"Dashboard"' in styles
+assert '"Editorial"' in styles and '"Workbench"' in styles and '"Playful"' in styles
 assert 'No fake iPhone frame' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
@@ -259,11 +259,35 @@ assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
 # Regression coverage for divergent AI looks and in-preview JavaScript errors.
 assert 'styleRegenerationRound += 1' in forge
 assert 'regeneration: regenerationRound' in forge
-assert 'MANDATORY unique composition:' in styles and 'diverseLayouts' in styles
+assert 'MANDATORY composition:' in styles and 'archetypes' in styles
 assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
 assert 'Button("Ask AI to Fix")' in forge
 web_source = source("HTMLAppV3/EditorWeb.swift")
 assert 'htmlappRuntimeError' in web_source and "unhandledrejection" in web_source
 assert 'onJavaScriptError?(' in web_source
+
+
+# Background audible media may extend useful streaming; interruptions must
+# fall back to the existing durable upload rather than abandoning the draft.
+assert 'GenerationMusic.shared.isPlaying' in forge
+assert 'GenerationMusic.playbackPausedNotification' in forge
+assert 'handoffForgeToBackgroundURLSession()' in forge
+assert '.mixWithOthers' not in music
+assert 'AVAudioSession.routeChangeNotification' in music
+assert 'AVAudioSessionInterruptionOptionKey' in music
+
+# Product contract interpolation and fast planner budgets.
+assert '\\(ForgeProductContract.rules)' in ai
+assert 'timeout: 45' in ai and 'maxTokens: 1800' in ai
+assert 'cache_control' in ai and 'api.anthropic.com' in ai
+assert 'requestDelayKey) == nil { return 0 }' in source("HTMLAppV3/AIConfiguration.swift")
+
+# Source flow and launch improvements.
+assert 'openWebClipProfileInSafari(for app:' in core
+assert 'deferredLaunchSave' in core
+assert 'HTMLAppWebWarmup.prime()' in web_source
+assert 'numberOfSteps = 6' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'ForgeQuickClassifier.decide(for:' in forge
+assert 'ai.quickMode.policy' in source("HTMLAppV3/AISettingsView.swift")
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
