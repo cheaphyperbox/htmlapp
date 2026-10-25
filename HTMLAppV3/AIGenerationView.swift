@@ -353,8 +353,22 @@ struct AIGenerationView: View {
                     dictation.stop()
                 }
                 persistDraftForBackground()
-                if value == .background { handoffForgeToBackgroundURLSession() }
+                if value == .background {
+                    // Audible, user-selected music may keep a foreground-style
+                    // Forge task executing after lock. Preserve the existing
+                    // generation pipeline rather than paying for a second request.
+                    // Use background URLSession when music isn't playing.
+                    if !GenerationMusic.shared.isPlaying {
+                        handoffForgeToBackgroundURLSession()
+                    }
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: GenerationMusic.playbackPausedNotification)) { _ in
+            // If playback is paused by the user or the audio route changes,
+            // switch to the supported file-backed background request while
+            // the iOS background task still has time to submit it.
+            if scenePhase == .background { handoffForgeToBackgroundURLSession() }
         }
         .onChange(of: dictation.transcribingOffline) { processing in
             if !processing && generateAfterVoiceTranscription {
@@ -1909,11 +1923,19 @@ Requested edit:
         session.persistCheckpoint()
         guard session.isWorking, backgroundTaskID == .invalid else { return }
         backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "Forge Generation") {
-            session.persistCheckpoint()
-            generationTask?.cancel()
-            if backgroundTaskID != .invalid {
-                UIApplication.shared.endBackgroundTask(backgroundTaskID)
-                backgroundTaskID = .invalid
+            Task { @MainActor in
+                session.persistCheckpoint()
+                if scenePhase == .background {
+                    handoffForgeToBackgroundURLSession()
+                }
+                // If the handoff cannot start, retain the saved checkpoint.
+                if !ForgeBackgroundUpload.shared.isActive {
+                    generationTask?.cancel()
+                }
+                if backgroundTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                    backgroundTaskID = .invalid
+                }
             }
         }
         if backgroundTaskID == .invalid {
