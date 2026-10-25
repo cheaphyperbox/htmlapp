@@ -232,7 +232,6 @@ assert 'queuedFileImport = payload' in library
 assert 'presentQueuedFileImport()' in library
 assert 'DispatchQueue.main.asyncAfter(deadline: .now() + 0.45)' in library
 
-print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
 # Regeneration must preserve the user-approved mockup, including when a
 # background URLSession request uses the refined planner brief.
@@ -240,7 +239,10 @@ regen = forge.split('Button("Regenerate from scratch") {', 1)[1].split('Button(e
 assert 'selectedStyle = nil' not in regen, "Regenerating must retain the chosen design"
 assert 'let designBrief = selectedStyle.map' in forge
 assert 'message = selectedStyle.map { base + "\\n\\n" + $0.buildInstruction } ?? base' in forge
-assert 'dictation.stop()\n        startForgeActivity(edit: false)' in forge
+# Closing the microphone must precede playback; resetting runtime diagnostics
+# between those operations is valid and must not break the source regression.
+generation_start = forge.split('private func generateApp(', 1)[1].split('private func applyAIChange(', 1)[0]
+assert generation_start.index('dictation.stop()') < generation_start.index('startForgeActivity(edit: false)')
 assert 'existingCachedAudio(from: url)' in music
 assert 'MPRemoteCommandCenter.shared()' in music and 'pauseCommand' in music
 assert 'MPNowPlayingInfoPropertyPlaybackRate' in music
@@ -263,3 +265,5 @@ assert 'Button("Ask AI to Fix")' in forge
 web_source = source("HTMLAppV3/EditorWeb.swift")
 assert 'htmlappRuntimeError' in web_source and "unhandledrejection" in web_source
 assert 'onJavaScriptError?(' in web_source
+
+print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
