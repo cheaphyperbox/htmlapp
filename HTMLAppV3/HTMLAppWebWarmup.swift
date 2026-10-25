@@ -23,5 +23,6 @@ enum HTMLAppWebWarmup {
     static func release() {
         warming?.stopLoading()
         warming = nil
+        primed = false
     }
 }
