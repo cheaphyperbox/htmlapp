@@ -341,7 +341,7 @@ enum ForgeStylePreviewService {
         let row2 = escaped(seed?.records[1] ?? second)
         let row3 = escaped(seed?.records[2] ?? third), stat = escaped(metric)
         let overrideAccent = seed?.accent ?? accent
-        let content: String
+        var content: String
         switch variant {
         case 0:
             content = """
@@ -368,6 +368,47 @@ enum ForgeStylePreviewService {
             <div class="item"><b>02</b><div><strong>\(row2)</strong><p>Next on your list</p></div></div>
             <div class="item"><b>03</b><div><strong>\(row3)</strong><p>Keep it moving</p></div></div></section>
             """
+        }
+        if ["calculator", "arithmetic", "maths", "math"].contains(where: query.contains) {
+            switch variant {
+            case 0:
+                content = """
+                <div class="feature calc-layout">
+                <small>\(title.uppercased()) / STANDARD</small>
+                <p class="calc-formula">480 ÷ 8</p><h1 class="calc-result">60</h1>
+                <div class="calc-keypad">
+                <span class="function">AC</span><span class="function">±</span><span class="function">%</span><span class="operator">÷</span>
+                <span>7</span><span>8</span><span>9</span><span class="operator">×</span>
+                <span>4</span><span>5</span><span>6</span><span class="operator">−</span>
+                <span>1</span><span>2</span><span>3</span><span class="operator">+</span>
+                <span class="zero">0</span><span>.</span><span class="operator">=</span>
+                </div></div>
+                <section class="floating calc-memory"><small>LAST ANSWER</small>
+                <h2>\(row1)</h2><p>Saved in your calculation history</p></section>
+                """
+            case 1:
+                content = """
+                <section class="hero calc-hero">
+                <small>\(title.uppercased()) / QUICK MATH</small><p class="calc-formula">24 × 6</p>
+                <h1 class="calc-result">144</h1>
+                <button>New calculation →</button></section>
+                <div class="tiles"><div><small>PREVIOUS</small><strong>\(row1)</strong></div>
+                <div><small>MEMORY</small><strong>\(row2)</strong></div></div>
+                <section class="card"><small>OPERATIONS</small>
+                <div class="calc-operations"><span>+</span><span>−</span><span>×</span><span>÷</span></div></section>
+                """
+            default:
+                content = """
+                <header><small>\(title.uppercased()) / SCIENTIFIC</small>
+                <h1>Calculator</h1><p>Standard • History • Memory</p></header>
+                <div class="search calc-sum">120 + 43 <b>= 163</b></div>
+                <section class="list"><h2>Calculation history</h2>
+                <div class="item"><b>01</b><div><strong>\(row1)</strong><p>Most recent</p></div></div>
+                <div class="item"><b>02</b><div><strong>\(row2)</strong><p>Earlier today</p></div></div>
+                <div class="item"><b>03</b><div><strong>\(row3)</strong><p>Yesterday</p></div></div></section>
+                <div class="calc-operations bottom"><span>sin</span><span>cos</span><span>√</span><span>π</span></div>
+                """
+            }
         }
         return """
         <!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -396,6 +437,21 @@ enum ForgeStylePreviewService {
         .search{margin:20px 0;border-radius:13px}.list{border-radius:16px}
         .item{display:flex;gap:17px;align-items:center;padding:17px 0;border-top:1px solid #8884}
         .item b{color:var(--accent)}.item p{margin:4px 0;font-size:13px}
+        .calc-layout{padding:28px 18px 120px;min-height:780px}.calc-formula{text-align:right;font-size:25px;opacity:.66;margin:40px 3px 2px}
+        .calc-result{text-align:right;font-size:72px;font-weight:300;letter-spacing:-.06em;margin:0 3px 18px}
+        .calc-keypad{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:20px}
+        .calc-keypad span{display:grid;place-items:center;height:60px;border-radius:50px;background:var(--bg);font-size:24px}
+        .calc-keypad .function{background:var(--accent);color:var(--bg)}
+        .calc-keypad .operator{background:var(--accent);color:var(--bg);font-weight:700}
+        .calc-keypad .zero{grid-column:span 2;justify-content:start;padding-left:24px}
+        .calc-memory{margin-top:-110px}.calc-memory h2{font-size:27px}
+        .calc-hero{min-height:400px;background:var(--accent);color:var(--bg);justify-content:end}
+        .calc-hero .calc-formula{margin:18px 0 0;opacity:.8}.calc-hero h1{font-size:80px}
+        .calc-hero button{background:var(--bg);color:var(--ink)}
+        .calc-operations{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:15px}
+        .calc-operations span{background:var(--bg);padding:17px 4px;border-radius:14px;text-align:center;font-size:22px}
+        .calc-operations.bottom{margin-top:15px}.calc-sum{display:flex;justify-content:space-between;gap:10px}
+        .calc-sum b{white-space:nowrap}
         </style></head><body><main>\(content)</main></body></html>
         """
     }
