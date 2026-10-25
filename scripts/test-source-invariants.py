@@ -234,6 +234,17 @@ assert 'DispatchQueue.main.asyncAfter(deadline: .now() + 0.45)' in library
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
+# Regeneration must preserve the user-approved mockup, including when a
+# background URLSession request uses the refined planner brief.
+regen = forge.split('Button("Regenerate from scratch") {', 1)[1].split('Button(existingApp == nil ?', 1)[0]
+assert 'selectedStyle = nil' not in regen, "Regenerating must retain the chosen design"
+assert 'let designBrief = selectedStyle.map' in forge
+assert 'message = selectedStyle.map { base + "\\n\\n" + $0.buildInstruction } ?? base' in forge
+assert 'dictation.stop()\n        startForgeActivity(edit: false)' in forge
+assert 'existingCachedAudio(from: url)' in music
+assert 'MPRemoteCommandCenter.shared()' in music and 'pauseCommand' in music
+assert 'MPNowPlayingInfoPropertyPlaybackRate' in music
+
 # AI styles must come entirely from complete provider HTML; never silently
 # substitute a static mockup or a short JSON-enriched local sketch.
 assert 'ForgeStylePreviewService.generateSingle' in forge
