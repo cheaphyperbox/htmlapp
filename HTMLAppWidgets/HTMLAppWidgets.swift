@@ -476,6 +476,11 @@ struct HTMLAppWidgetView: View {
             URLQueryItem(name: "action", value: action.id)
         ]
         if let itemID { params.append(URLQueryItem(name: "item", value: itemID)) }
+        guard let signature = HTMLAppWidgetActionLink.signature(
+            appID: entry.definition.appID,
+            widgetID: entry.definition.widgetID,
+            actionID: action.id, itemID: itemID) else { return nil }
+        params.append(URLQueryItem(name: "signature", value: signature))
         parts.queryItems = params
         return parts.url
     }
