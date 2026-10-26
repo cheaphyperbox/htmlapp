@@ -136,9 +136,14 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
 
         if HTMLPermissionStore.choice(for: .location, appID: appID) == .ask {
             switch PermissionRequestGate.check(appID: appID, permission: "location") {
-            case .ignore: completion(false); return
+            case .ignore:
+                if PermissionRequestGate.hasPending(appID: appID, permission: "location") {
+                    _ = PermissionRequestGate.queue(appID: appID, permission: "location", completion: completion)
+                } else { completion(false) }
+                return
             case .autoDenied:
                 HTMLPermissionStore.set(.deny, for: .location, appID: appID)
+                PermissionRequestGate.finish(appID: appID, permission: "location", allowed: false)
                 PermissionRequestGate.showNotice(appID: appID, title: "Location")
                 completion(false)
                 return
@@ -151,8 +156,9 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
         case .deny:
             completion(false)
         case .ask:
+            guard PermissionRequestGate.queue(appID: appID, permission: "location", completion: completion) else { return }
             guard let presenter = topViewController() else {
-                completion(false)
+                PermissionRequestGate.finish(appID: appID, permission: "location", allowed: false)
                 return
             }
             let alert = UIAlertController(
