@@ -81,8 +81,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 reject(id, code: "preview_restricted", message: "Native tabs are unavailable in preview.")
                 return
             }
-            guard let entries = args["items"] as? [[String: Any]], (2...5).contains(entries.count) else {
-                reject(id, code: "invalid_tabs", message: "Provide 2–5 native tabs.")
+            guard let entries = args["items"] as? [[String: Any]], (1...7).contains(entries.count) else {
+                reject(id, code: "invalid_tabs", message: "Provide 1–7 native tabs.")
                 return
             }
             let labels = entries.compactMap { entry -> HTMLAppNativeTabBar.Tab? in
@@ -90,7 +90,11 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                       id.range(of: #"^[A-Za-z][A-Za-z0-9_-]{0,31}$"#, options: .regularExpression) != nil,
                       let label = entry["title"] as? String, !label.isEmpty, label.count <= 24 else { return nil }
                 let symbol = entry["symbol"] as? String ?? "square"
-                return .init(id: id, title: label, symbol: HTMLAppSymbolCatalog.names.contains(symbol) ? symbol : "square")
+                let badge = entry["badge"] as? String
+                guard badge == nil || badge!.count <= 5 else { return nil }
+                return .init(id: id, title: label,
+                             symbol: HTMLAppSymbolCatalog.names.contains(symbol) ? symbol : "square",
+                             badge: badge)
             }
             guard labels.count == entries.count, Set(labels.map(\.id)).count == labels.count else {
                 reject(id, code: "invalid_tabs", message: "Every native tab needs a unique, valid ID and title.")
@@ -99,7 +103,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             if nativeTabBar == nil, let webView {
                 nativeTabBar = HTMLAppNativeTabBar(webView: webView)
             }
-            nativeTabBar?.configure(tabs: labels)
+            nativeTabBar?.configure(tabs: labels, selected: args["selected"] as? String)
             resolve(id, value: ["enabled": nativeTabBar != nil, "count": labels.count])
         case "tabs.select":
             guard let tab = args["id"] as? String, nativeTabBar?.select(id: tab) == true else {
