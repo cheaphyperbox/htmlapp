@@ -81,6 +81,10 @@ vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,c
   assert.equal(configureCall.args.items.length, 2);
   window.__htmlappNativeResolve(configureCall.id, true, {enabled:true,count:2});
   assert.equal((await tabs).enabled, true);
+  // The native UITabBar signals the initially selected tab after configuration.
+  // Simulate that native-to-JavaScript callback in this bridge-only test.
+  assert.equal(configureCall.args.selected, 'home');
+  window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {detail:{id:'home'}}));
   assert.equal(selectedTab, 'home', 'Native tabs must select their first destination');
   let selectedPerItem = null;
   const seven = window.HTMLAppNative.tabs.configure([
