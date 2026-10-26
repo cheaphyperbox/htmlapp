@@ -577,9 +577,16 @@ struct HTMLWebView: UIViewRepresentable {
             guard appID != "PREVIEW" else { resolveSensor(callbackID, value: "denied"); return }
             if HTMLSensorPermissionPolicy.choice(appID: appID) == .ask {
                 switch PermissionRequestGate.check(appID: appID, permission: "motion") {
-                case .ignore: resolveSensor(callbackID, value: "denied"); return
+                case .ignore:
+                    if PermissionRequestGate.hasPending(appID: appID, permission: "motion") {
+                        _ = PermissionRequestGate.queue(appID: appID, permission: "motion") { [weak self] allowed in
+                            self?.resolveSensor(callbackID, value: allowed ? "granted" : "denied")
+                        }
+                    } else { resolveSensor(callbackID, value: "denied") }
+                    return
                 case .autoDenied:
                     HTMLSensorPermissionPolicy.set(.deny, appID: appID)
+                    PermissionRequestGate.finish(appID: appID, permission: "motion", allowed: false)
                     PermissionRequestGate.showNotice(appID: appID, title: "Motion")
                     resolveSensor(callbackID, value: "denied")
                     return
@@ -592,7 +599,13 @@ struct HTMLWebView: UIViewRepresentable {
             case .deny:
                 resolveSensor(callbackID, value: "denied")
             case .ask:
-                guard let presenter = topViewController() else { resolveSensor(callbackID, value: "denied"); return }
+                guard PermissionRequestGate.queue(appID: appID, permission: "motion", completion: { [weak self] allowed in
+                    self?.resolveSensor(callbackID, value: allowed ? "granted" : "denied")
+                }) else { return }
+                guard let presenter = topViewController() else {
+                    PermissionRequestGate.finish(appID: appID, permission: "motion", allowed: false)
+                    return
+                }
                 let alert = UIAlertController(
                     title: "Allow Motion & Orientation?",
                     message: "This saved HTML app wants access to device motion, orientation, and compass events while it is open.",
