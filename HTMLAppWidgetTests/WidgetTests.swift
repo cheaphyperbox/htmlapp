@@ -17,6 +17,26 @@ final class WidgetTests: XCTestCase {
         d.snapshot.title = "Focus Streak"; d.snapshot.value = "7"; d.snapshot.subtitle = "Goal: 10 days"
         return d
     }
+    func testWidgetActionSerializationAndOldItemCompatibility() throws {
+        let old = Data(#"{"id":"row","label":"Tasks","value":"3"}"#.utf8)
+        let decoded = try JSONDecoder().decode(HTMLAppWidgetItem.self, from: old)
+        XCTAssertNil(decoded.action)
+
+        var published = definition("test-actions")
+        published.openBehavior = "action"
+        published.action = HTMLAppWidgetAction(id: "open-board", type: "route", route: "board")
+        published.snapshot.items = [
+            HTMLAppWidgetItem(id: "today", label: "Today", value: "2",
+                action: HTMLAppWidgetAction(id: "show-today", type: "event",
+                    payload: #"{"filter":"today"}"#))
+        ]
+        let data = try JSONEncoder().encode(published)
+        let restored = try JSONDecoder().decode(HTMLAppWidgetDefinition.self, from: data)
+        XCTAssertEqual(restored.action?.route, "board")
+        XCTAssertEqual(restored.openBehavior, "action")
+        XCTAssertEqual(restored.snapshot.items?.first?.action?.payload, #"{"filter":"today"}"#)
+    }
+
     func testIndependentReaderDecodesPublishedSnapshotAndTimeline() async throws {
         let published = try repository.save(definition("focus-streak"))
         let reader = HTMLAppWidgetRepository(directory: directory)
