@@ -98,10 +98,6 @@ struct AIConfigurationSettingsView: View {
                 } label: {
                     Label(musicURL.isEmpty ? "Choose Audio File" : "Change Audio File", systemImage: "folder")
                 }
-                if !musicURL.isEmpty {
-                    Text(URL(string: musicURL)?.lastPathComponent ?? "Selected audio")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
                 .fileImporter(isPresented: $choosingMusicFile, allowedContentTypes: [.audio]) { result in
                     do {
                         let selected = try result.get()
@@ -117,6 +113,10 @@ struct AIConfigurationSettingsView: View {
                     } catch {
                         generationMusic.stopPreview()
                     }
+                }
+                if !musicURL.isEmpty {
+                    Text(URL(string: musicURL)?.lastPathComponent ?? "Selected audio")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
                     Text("Volume")
