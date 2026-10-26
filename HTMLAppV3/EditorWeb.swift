@@ -182,6 +182,13 @@ struct HTMLWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        if appID == "PREVIEW" {
+            controller.addUserScript(WKUserScript(
+                source: HTMLAppPreviewTabs.script,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         controller.addUserScript(WKUserScript(
             source: HTMLAppWebBluetoothScript.source,
             injectionTime: .atDocumentStart,
@@ -905,6 +912,69 @@ enum DownloadBridgeScript {
         event.stopPropagation();
         sendBlob(href, anchor.getAttribute('download'));
       }, true);
+    })();
+    """#
+}
+
+private enum HTMLAppPreviewTabs {
+    static let script = #"""
+    (() => {
+      const install = () => {
+        const api = window.HTMLAppNative?.tabs;
+        if (!api || api.__previewTabsInstalled) return;
+        api.__previewTabsInstalled = true;
+        const callbacks = new Map();
+        let tabs = [];
+        let active = '';
+        let hidden = false;
+        const style = document.createElement('style');
+        style.textContent = '#__htmlappPreviewTabs{position:fixed;bottom:env(safe-area-inset-bottom,0px);left:0;right:0;z-index:2147483640;display:flex;justify-content:space-around;gap:4px;padding:9px 8px;background:rgba(30,30,30,.94);color:white;font:14px -apple-system,sans-serif}#__htmlappPreviewTabs button{flex:1;min-height:48px;background:transparent;color:inherit;border:0;border-radius:12px;font:inherit}#__htmlappPreviewTabs button[aria-selected=true]{background:#555}';
+        const ready = () => {
+          if (!document.head || !document.body) return false;
+          if (!style.isConnected) document.head.appendChild(style);
+          return true;
+        };
+        const select = id => {
+          if (!tabs.some(t => t.id === id)) return false;
+          active = id;
+          document.querySelectorAll('#__htmlappPreviewTabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === id)));
+          const handler = callbacks.get(id);
+          if (handler) handler(id);
+          window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {detail:{id}}));
+          return true;
+        };
+        const render = () => {
+          if (!ready()) { setTimeout(render, 30); return; }
+          let bar = document.getElementById('__htmlappPreviewTabs');
+          if (!bar) { bar = document.createElement('nav'); bar.id = '__htmlappPreviewTabs'; document.body.appendChild(bar); }
+          bar.replaceChildren();
+          tabs.forEach(t => {
+            const button = document.createElement('button');
+            button.type = 'button'; button.dataset.id = t.id;
+            button.textContent = t.title || t.id;
+            button.setAttribute('aria-selected', String(t.id === active));
+            button.addEventListener('click', () => select(t.id));
+            bar.appendChild(button);
+          });
+          bar.hidden = hidden;
+          document.documentElement.style.setProperty('--htmlapp-tabbar-height', hidden ? '0px' : '72px');
+        };
+        api.configure = async (input, options = {}) => {
+          tabs = Array.isArray(input) ? input : (input?.items || []);
+          callbacks.clear();
+          tabs.forEach(t => { if (typeof t.onSelect === 'function') callbacks.set(t.id,t.onSelect); });
+          active = options.selected || input?.selected || tabs[0]?.id || '';
+          render();
+          setTimeout(() => { if (active) select(active); }, 0);
+          return {enabled:true,count:tabs.length,preview:true};
+        };
+        api.select = async id => ({selected:select(id) ? id : null});
+        api.remove = async () => { tabs=[]; document.getElementById('__htmlappPreviewTabs')?.remove(); return {removed:true}; };
+        api.setHidden = async value => { hidden=!!value; render(); return {hidden}; };
+        api.update = async (id, props) => { const tab=tabs.find(t=>t.id===id); if(tab) Object.assign(tab,props); render(); return {updated:!!tab}; };
+        api.pulse = async () => ({ok:true});
+      };
+      install();
     })();
     """#
 }
