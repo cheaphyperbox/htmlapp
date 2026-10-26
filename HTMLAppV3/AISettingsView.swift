@@ -22,6 +22,7 @@ struct AIConfigurationSettingsView: View {
     @State private var appearancePreference = AISettingsStore.appearancePreference
     @State private var saved = false
     @State private var showAdvancedRoles = false
+    @State private var musicPrefetchTask: Task<Void, Never>?
 
     var body: some View {
         Form {
@@ -89,6 +90,15 @@ struct AIConfigurationSettingsView: View {
                     .keyboardType(.URL)
                     .submitLabel(.done)
                     .onSubmit { generationMusic.prefetch() }
+                    .onChange(of: musicURL) { _ in
+                        musicPrefetchTask?.cancel()
+                        guard GenerationMusicSettings.validatedURL(musicURL) != nil else { return }
+                        musicPrefetchTask = Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 850_000_000)
+                            guard !Task.isCancelled else { return }
+                            generationMusic.prefetch()
+                        }
+                    }
                 HStack {
                     Text("Volume")
                     Slider(value: $musicVolume, in: 0...1)
