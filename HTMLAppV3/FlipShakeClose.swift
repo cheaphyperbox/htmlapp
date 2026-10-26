@@ -30,9 +30,10 @@ final class FlipShakeClose {
                 self.duration = 0
             }
             if self.duration >= 1 {
+                let close = self.action
                 self.stop()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
-                self.action?()
+                close?()
             }
         }
     }
