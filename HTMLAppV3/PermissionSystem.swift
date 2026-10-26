@@ -103,6 +103,15 @@ enum HTMLPermissionChoice: String, CaseIterable, Identifiable {
 }
 
 enum HTMLPermissionStore {
+    static func requested(appID: String) -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: "htmlPermission.used." + appID) ?? [])
+    }
+    static func markRequested(_ name: String, appID: String) {
+        var names = requested(appID: appID)
+        guard names.insert(name).inserted else { return }
+        UserDefaults.standard.set(Array(names), forKey: "htmlPermission.used." + appID)
+    }
+
     static func choice(for permission: HTMLPermission, appID: String) -> HTMLPermissionChoice {
         let key = storageKey(permission, appID: appID)
         return HTMLPermissionChoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "ask") ?? .ask
