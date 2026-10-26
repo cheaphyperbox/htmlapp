@@ -1878,14 +1878,9 @@ enum HTMLNativeAPIScript {
               return { id: item.id, title: item.title, symbol: item.symbol, badge: item.badge };
             });
             const selected = opts.selected || input?.selected || items[0].id;
-            const result = await call('tabs.configure', { items: cleaned, selected });
             api.tabs._handlers = handlers;
-            if (result?.enabled) {
-              window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {
-                detail: {id: selected}
-              }));
-            }
-            return result;
+            const result = await call('tabs.configure', { items: cleaned, selected });
+             return result;
           },
           _handlers: {},
           select: (id) => call('tabs.select', { id: String(id || '') }),
