@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.24"
-    static let compiledBuild = "31"
+    static let compiledVersion = "1.6.25"
+    static let compiledBuild = "32"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.25" { return [
+            Entry(id: "native-tab-isolation", title: "Native tabs stay inside apps", description: "The real native tab bar no longer mounts onto the global app screen while editing.", symbol: "rectangle.bottomthird.inset.filled", tint: .blue),
+            Entry(id: "shake-transition", title: "Shake exit transition improvements", description: "A dedicated overlay window keeps the black-and-blurred fade visible while returning to the Library.", symbol: "iphone.radiowaves.left.and.right", tint: .purple),
+            Entry(id: "torch", title: "Exit flashlight cue", description: "The shake-exit flashlight now targets the rear torch for a short pulse after closing an HTML app.", symbol: "flashlight.on.fill", tint: .orange)
+        ] }
         if version == "1.6.24" { return [
             Entry(id: "music-source", title: "Two ways to add generation music", description: "Switch between picking an audio file from Files and downloading audio from a direct HTTPS URL. Your previous audio URL is preserved.", symbol: "music.note.list", tint: .purple),
             Entry(id: "previous-release", title: "Recent HTMLApp improvements", description: "Includes the updated face-down shake exit, AI generation controls, photo compatibility, and improved app sharing.", symbol: "sparkles", tint: .blue)
