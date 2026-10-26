@@ -147,7 +147,7 @@ assert 'Button { store.installWebClip(for: app) }' in source("HTMLAppV3/LibraryU
 
 assert "transcribingOffline" in source("HTMLAppV3/ForgeDictation.swift")
 assert "pendingFloatingVoiceFeedback" in source("HTMLAppV3/AIGenerationView.swift")
-assert 'ForEach(0..<max(3, styleOptions.count), id: \\.self)' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'ForEach(0..<max(3, (styleOptions.map(\\.id).max() ?? -1) + 1), id: \\.self)' in source("HTMLAppV3/AIGenerationView.swift")
 assert "htmlapp.voiceCreatePending" in core and "htmlapp.voiceCreatePending" in source("HTMLAppV3/LibraryUI.swift")
 assert 'let refreshed = definition // Display committed' in source("HTMLAppWidgets/HTMLAppWidgets.swift")
 assert 'content.containerBackground(for: .widget) { Color(.secondarySystemBackground) }' in source("HTMLAppWidgets/HTMLAppVoiceCreateWidget.swift")
