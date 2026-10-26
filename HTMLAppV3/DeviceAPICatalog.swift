@@ -78,7 +78,7 @@ enum HTMLAppDeviceAPIResearch {
               console.log(devices);
             }
             """,
-            constraints: "Requires per-HTMLApp Bluetooth permission and iOS Bluetooth authorization. No Classic Bluetooth pairing, connection, or hidden background scans; only bounded 2–12 second foreground discovery."
+            constraints: "REQUIRED for nearby Bluetooth in HTMLApp: use HTMLAppNative.bluetooth.scan(6), never navigator.bluetooth.requestDevice or a Web Bluetooth chooser (unavailable in iOS WKWebView). Scan runs after user interaction and permission. Returns {devices:[{id,name,rssi}]}, including an empty array if none advertises. No Classic Bluetooth pairing, connection, accessory battery information, or hidden background scans; only bounded 2–12 second foreground BLE discovery."
         ),
         .init(
             id: "motion.pedometer",
@@ -630,7 +630,7 @@ enum HTMLAppDeviceAPIResearch {
         .init(
             id: "optional.web.capabilities",
             title: "Optional WebKit capabilities",
-            keywords: ["wake lock", "service worker", "cache api", "webgpu", "webgl", "bluetooth", "usb", "serial", "hid", "fullscreen", "picture in picture", "network information", "battery"],
+            keywords: ["wake lock", "service worker", "cache api", "webgpu", "webgl", "usb", "serial", "hid", "fullscreen", "picture in picture", "network information"],
             purpose: "Use optional browser APIs only when feature detection proves the relevant object/method is present and the app has a usable fallback.",
             api: "Feature-detect the specific standard browser API before use",
             example: """
@@ -638,7 +638,7 @@ enum HTMLAppDeviceAPIResearch {
               try { const lock = await navigator.wakeLock.request("screen"); } catch (_) {}
             }
             """,
-            constraints: "Object presence does not guarantee a particular operation succeeds on the current iOS/WebKit version or context."
+            constraints: "Object presence does not guarantee a particular operation succeeds on the current iOS/WebKit version or context. For Bluetooth discovery specifically, use HTMLAppNative.bluetooth.scan, never Web Bluetooth."
         ),
         .init(
             id: "unsupported.entitlements",
