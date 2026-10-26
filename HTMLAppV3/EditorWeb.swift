@@ -1026,14 +1026,22 @@ private final class HTMLAppFaceDownShakeExit {
         let faceDown = sample.gravity.z > 0.78
         let a = sample.userAcceleration
         let shake = sqrt(a.x*a.x + a.y*a.y + a.z*a.z)
-        if faceDown && shake > 0.55 {
-            progress = min(1, progress + delta * min(1.7, shake) / 3.5)
-            if now - lastHaptic > max(0.07, 0.42 - progress * 0.34) {
-                feedback.impactOccurred(intensity: CGFloat(0.15 + progress * 0.85))
-                lastHaptic = now
+        // Shaking consists of brief acceleration peaks separated by near-zero
+        // samples. Requiring 3.5 seconds of continuous acceleration made the
+        // progress bar appear without ever reaching the exit threshold.
+        if faceDown {
+            if shake > 0.35 {
+                progress = min(1, progress + delta * min(3.2, 1.4 + shake * 1.5))
+                if now - lastHaptic > max(0.09, 0.32 - progress * 0.2) {
+                    feedback.impactOccurred(intensity: CGFloat(0.2 + progress * 0.8))
+                    lastHaptic = now
+                }
+            } else {
+                // Preserve credit between the short impulses of one shake.
+                progress = max(0, progress - delta * 0.10)
             }
-        } else if !faceDown {
-            progress = max(0, progress - delta * 0.65)
+        } else {
+            progress = max(0, progress - delta * 1.5)
         }
         if progress > 0 { showProgress() }
         progressFill?.frame.size.width = (progressTrack?.bounds.width ?? 0) * progress
