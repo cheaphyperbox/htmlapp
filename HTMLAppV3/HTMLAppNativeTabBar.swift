@@ -25,7 +25,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
         let tabBar: UITabBar
         if let bar { tabBar = bar }
         else {
-            guard let host = webView.window?.rootViewController?.view else {
+            guard let root = webView.window?.rootViewController else {
                 guard mountAttempts < 20 else { return }
                 mountAttempts += 1
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
@@ -35,6 +35,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
                 return
             }
             mountAttempts = 0
+            let host = Self.topController(from: root).view!
             let created = UITabBar()
             created.delegate = self
             created.translatesAutoresizingMaskIntoConstraints = false
@@ -120,6 +121,17 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
         mountAttempts = 0
         hidden = false
         reportInset()
+    }
+
+    private static func topController(from root: UIViewController) -> UIViewController {
+        if let presented = root.presentedViewController { return topController(from: presented) }
+        if let navigation = root as? UINavigationController {
+            return topController(from: navigation.visibleViewController ?? navigation)
+        }
+        if let tabs = root as? UITabBarController, let selected = tabs.selectedViewController {
+            return topController(from: selected)
+        }
+        return root
     }
 
     private func reportInset() {
