@@ -7,6 +7,9 @@ struct AIConfigurationSettingsView: View {
     @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
     @AppStorage("generationMusic.url") private var musicURL = ""
+    @AppStorage("generationMusic.sourceMode") private var musicSourceMode = "file"
+    @AppStorage("generationMusic.remoteURL") private var remoteMusicURL = ""
+    @AppStorage("generationMusic.localURL") private var localMusicURL = ""
     @AppStorage("generationMusic.volume") private var musicVolume = 0.6
     @ObservedObject private var generationMusic = GenerationMusic.shared
     @State private var compatibility = AISettingsStore.compatibility
@@ -26,6 +29,7 @@ struct AIConfigurationSettingsView: View {
     @State private var showAdvancedGeneration = false
     @State private var musicPrefetchTask: Task<Void, Never>?
     @State private var choosingMusicFile = false
+    @State private var musicFileError: String?
 
     var body: some View {
         Form {
@@ -93,30 +97,57 @@ struct AIConfigurationSettingsView: View {
 
             Section {
                 Toggle("Play music while generating", isOn: $musicEnabled)
-                Button {
-                    choosingMusicFile = true
-                } label: {
-                    Label(musicURL.isEmpty ? "Choose Audio File" : "Change Audio File", systemImage: "folder")
+                Picker("Music source", selection: $musicSourceMode) {
+                    Text("Choose File").tag("file")
+                    Text("Download URL").tag("url")
                 }
-                .fileImporter(isPresented: $choosingMusicFile, allowedContentTypes: [.audio]) { result in
-                    do {
-                        let selected = try result.get()
-                        let accessed = selected.startAccessingSecurityScopedResource()
-                        defer { if accessed { selected.stopAccessingSecurityScopedResource() } }
-                        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                            .appendingPathComponent("GenerationMusic", isDirectory: true)
-                        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                        let destination = root.appendingPathComponent(UUID().uuidString + "." + selected.pathExtension)
-                        try FileManager.default.copyItem(at: selected, to: destination)
-                        musicURL = destination.absoluteString
-                        generationMusic.prefetch()
-                    } catch {
-                        generationMusic.stopPreview()
+                .pickerStyle(.segmented)
+                .onChange(of: musicSourceMode) { newMode in
+                    musicURL = newMode == "url" ? remoteMusicURL : localMusicURL
+                    generationMusic.prefetch()
+                }
+                if musicSourceMode == "url" {
+                    TextField("Direct audio URL (https://…)", text: $remoteMusicURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: remoteMusicURL) { value in
+                            musicURL = value
+                            generationMusic.prefetch()
+                        }
+                } else {
+                    Button {
+                        choosingMusicFile = true
+                    } label: {
+                        Label(localMusicURL.isEmpty ? "Choose Audio File" : "Change Audio File", systemImage: "folder")
+                    }
+                    .fileImporter(isPresented: $choosingMusicFile,
+                                  allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav]) { result in
+                        do {
+                            let selected = try result.get()
+                            let accessed = selected.startAccessingSecurityScopedResource()
+                            defer { if accessed { selected.stopAccessingSecurityScopedResource() } }
+                            let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                                .appendingPathComponent("GenerationMusic", isDirectory: true)
+                            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                            let ext = selected.pathExtension.isEmpty ? "m4a" : selected.pathExtension
+                            let destination = root.appendingPathComponent(UUID().uuidString + "." + ext)
+                            try FileManager.default.copyItem(at: selected, to: destination)
+                            localMusicURL = destination.absoluteString
+                            musicURL = localMusicURL
+                            musicFileError = nil
+                            generationMusic.prefetch()
+                        } catch {
+                            musicFileError = "Could not import audio file: \\(error.localizedDescription)"
+                        }
+                    }
+                    if !localMusicURL.isEmpty {
+                        Text(URL(string: localMusicURL)?.lastPathComponent ?? "Selected audio")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                if !musicURL.isEmpty {
-                    Text(URL(string: musicURL)?.lastPathComponent ?? "Selected audio")
-                        .font(.caption).foregroundStyle(.secondary)
+                if let musicFileError {
+                    Text(musicFileError).font(.caption).foregroundStyle(.red)
                 }
                 HStack {
                     Text("Volume")
@@ -134,7 +165,7 @@ struct AIConfigurationSettingsView: View {
             } header: {
                 Text("Generation Music")
             } footer: {
-                Text("Choose an audio file (MP3, M4A, WAV…). It loops during generation and edits, and stops when the run finishes.")
+                Text("Choose an audio file from Files or enter a direct HTTPS audio URL to download and cache it. Playback loops during generation and edits.")
             }
 
             }
