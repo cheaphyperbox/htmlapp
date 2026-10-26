@@ -6,6 +6,25 @@ enum PermissionRequestGate {
     enum Verdict { case proceed, ignore, autoDenied }
     private static var recent: [String: [TimeInterval]] = [:]
     private static var notices: Set<String> = []
+    private static var pending: [String: [(Bool) -> Void]] = [:]
+
+    static func queue(appID: String, permission: String,
+                      completion: @escaping (Bool) -> Void) -> Bool {
+        let key = appID + ":" + permission
+        let first = pending[key] == nil
+        pending[key, default: []].append(completion)
+        return first
+    }
+
+    static func hasPending(appID: String, permission: String) -> Bool {
+        pending[appID + ":" + permission] != nil
+    }
+
+    static func finish(appID: String, permission: String, allowed: Bool) {
+        let callbacks = pending.removeValue(forKey: appID + ":" + permission) ?? []
+        callbacks.forEach { $0(allowed) }
+    }
+
     static func showNotice(appID: String, title: String) {
         guard !notices.contains(appID + title) else { return }
         notices.insert(appID + title)
