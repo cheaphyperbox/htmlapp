@@ -60,6 +60,22 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                 }
             }
+        case "bluetooth.battery":
+            guard let deviceID = args["id"] as? String else {
+                reject(id, code: "invalid_device", message: "Provide the ID of a device from a BLE scan.")
+                return
+            }
+            withPermission(.bluetooth, id: id) { [weak self] in
+                guard let self else { return }
+                self.bluetoothDiscovery.readBattery(deviceID: deviceID) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let level): self.resolve(id, value: ["percentage": level])
+                    case .failure(let error):
+                        self.reject(id, code: "battery_unavailable", message: error.localizedDescription)
+                    }
+                }
+            }
         case "tabs.configure":
             guard appID != "PREVIEW" else {
                 reject(id, code: "preview_restricted", message: "Native tabs are unavailable in preview.")
@@ -99,7 +115,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "bluetooth.scan", "tabs.configure", "tabs.select", "tabs.remove",
+                    "motion.pedometer", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -1803,7 +1819,8 @@ enum HTMLNativeAPIScript {
           pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) })
         },
         bluetooth: {
-          scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) })
+          scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) }),
+          battery: (id) => call('bluetooth.battery', { id: String(id || '') })
         },
         tabs: {
           configure: async (items) => {
