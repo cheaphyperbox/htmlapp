@@ -347,4 +347,26 @@ assert 'CBUUID(string: "2A19")' in ble and 'didUpdateValueFor' in ble
 assert 'case "bluetooth.battery":' in native and "battery: (id) => call('bluetooth.battery'" in native
 assert 'id: "bluetooth.battery"' in source("HTMLAppV3/DeviceAPICatalog.swift")
 
+# Audio, gestures, permission coordination and native seven-item tab support.
+assert 'BackgroundKeepAlive.shared.start()' in forge
+assert 'BackgroundKeepAlive.shared.stop()' in forge
+assert 'let wasUsingAudio = recording || tapped' in source("HTMLAppV3/ForgeDictation.swift")
+assert 'generationMusic.prefetch()' in source("HTMLAppV3/AISettingsView.swift")
+assert 'closeOnFlipShake' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'flipShakeCloser.start' in web_source
+assert 'sample.gravity.z > 0.82' in source("HTMLAppV3/FlipShakeClose.swift")
+gate = source("HTMLAppV3/PermissionRequestGate.swift")
+assert 'times.count > 10' in gate and 'now - $0 < 15' in gate
+assert 'PermissionRequestGate.check' in source("HTMLAppV3/PermissionSystem.swift")
+assert 'PermissionRequestGate.check' in source("HTMLAppV3/LocationPermissionBridge.swift")
+assert 'PermissionRequestGate.check' in web_source
+assert 'HTMLPermissionStore.requested' in source("HTMLAppV3/EnhancedPermissionsView.swift")
+tab_source = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+assert 'UITabBarDelegate' in tab_source
+assert '(1...7).contains(entries.count)' in native
+assert 'case "tabs.update":' in native
+assert 'case "tabs.setHidden":' in native and 'case "tabs.pulse":' in native
+assert 'tabs.setHidden' in source("HTMLAppV3/DeviceAPICatalog.swift")
+assert '12 characters' in ai
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
