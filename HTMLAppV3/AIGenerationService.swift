@@ -2095,6 +2095,7 @@ HTMLAPP GESTURES AND REAL NATIVE TAB BARS:
   await HTMLAppNative.tabs.select("home");
   await HTMLAppNative.tabs.remove();
 - The host owns the tab bar appearance and handling. The generated app owns destinations and content through onSelect. Each item needs a stable unique ASCII id, short title, valid SF Symbol; supply 1 to 7 tabs only. Do NOT draw an overlapping fake CSS bottom tab bar when using native tabs. The host on iOS 26 chooses native materials; HTML cannot force Liquid Glass on earlier iOS releases. Only use native tabs for a saved, host-run app, and provide graceful HTML navigation fallback where the bridge is unavailable.
+- Native tab items may supply onSelect JavaScript callbacks and an optional badge. Update with HTMLAppNative.tabs.update(id,{badge:""}), hide with tabs.setHidden(true), and animate with tabs.pulse(). Reserve padding-bottom: var(--htmlapp-tabbar-height, 0px) in the HTML page. The host owns system tab visuals.
 - Before calling bridge APIs, query await HTMLAppNative.capabilities(); check methods includes "tabs.configure" and avoid invented APIs. Test that each tab selection renders the actual intended screen and that app data persists across switching.
 
 HTMLAPP SF SYMBOLS:
