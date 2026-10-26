@@ -369,4 +369,25 @@ assert 'case "tabs.setHidden":' in native and 'case "tabs.pulse":' in native
 assert 'tabs.setHidden' in source("HTMLAppV3/DeviceAPICatalog.swift")
 assert '12 characters' in ai
 
+# Native tab configuration, background audio, permission protection, and sensor support.
+tab_view = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+gate = source("HTMLAppV3/PermissionRequestGate.swift")
+assert "UITabBar()" in tab_view and "UITabBarController()" not in tab_view
+assert "func update(id:" in tab_view and "func setHidden(" in tab_view and "func pulse()" in tab_view
+assert "(1...7).contains(entries.count)" in native
+for method in ("tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse"):
+    assert method in native, f"Missing native tab method: {method}"
+assert "api.tabs._handlers = handlers" in native and "typeof fn === 'function'" in native
+assert "HTMLAppNative.tabs.update" in ai or "tabs.update" in ai
+assert "processInfo.systemUptime" in gate.lower() or "systemUptime" in gate
+assert "times.count > 10" in gate and "now - $0 < 15" in gate
+for file in ("HTMLAppV3/PermissionSystem.swift", "HTMLAppV3/LocationPermissionBridge.swift", "HTMLAppV3/EditorWeb.swift"):
+    assert "PermissionRequestGate.check" in source(file), f"Missing rate limiter: {file}"
+assert 'closeOnFlipShake' in bridge and 'closeOnFlipShake' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'BackgroundKeepAlive.shared.start()' in source("HTMLAppV3/AIGenerationView.swift")
+assert 'if wasUsingAudio' in source("HTMLAppV3/ForgeDictation.swift")
+assert 'case "motion.altitude":' in native and "CMAltimeter" in native
+assert 'id: "motion.altitude"' in source("HTMLAppV3/DeviceAPICatalog.swift")
+assert (root / "docs/apns-ptt-deployment.md").exists()
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
