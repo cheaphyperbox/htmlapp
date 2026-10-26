@@ -97,7 +97,7 @@ assert 'BGTaskSchedulerPermittedIdentifiers:' in project and 'com.mekabrine.html
 assert 'ForgeStyleReferenceStore.clear(for: app.id)' in source("HTMLAppV3/EditorWeb.swift")
 assert 'originalUserPrompt ?? prompt' in ai and 'improved = planning.brief + visualReference' in ai
 
-assert 'compiledVersion = "1.6.25"' in release
+assert f'compiledVersion = "{version}"' in release
 assert 'HTMLAppFirstUseTips.show("firstAI")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("dragMic")' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'HTMLAppFirstUseTips.show("mockups")' in source("HTMLAppV3/AIGenerationView.swift")
@@ -106,7 +106,10 @@ assert 'Label("Developer", systemImage:' in source("HTMLAppV3/LibraryUI.swift")
 assert 'HTMLAppWebWarmup.prime()' in source("HTMLAppV3/LibraryUI.swift")
 assert 'configuration.processPool = HTMLAppWebWarmup.pool' in source("HTMLAppV3/EditorWeb.swift")
 assert 'case .qa: return "Creating App"' in source("HTMLAppV3/ForgeRunTelemetry.swift")
-assert 'guard let root = webView.window?.rootViewController else {' in source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+tab_bar_source = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+assert 'guard webView.window != nil, let host = webView.superview else {' in tab_bar_source, "Native tabs must mount within their WebView container"
+assert 'host.addSubview(created)' in tab_bar_source, "Native tabs must not attach to the global root controller"
+assert 'webView.window?.rootViewController' not in tab_bar_source, "Native tabs must not leak into editor screens"
 assert 'Button("Skip and make app now")' not in source("HTMLAppV3/AIGenerationView.swift")
 assert 'Give feedback on all looks' not in source("HTMLAppV3/AIGenerationView.swift")
 
