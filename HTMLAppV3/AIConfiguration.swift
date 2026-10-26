@@ -197,7 +197,7 @@ RESEARCH RESULTS
     }
 
     static func usesSpecialistProvider(for role: AIModelRole) -> Bool {
-        if ForgeRunOptions.quick && !quickModel.isEmpty { return false }
+        if (ForgeRunOptions.quick || UserDefaults.standard.bool(forKey: "forge.hurryUpCurrentRun")) && !quickModel.isEmpty { return false }
         return UserDefaults.standard.bool(forKey: "ai.specialist.\(role.rawValue).enabled")
     }
 
