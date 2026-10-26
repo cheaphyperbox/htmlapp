@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.28"
-    static let compiledBuild = "35"
+    static let compiledVersion = "1.6.29"
+    static let compiledBuild = "36"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.29" { return [
+            Entry(id: "motion-settings", title: "Custom motion settings", description: "Set the shake time and, in Developer Mode, the fade disappearance angle. Settings displays the selected values.", symbol: "slider.horizontal.3", tint: .blue)
+        ] }
         if version == "1.6.28" { return [
             Entry(id: "shake-completion", title: "More reliable face-down shake", description: "Shake progress now accumulates across natural motion impulses instead of requiring uninterrupted acceleration, allowing the exit animation and flashlight cue to trigger.", symbol: "iphone.radiowaves.left.and.right", tint: .blue)
         ] }
