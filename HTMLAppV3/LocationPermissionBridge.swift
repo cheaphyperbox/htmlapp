@@ -134,6 +134,7 @@ final class HTMLLocationBridge: NSObject, CLLocationManagerDelegate {
             return
         }
 
+        HTMLPermissionStore.markRequested("location", appID: appID)
         if HTMLPermissionStore.choice(for: .location, appID: appID) == .ask {
             switch PermissionRequestGate.check(appID: appID, permission: "location") {
             case .ignore:
