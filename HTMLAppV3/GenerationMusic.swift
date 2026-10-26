@@ -295,6 +295,10 @@ final class GenerationMusic: ObservableObject {
 
     private func fail(_ detail: String) {
         isPlaying = false
+        if generationWanted {
+            isGenerationActive = false
+            NotificationCenter.default.post(name: Self.playbackPausedNotification, object: nil)
+        }
         status = detail
         AIDebugTraceStore.shared.append("GENERATION MUSIC", detail)
     }
