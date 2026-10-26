@@ -174,10 +174,17 @@ struct ForgeBuildDashboard: View {
         VStack(alignment: .leading, spacing: 13) {
             if active {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Keep HTMLApp open and your screen on", systemImage: "exclamationmark.triangle.fill")
-                        .font(.title3.weight(.bold))
-                    Text("Leaving HTMLApp for too long or locking your device can interrupt the AI request and make generation or edits fail. Return to HTMLApp to continue.")
-                        .font(.subheadline.weight(.medium))
+                    if GenerationMusicSettings.enabled && GenerationMusicSettings.validatedURL(GenerationMusicSettings.url) != nil {
+                        Label("Generation in progress", systemImage: "music.note")
+                            .font(.title3.weight(.bold))
+                        Text("You can leave HTMLApp while it generates. Avoid calls, music, and videos during generation. To lock the screen, reopen HTMLApp first, then lock your phone.")
+                            .font(.subheadline.weight(.medium))
+                    } else {
+                        Label("Keep HTMLApp open and your screen on", systemImage: "exclamationmark.triangle.fill")
+                            .font(.title3.weight(.bold))
+                        Text("You can leave HTMLApp during generation. If you want to lock your screen, reopen HTMLApp first and then lock it. Without generation music, iOS may suspend the request.")
+                            .font(.subheadline.weight(.medium))
+                    }
                 }
                 .foregroundStyle(.white)
                 .padding(14)
