@@ -3,6 +3,7 @@ import WebKit
 import UIKit
 import UniformTypeIdentifiers
 import CoreMotion
+import AVFoundation
 
 enum EditorMode: Identifiable {
     case new
@@ -1086,6 +1087,7 @@ private final class HTMLAppFaceDownShakeExit {
         darkness = dark
         Self.transitionOwner = self
         updateBlackout()
+        flashTorch()
 
         var responder: UIResponder? = webView
         while let current = responder {
@@ -1106,13 +1108,32 @@ private final class HTMLAppFaceDownShakeExit {
 
     private func updateBlackout() {
         // z=+1 is face down; z=0 is 90 degrees; z=-1 is face up.
-        let fraction = CGFloat(max(0, min(1, lastGravityZ)))
-        darkness?.alpha = fraction
-        blackout?.alpha = fraction
+        // Fade fully by roughly 70 degrees of rotation from face down.
+        let fraction = CGFloat(max(0, min(1, (lastGravityZ - 0.342) / 0.658)))
+        let eased = fraction * fraction * (3 - 2 * fraction)
+        darkness?.alpha = eased
+        blackout?.alpha = eased
         if fraction <= 0.01 {
             cleanup()
             Self.transitionOwner = nil
         }
+    }
+
+    private func flashTorch() {
+        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
+        do {
+            try device.lockForConfiguration()
+            guard device.isTorchAvailable else { device.unlockForConfiguration(); return }
+            try device.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)
+            device.unlockForConfiguration()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                do {
+                    try device.lockForConfiguration()
+                    device.torchMode = .off
+                    device.unlockForConfiguration()
+                } catch { }
+            }
+        } catch { }
     }
 
     private func cleanup() {
