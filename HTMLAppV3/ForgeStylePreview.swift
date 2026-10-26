@@ -137,18 +137,17 @@ enum ForgeStylePreviewService {
              "One powerful command area, compact supporting detail rail and keyboard-like action row. No banner or bottom tabs.")
         ]
         let round = max(0, regeneration)
-        let slot = max(0, min(index, 2))
+        let slot = max(0, index % 3)
         let selectedIndex = (round * 3 + slot) % archetypes.count
         let variant = archetypes[selectedIndex]
         let competing = (0..<3).filter { $0 != slot }.map {
             archetypes[(round * 3 + $0) % archetypes.count].0
         }.joined(separator: ", ")
+        let freeform = index >= 3
         let user = """
         App idea: \(String(request.prefix(2300)))
         Requested changes: \(String(feedback.prefix(650)))
-        Design: \(variant.0) — \(variant.1).
-        MANDATORY composition: \(variant.2)
-        Other two looks in this round: \(competing). Do NOT imitate their layouts.
+        \(freeform ? "Choose your own entirely original visual style, layout, interaction pattern and design language. Do not follow any predefined aesthetic or archetype." : "Design: \(variant.0) — \(variant.1). Mandatory composition: \(variant.2). Avoid the other two looks: \(competing).")
         Style regeneration round: \(regeneration). Invent a completely new visual identity, section organization and interaction pattern on each round.
         System appearance: \(appearance). Design in this light/dark mode unless the user explicitly requested another mode.
         Every visible element MUST be relevant to the described app.
@@ -161,7 +160,7 @@ enum ForgeStylePreviewService {
         "Overview", "Make progress your way", "Recent activity" or fake tabs.
         Style \(slot + 1) must differ in layout, section order, hierarchy,
         map prominence, button placement and navigation — not merely colors.
-        The selected layout archetype is mandatory.
+        \(freeform ? "The AI must invent the design freely; no style presets." : "The selected layout archetype is mandatory.")
         """
         let system = """
         Return ONLY a complete standalone HTML document starting with <!DOCTYPE html>.
@@ -173,7 +172,7 @@ enum ForgeStylePreviewService {
         preview with domain-relevant content, different shapes and hierarchy.
         Three styles share the objective but must not share a template.
         No generic app dashboard, repeated card stacks or copied header/footer.
-        Follow the mandatory composition even when it differs from your default style.
+        \(freeform ? "Invent a new composition without presets." : "Follow the mandatory composition even when it differs from your default style.")
         No external resources, external CSS, scripts, JSON, explanation or Markdown.
         No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island
         or home indicator. The iOS host already provides system chrome.
@@ -192,8 +191,9 @@ enum ForgeStylePreviewService {
                     retryOnTransient: false
                 )
                 if let html = extractHTML(raw) {
-                    return ForgeStyleConcept(id: index, name: variant.0,
-                        summary: variant.1, direction: variant.2, previewHTML: html)
+                    return ForgeStyleConcept(id: index, name: freeform ? "AI Look \(index + 1)" : variant.0,
+                        summary: freeform ? "Original AI-designed concept" : variant.1,
+                        direction: freeform ? "Unrestricted creative direction" : variant.2, previewHTML: html)
                 }
                 let detail = "Look \(index + 1), attempt \(attempt + 1), model \(config.model): incomplete HTML (\(raw.count) characters)."
                 await MainActor.run {
