@@ -313,6 +313,7 @@ widget_launch = source("HTMLAppV3/HTMLAppWidgetLaunch.swift")
 assert 'struct HTMLAppWidgetAction:' in widget_shared
 assert 'HTMLAppWidgetActionLink.signature' in widget_render
 assert 'HMAC<SHA256>' in widget_shared
+assert 'Data(digest).base64EncodedString()' in widget_shared
 assert 'difference == 0' in widget_launch
 assert 'definition.snapshot.items?' in widget_launch
 assert 'window.htmlappLaunch' in widget_launch
