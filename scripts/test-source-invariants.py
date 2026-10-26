@@ -329,4 +329,10 @@ assert 'if quickModePolicy == "manual" {' in forge
 assert 'Label(AISettingsStore.configuration.model' not in forge
 assert 'Text(AISettingsStore.isUIOverhaulEnabled ?' not in forge
 
+# Generated nearby Bluetooth apps must use the available CoreBluetooth bridge.
+assert 'ALWAYS use HTMLAppNative.bluetooth.scan(6)' in ai
+assert 'Do NOT use navigator.bluetooth' in ai
+assert 'never navigator.bluetooth.requestDevice' in source("HTMLAppV3/DeviceAPICatalog.swift")
+assert 'bluetooth.scan' in source("HTMLAppV3/NativeAPIBridge.swift")
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
