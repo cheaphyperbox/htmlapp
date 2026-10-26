@@ -7,6 +7,7 @@ struct AIConfigurationSettingsView: View {
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
     @AppStorage("generationMusic.url") private var musicURL = ""
     @AppStorage("generationMusic.volume") private var musicVolume = 0.6
+    @AppStorage("generationMusic.silentKeepAlive") private var experimentalSilentAudio = false
     @ObservedObject private var generationMusic = GenerationMusic.shared
     @State private var compatibility = AISettingsStore.compatibility
     @State private var apiURL = AISettingsStore.apiURL
@@ -109,6 +110,9 @@ struct AIConfigurationSettingsView: View {
                 }
                 .disabled((!generationMusic.isPreview && GenerationMusicSettings.validatedURL(musicURL) == nil) ||
                           generationMusic.isGenerationActive)
+                Toggle("Experimental silent background audio", isOn: $experimentalSilentAudio)
+                Text("May keep a live generation running when locked, but iOS can stop it. Not suitable for App Store distribution; HTMLApp still uses background tasks when audio is unavailable.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text(generationMusic.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
