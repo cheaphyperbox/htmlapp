@@ -133,7 +133,13 @@ assert 'ForgeDraftCheckpointStore.clear()' in source("HTMLAppV3/AIGenerationView
 
 assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "currentPaint" in source("HTMLAppV3/AIIconRenderer.swift")
-assert "UITabBarController()" in source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+tab_bar = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
+assert "UITabBar()" in tab_bar, "Native tabs must use a standalone UITabBar"
+assert "UITabBarDelegate" in tab_bar
+assert "tabBar.setItems(items, animated: true)" in tab_bar
+assert "func setHidden(" in tab_bar
+assert "func update(" in tab_bar
+assert "func pulse()" in tab_bar
 assert "No fake iPhone frame, status bar, battery, clock, notch, Dynamic Island" in source("HTMLAppV3/ForgeStylePreview.swift")
 assert "Keep HTMLApp open and your screen on" in source("HTMLAppV3/ForgeBuildDashboard.swift")
 assert "testAIGeneratedFillCommandsRenderLocally" in source("HTMLAppWidgetTests/WidgetTests.swift")
