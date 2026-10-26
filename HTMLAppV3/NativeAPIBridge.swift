@@ -29,6 +29,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let pedometer = CMPedometer()
+    private let altimeter = CMAltimeter()
     private var nativeTabBar: HTMLAppNativeTabBar?
     private let bluetoothDiscovery = HTMLAppBluetoothDiscovery()
 
@@ -153,7 +154,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
+                    "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -240,6 +241,27 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                             "days": days
                         ])
                     }
+                }
+            }
+        case "motion.altitude":
+            withPermission(.motion, id: id) { [weak self] in
+                guard let self else { return }
+                guard CMAltimeter.isRelativeAltitudeAvailable() else {
+                    self.reject(id, code: "altimeter_unavailable",
+                                message: "This device has no barometer.")
+                    return
+                }
+                self.altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] reading, error in
+                    guard let self else { return }
+                    self.altimeter.stopRelativeAltitudeUpdates()
+                    guard let reading, error == nil else {
+                        self.reject(id, code: "altimeter_failed", message: "Barometer reading unavailable.")
+                        return
+                    }
+                    self.resolve(id, value: [
+                        "relativeAltitudeMeters": reading.relativeAltitude.doubleValue,
+                        "pressureKPa": reading.pressure.doubleValue
+                    ])
                 }
             }
         case "device.torch":
@@ -1861,7 +1883,8 @@ enum HTMLNativeAPIScript {
         call,
         capabilities: () => call('capabilities.list'),
         motion: {
-          pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) })
+          pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) }),
+          altitude: () => call('motion.altitude')
         },
         bluetooth: {
           scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) }),
