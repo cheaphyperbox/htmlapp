@@ -111,20 +111,8 @@ struct WebRunner: View {
         HTMLWebView(html: app.html, appID: app.id)
             .statusBarHidden(Self.shouldHideStatusBar(in: app.html))
             .htmlAppFirstUseToasts()
-            .onAppear {
-                HTMLAppFirstUseTips.show("open")
-                if closeOnFlipShake {
-                    flipShakeCloser.start { store.runningApp = nil }
-                }
-            }
-            .onChange(of: closeOnFlipShake) { enabled in
-                if enabled {
-                    flipShakeCloser.start { store.runningApp = nil }
-                } else {
-                    flipShakeCloser.stop()
-                }
-            }
-            .onDisappear { flipShakeCloser.stop() }
+            .onAppear { HTMLAppFirstUseTips.show("open") }
+
     }
 }
 
