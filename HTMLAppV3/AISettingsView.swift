@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AIConfigurationSettingsView: View {
     @AppStorage("developerMode") private var developerMode = false
@@ -7,7 +8,6 @@ struct AIConfigurationSettingsView: View {
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
     @AppStorage("generationMusic.url") private var musicURL = ""
     @AppStorage("generationMusic.volume") private var musicVolume = 0.6
-    @AppStorage("generationMusic.silentKeepAlive") private var experimentalSilentAudio = false
     @ObservedObject private var generationMusic = GenerationMusic.shared
     @State private var compatibility = AISettingsStore.compatibility
     @State private var apiURL = AISettingsStore.apiURL
@@ -25,6 +25,7 @@ struct AIConfigurationSettingsView: View {
     @State private var showAdvancedRoles = false
     @State private var showAdvancedGeneration = false
     @State private var musicPrefetchTask: Task<Void, Never>?
+    @State private var choosingMusicFile = false
 
     var body: some View {
         Form {
@@ -92,21 +93,31 @@ struct AIConfigurationSettingsView: View {
 
             Section {
                 Toggle("Play music while generating", isOn: $musicEnabled)
-                TextField("Audio file URL (https://…)", text: $musicURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .submitLabel(.done)
-                    .onSubmit { generationMusic.prefetch() }
-                    .onChange(of: musicURL) { _ in
-                        musicPrefetchTask?.cancel()
-                        guard GenerationMusicSettings.validatedURL(musicURL) != nil else { return }
-                        musicPrefetchTask = Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 850_000_000)
-                            guard !Task.isCancelled else { return }
-                            generationMusic.prefetch()
-                        }
+                Button {
+                    choosingMusicFile = true
+                } label: {
+                    Label(musicURL.isEmpty ? "Choose Audio File" : "Change Audio File", systemImage: "folder")
+                }
+                if !musicURL.isEmpty {
+                    Text(URL(string: musicURL)?.lastPathComponent ?? "Selected audio")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .fileImporter(isPresented: $choosingMusicFile, allowedContentTypes: [.audio]) { result in
+                    do {
+                        let selected = try result.get()
+                        let accessed = selected.startAccessingSecurityScopedResource()
+                        defer { if accessed { selected.stopAccessingSecurityScopedResource() } }
+                        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                            .appendingPathComponent("GenerationMusic", isDirectory: true)
+                        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+                        let destination = root.appendingPathComponent(UUID().uuidString + "." + selected.pathExtension)
+                        try FileManager.default.copyItem(at: selected, to: destination)
+                        musicURL = destination.absoluteString
+                        generationMusic.prefetch()
+                    } catch {
+                        generationMusic.stopPreview()
                     }
+                }
                 HStack {
                     Text("Volume")
                     Slider(value: $musicVolume, in: 0...1)
@@ -117,16 +128,13 @@ struct AIConfigurationSettingsView: View {
                 }
                 .disabled((!generationMusic.isPreview && GenerationMusicSettings.validatedURL(musicURL) == nil) ||
                           generationMusic.isGenerationActive)
-                Toggle("Experimental silent background audio", isOn: $experimentalSilentAudio)
-                Text("May keep a live generation running when locked, but iOS can stop it. Not suitable for App Store distribution; HTMLApp still uses background tasks when audio is unavailable.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Text(generationMusic.status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Generation Music")
             } footer: {
-                Text("Link to any audio file (MP3, M4A, WAV…). It downloads once, then loops during every app generation or edit and stops when the run finishes.")
+                Text("Choose an audio file (MP3, M4A, WAV…). It loops during generation and edits, and stops when the run finishes.")
             }
 
             }
