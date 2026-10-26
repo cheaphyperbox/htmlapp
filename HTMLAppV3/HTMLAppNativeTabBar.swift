@@ -39,11 +39,20 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
             let created = UITabBar()
             created.delegate = self
             created.translatesAutoresizingMaskIntoConstraints = false
+            // Fill the available width instead of allowing a tiny centered compact bar.
+            created.itemPositioning = .fill
+            created.itemSpacing = 0
+            created.itemWidth = 0
+            let appearance = UITabBarAppearance()
+            appearance.configureWithDefaultBackground()
+            created.standardAppearance = appearance
+            created.scrollEdgeAppearance = appearance
             host.addSubview(created)
             NSLayoutConstraint.activate([
                 created.leadingAnchor.constraint(equalTo: host.leadingAnchor),
                 created.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-                created.bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor)
+                created.bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor),
+                created.heightAnchor.constraint(greaterThanOrEqualToConstant: 64)
             ])
             bar = created
             tabBar = created
