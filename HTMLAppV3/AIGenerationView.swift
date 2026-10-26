@@ -38,6 +38,8 @@ struct AIGenerationView: View {
     @AppStorage("ai.stylePickerEnabled") private var stylePickerEnabled = true
     @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @State private var quickMode = false
+    @State private var showHurryUp = false
+    @State private var hurriedThisRun = false
     @State private var autoQuickReason: String?
     @State private var polishThisRun = false
     @State private var exploringStyles = false
@@ -1099,6 +1101,17 @@ struct AIGenerationView: View {
                             .lineLimit(2)
                     }
                     Spacer(minLength: 4)
+                    if showHurryUp && !hurriedThisRun && !quickMode &&
+                       !AISettingsStore.quickModel.isEmpty &&
+                       (session.isWorking || browserResearch.isBrowsing) {
+                        Button("Hurry Up!") {
+                            UserDefaults.standard.set(true, forKey: "forge.hurryUpCurrentRun")
+                            hurriedThisRun = true
+                            quickMode = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
                     if session.isWorking || browserResearch.isBrowsing {
                         Button { stopKeepingDraft() } label: {
                             Label("Stop", systemImage: "stop.fill")
@@ -1473,6 +1486,13 @@ struct AIGenerationView: View {
     }
 
     private func startForgeActivity(edit: Bool) {
+        UserDefaults.standard.set(false, forKey: "forge.hurryUpCurrentRun")
+        showHurryUp = false
+        hurriedThisRun = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            if forgeActivityJobID != nil { showHurryUp = true }
+        }
         HTMLAppForgeBackgroundNotice.prepare()
         BackgroundKeepAlive.shared.start()
         GenerationMusic.shared.start()
@@ -1491,6 +1511,8 @@ struct AIGenerationView: View {
     private func endForgeActivity(onlyIf expected: String? = nil) {
         guard let job = forgeActivityJobID, expected == nil || expected == job else { return }
         BackgroundKeepAlive.shared.stop()
+        UserDefaults.standard.set(false, forKey: "forge.hurryUpCurrentRun")
+        showHurryUp = false
         if !ForgeBackgroundUpload.shared.isActive { GenerationMusic.shared.stop() }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
