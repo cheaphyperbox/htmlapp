@@ -866,8 +866,10 @@ final class AppStore: ObservableObject {
     }
 
     func exportHTML(_ app: SavedHTMLApp) {
+        let safeName = HTMLFileName.safe(app.name)
+        let fileName = safeName.lowercased().hasSuffix(".html") ? safeName : safeName + ".html"
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(HTMLFileName.safe(app.name).replacingOccurrences(of: ".html", with: "", options: [.caseInsensitive, .anchored], range: nil) + ".html")
+            .appendingPathComponent(fileName)
         do {
             try Data(app.html.utf8).write(to: url, options: .atomic)
             SharePresenter.present(items: [url])
