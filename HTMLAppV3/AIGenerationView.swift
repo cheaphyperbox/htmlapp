@@ -362,7 +362,7 @@ struct AIGenerationView: View {
                     // Forge task executing after lock. Preserve the existing
                     // generation pipeline rather than paying for a second request.
                     // Use background URLSession when music isn't playing.
-                    if !GenerationMusic.shared.isPlaying && !GenerationMusic.shared.isGenerationActive {
+                    if !BackgroundKeepAlive.shared.isRunning && !GenerationMusic.shared.isPlaying && !GenerationMusic.shared.isGenerationActive {
                         handoffForgeToBackgroundURLSession()
                     }
                 }
@@ -1417,6 +1417,7 @@ struct AIGenerationView: View {
     }
 
     private func startForgeActivity(edit: Bool) {
+        BackgroundKeepAlive.shared.start()
         GenerationMusic.shared.start()
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
@@ -1432,6 +1433,7 @@ struct AIGenerationView: View {
 
     private func endForgeActivity(onlyIf expected: String? = nil) {
         guard let job = forgeActivityJobID, expected == nil || expected == job else { return }
+        BackgroundKeepAlive.shared.stop()
         if !ForgeBackgroundUpload.shared.isActive { GenerationMusic.shared.stop() }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
