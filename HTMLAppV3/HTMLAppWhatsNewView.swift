@@ -30,6 +30,12 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.22" { return [
+            Entry(id: "audio", title: "More dependable generation audio", description: "Music URL prefetch and safer dictation teardown reduce interruptions. Experimental silent audio is optional; background processing remains best-effort.", symbol: "waveform", tint: .purple),
+            Entry(id: "gesture", title: "Flip and shake to close", description: "An optional face-down shake returns from a saved app to Library.", symbol: "iphone.radiowaves.left.and.right", tint: .blue),
+            Entry(id: "tabs", title: "Up to seven native tabs", description: "Apps can request compact UIKit tabs with badges, JavaScript selection callbacks and animations.", symbol: "square.stack", tint: .mint),
+            Entry(id: "permissions", title: "Quieter permissions", description: "Repeated requests are coalesced and abusive prompts are blocked, with permissions shown in a simpler list.", symbol: "hand.raised.fill", tint: .orange)
+        ] }
         if version == "1.6.21" { return [
             Entry(id: "ai-privacy", title: "AI Generation Privacy", description: "Control whether Forge may use location, date, device, calendar, reminders or public HTTPS research. All permissions default off.", symbol: "hand.raised.shield.fill", tint: .blue),
             Entry(id: "widget-actions", title: "Actionable app widgets", description: "Generated widgets can open specific screens or deliver validated action context through signed links.", symbol: "square.grid.2x2.fill", tint: .purple),
