@@ -1548,6 +1548,29 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
     }
 
+    private func installNotificationSound(id: String, args: [String: Any]) {
+        guard let name = args["name"] as? String,
+              name.range(of: #"^[A-Za-z0-9_-]{1,64}\\.(caf|wav|aiff)$"#,
+                         options: [.regularExpression, .caseInsensitive]) != nil,
+              let base64 = args["base64"] as? String,
+              base64.count <= 7_000_000,
+              let data = Data(base64Encoded: base64),
+              !data.isEmpty, data.count <= 5_000_000 else {
+            reject(id, code: "invalid_sound", message: "Provide a .caf, .wav, or .aiff filename and up to 5 MB of base64 audio.")
+            return
+        }
+        do {
+            let sounds = try FileManager.default.url(for: .libraryDirectory, in: .userDomainMask,
+                                                     appropriateFor: nil, create: true)
+                .appendingPathComponent("Sounds", isDirectory: true)
+            try FileManager.default.createDirectory(at: sounds, withIntermediateDirectories: true)
+            try data.write(to: sounds.appendingPathComponent(name), options: .atomic)
+            resolve(id, value: ["installed": true, "name": name])
+        } catch {
+            reject(id, code: "sound_install_failed", message: error.localizedDescription)
+        }
+    }
+
     private func scheduleNotification(id: String, args: [String: Any]) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             guard let self else { return }
@@ -1561,7 +1584,15 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 let content = UNMutableNotificationContent()
                 content.title = args["title"] as? String ?? "HTMLApp"
                 content.body = args["body"] as? String ?? ""
-                content.sound = (args["silent"] as? Bool ?? false) ? nil : .default
+                if args["silent"] as? Bool == true {
+                    content.sound = nil
+                } else if let name = args["sound"] as? String,
+                          name.range(of: #"^[A-Za-z0-9_-]{1,64}\\.(caf|wav|aiff)$"#,
+                                         options: [.regularExpression, .caseInsensitive]) != nil {
+                    content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: name))
+                } else {
+                    content.sound = .default
+                }
 
                 let requestedID = (args["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let identifier = "native.\(self.appID)." + ((requestedID?.isEmpty == false ? requestedID! : UUID().uuidString))
