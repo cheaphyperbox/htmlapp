@@ -830,7 +830,7 @@ struct AIGenerationView: View {
                                 }
                                 .allowsHitTesting(!exploringStyles)
                             VStack(spacing: 10) {
-                                ForEach(0..<max(3, styleOptions.count), id: \.self) { slot in
+                                ForEach(0..<max(3, (styleOptions.map(\.id).max() ?? -1) + 1), id: \.self) { slot in
                                     let available = styleOptions.firstIndex(where: { $0.id == slot })
                                     Button {
                                         if let available { selectedStyleIndex = available }
