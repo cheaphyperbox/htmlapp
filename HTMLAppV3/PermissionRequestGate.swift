@@ -33,7 +33,12 @@ enum PermissionRequestGate {
               let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else { return }
         var current = root
         while let next = current.presentedViewController { current = next }
-        if current is UIAlertController { return }
+        if let shown = current as? UIAlertController {
+            shown.title = title + " blocked"
+            shown.message = "This HTML app requested this permission too often. It is now denied. To change it, open Library, hold the app and choose Permissions."
+            shown.actions.forEach { $0.isEnabled = $0.style == .cancel }
+            return
+        }
         let alert = UIAlertController(title: title + " blocked",
             message: "This HTML app requested this permission more than 10 times in 15 seconds. Open Library, hold this app, and select Permissions to change it.",
             preferredStyle: .alert)
