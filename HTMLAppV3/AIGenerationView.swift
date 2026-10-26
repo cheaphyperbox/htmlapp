@@ -1,3 +1,4 @@
+import UserNotifications
 import SwiftUI
 import UIKit
 
@@ -1417,6 +1418,7 @@ struct AIGenerationView: View {
     }
 
     private func startForgeActivity(edit: Bool) {
+        HTMLAppForgeBackgroundNotice.prepare()
         BackgroundKeepAlive.shared.start()
         GenerationMusic.shared.start()
         #if compiler(>=6.2)
@@ -1668,6 +1670,7 @@ struct AIGenerationView: View {
             }
             if session.errorMessage == nil && !Task.isCancelled {
                 await HTMLAppForgeCompletionFeedback.announce(edit: false)
+                HTMLAppForgeBackgroundNotice.completed(edit: false)
             }
             }
         }
@@ -1751,6 +1754,7 @@ Requested edit:
             }
             if session.errorMessage == nil && !Task.isCancelled {
                 await HTMLAppForgeCompletionFeedback.announce(edit: true)
+                HTMLAppForgeBackgroundNotice.completed(edit: true)
             }
             }
         }
@@ -2057,3 +2061,24 @@ private struct ForgeDetailsView: View {
     }
 }
 
+
+@MainActor
+private enum HTMLAppForgeBackgroundNotice {
+    static func prepare() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    static func completed(edit: Bool) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        let content = UNMutableNotificationContent()
+        content.title = edit ? "App update finished" : "Your app is ready"
+        content.body = edit ? "Your HTMLApp changes are complete." : "HTMLApp finished generating your app."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "htmlapp.forge.finished.\(UUID().uuidString)",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+}
