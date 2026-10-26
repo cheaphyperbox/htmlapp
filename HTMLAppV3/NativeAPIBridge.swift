@@ -1550,7 +1550,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
 
     private func installNotificationSound(id: String, args: [String: Any]) {
         guard let name = args["name"] as? String,
-              name.range(of: #"^[A-Za-z0-9_-]{1,64}\\.(caf|wav|aiff)$"#,
+              name.range(of: #"^[A-Za-z0-9_-]{1,64}\.(caf|wav|aiff)$"#,
                          options: [.regularExpression, .caseInsensitive]) != nil,
               let base64 = args["base64"] as? String,
               base64.count <= 7_000_000,
@@ -1587,7 +1587,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 if args["silent"] as? Bool == true {
                     content.sound = nil
                 } else if let name = args["sound"] as? String,
-                          name.range(of: #"^[A-Za-z0-9_-]{1,64}\\.(caf|wav|aiff)$"#,
+                          name.range(of: #"^[A-Za-z0-9_-]{1,64}\.(caf|wav|aiff)$"#,
                                          options: [.regularExpression, .caseInsensitive]) != nil {
                     content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: name))
                 } else {
