@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.29"
-    static let compiledBuild = "36"
+    static let compiledVersion = "1.6.30"
+    static let compiledBuild = "37"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.30" { return [
+            Entry(id: "capability-lookup", title: "On-demand native capability research", description: "Forge can request the complete HTMLApp capability catalog or focused sections such as Bluetooth, widgets, tabs, and device information before generating or editing apps.", symbol: "books.vertical", tint: .blue)
+        ] }
         if version == "1.6.29" { return [
             Entry(id: "motion-settings", title: "Custom motion settings", description: "Set the shake time and, in Developer Mode, the fade disappearance angle. Settings displays the selected values.", symbol: "slider.horizontal.3", tint: .blue)
         ] }
