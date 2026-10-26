@@ -37,7 +37,7 @@ enum HTMLAppWidgetActionLink {
         let message = [appID, widgetID, actionID, itemID ?? ""].joined(separator: "\\n")
         let digest = HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
                                                      using: SymmetricKey(data: bytes))
-        return Data(digest).base64Encoded()
+        return Data(digest).base64EncodedString()
     }
 }
 
