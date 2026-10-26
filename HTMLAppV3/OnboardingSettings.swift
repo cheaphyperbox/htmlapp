@@ -421,6 +421,7 @@ struct SettingsView: View {
     @AppStorage("libraryFoldersOnTop") private var libraryFoldersOnTop = true
     @AppStorage("libraryFavoritesOnTop") private var libraryFavoritesOnTop = true
     @AppStorage("askBeforeSwitch") private var askBeforeSwitch = true
+    @AppStorage("closeOnFlipShake") private var closeOnFlipShake = false
     @AppStorage("sourceRefreshDays") private var sourceRefreshDays = 3
     @AppStorage("autoApplyWebsiteUpdates") private var autoApplyWebsiteUpdates = false
     @AppStorage("webClipFullScreen") private var webClipFullScreen = true
@@ -555,6 +556,13 @@ struct SettingsView: View {
                     Text("Create apps, manage Home Screen widgets, and share or back up your Library.")
                 }
 
+                Section("App Controls") {
+                    Toggle("Close app by flipping face down and shaking", isOn: $closeOnFlipShake)
+                    Text("While an HTML app is open, hold the phone screen-down and gently shake for about one second to return to Library.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Toggle("Ask before switching apps", isOn: $askBeforeSwitch)
+                }
+
                 Section("Developer") {
                     Toggle("Developer Mode", isOn: $developerMode)
                     if developerMode {
@@ -574,12 +582,6 @@ struct SettingsView: View {
                 }
 
                 if developerMode {
-                Section("Opening Apps") {
-                    Toggle("Ask before switching apps", isOn: $askBeforeSwitch)
-                    Text("When a URL scheme arrives while an HTML app is open, HTMLApp can ask before unloading it and opening the linked app.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
                 Section("Downloaded Websites") {
                     Toggle("Always apply website updates immediately", isOn: $autoApplyWebsiteUpdates)
                     Text(autoApplyWebsiteUpdates
