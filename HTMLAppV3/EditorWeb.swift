@@ -575,6 +575,7 @@ struct HTMLWebView: UIViewRepresentable {
 
         private func requestSensorPermission(callbackID: String) {
             guard appID != "PREVIEW" else { resolveSensor(callbackID, value: "denied"); return }
+            HTMLPermissionStore.markRequested("motionSensor", appID: appID)
             if HTMLSensorPermissionPolicy.choice(appID: appID) == .ask {
                 switch PermissionRequestGate.check(appID: appID, permission: "motion") {
                 case .ignore:
