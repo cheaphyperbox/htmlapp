@@ -326,8 +326,9 @@ final class NativePermissionCoordinator: NSObject, CLLocationManagerDelegate {
         case .deny:
             completion(false)
         case .ask:
+            guard PermissionRequestGate.queue(appID: appID, permission: permission.rawValue, completion: completion) else { return }
             guard let presenter = UIViewController.htmlAppTopViewController else {
-                completion(false)
+                PermissionRequestGate.finish(appID: appID, permission: permission.rawValue, allowed: false)
                 return
             }
             let alert = UIAlertController(
