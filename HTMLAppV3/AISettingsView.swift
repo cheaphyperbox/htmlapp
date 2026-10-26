@@ -102,6 +102,17 @@ struct AIConfigurationSettingsView: View {
                     Text("Download URL").tag("url")
                 }
                 .pickerStyle(.segmented)
+                .onAppear {
+                    if remoteMusicURL.isEmpty && localMusicURL.isEmpty && !musicURL.isEmpty {
+                        if musicURL.hasPrefix("file:") {
+                            localMusicURL = musicURL
+                            musicSourceMode = "file"
+                        } else {
+                            remoteMusicURL = musicURL
+                            musicSourceMode = "url"
+                        }
+                    }
+                }
                 .onChange(of: musicSourceMode) { newMode in
                     musicURL = newMode == "url" ? remoteMusicURL : localMusicURL
                     generationMusic.prefetch()
@@ -122,7 +133,7 @@ struct AIConfigurationSettingsView: View {
                         Label(localMusicURL.isEmpty ? "Choose Audio File" : "Change Audio File", systemImage: "folder")
                     }
                     .fileImporter(isPresented: $choosingMusicFile,
-                                  allowedContentTypes: [.audio, .mp3, .mpeg4Audio, .wav]) { result in
+                                  allowedContentTypes: [.audio]) { result in
                         do {
                             let selected = try result.get()
                             let accessed = selected.startAccessingSecurityScopedResource()
@@ -138,7 +149,7 @@ struct AIConfigurationSettingsView: View {
                             musicFileError = nil
                             generationMusic.prefetch()
                         } catch {
-                            musicFileError = "Could not import audio file: \\(error.localizedDescription)"
+                            musicFileError = "Could not import audio file: \(error.localizedDescription)"
                         }
                     }
                     if !localMusicURL.isEmpty {
