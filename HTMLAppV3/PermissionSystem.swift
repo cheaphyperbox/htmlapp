@@ -312,6 +312,7 @@ final class NativePermissionCoordinator: NSObject, CLLocationManagerDelegate {
             return
         }
 
+        HTMLPermissionStore.markRequested(permission.rawValue, appID: appID)
         if HTMLPermissionStore.choice(for: permission, appID: appID) == .ask {
             switch PermissionRequestGate.check(appID: appID, permission: permission.rawValue) {
             case .ignore:
