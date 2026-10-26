@@ -25,7 +25,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
         let tabBar: UITabBar
         if let bar { tabBar = bar }
         else {
-            guard let root = webView.window?.rootViewController else {
+            guard webView.window != nil, let host = webView.superview else {
                 guard mountAttempts < 20 else { return }
                 mountAttempts += 1
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
@@ -35,7 +35,8 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
                 return
             }
             mountAttempts = 0
-            let host = Self.topController(from: root).view!
+            // Keep tabs inside their own WebView container. Never attach to the
+            // app's root controller, which would leak tabs into editing screens.
             let created = UITabBar()
             created.delegate = self
             created.translatesAutoresizingMaskIntoConstraints = false
