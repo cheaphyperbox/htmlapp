@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.22"
-    static let compiledBuild = "29"
+    static let compiledVersion = "1.6.23"
+    static let compiledBuild = "30"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,14 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.23" { return [
+            Entry(id: "shake-exit", title: "Face-down shake exit", description: "Shake a face-down iPhone to close the running HTML app, with a flashlight cue and a black-and-blurred screen that fades as you rotate it.", symbol: "iphone.radiowaves.left.and.right", tint: .blue),
+            Entry(id: "photo-compat", title: "Photo picker compatibility", description: "Selected images are easier for both new and older HTML apps to display.", symbol: "photo.on.rectangle", tint: .green),
+            Entry(id: "music-files", title: "Choose generation music from Files", description: "Pick a local audio track instead of entering a URL, with clearer guidance for background generation.", symbol: "music.note", tint: .purple),
+            Entry(id: "forge-controls", title: "More AI generation controls", description: "Add three original AI looks, speed up a run with Hurry Up!, undo unsaved edits and approve rare full rewrites.", symbol: "sparkles", tint: .orange),
+            Entry(id: "island", title: "Generation progress in Dynamic Island", description: "See the active AI phase and progress while a Live Activity is running.", symbol: "circle.dotted.circle", tint: .mint),
+            Entry(id: "sharing", title: "Organized app actions", description: "App menus group everyday actions, sharing and developer tools. Raw code exports use HTML files.", symbol: "square.and.arrow.up", tint: .indigo)
+        ] }
         if version == "1.6.22" { return [
             Entry(id: "audio", title: "More dependable generation audio", description: "Music URL prefetch and safer dictation teardown reduce interruptions. Experimental silent audio is optional; background processing remains best-effort.", symbol: "waveform", tint: .purple),
             Entry(id: "gesture", title: "Flip and shake to close", description: "An optional face-down shake returns from a saved app to Library.", symbol: "iphone.radiowaves.left.and.right", tint: .blue),
