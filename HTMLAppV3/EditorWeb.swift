@@ -1090,8 +1090,15 @@ private final class HTMLAppFaceDownShakeExit {
         var responder: UIResponder? = webView
         while let current = responder {
             if let controller = current as? UIViewController {
-                controller.dismiss(animated: false)
-                break
+                if let presented = controller.presentingViewController {
+                    presented.dismiss(animated: false)
+                    break
+                }
+                if let navigation = controller.navigationController,
+                   navigation.viewControllers.count > 1 {
+                    navigation.popViewController(animated: false)
+                    break
+                }
             }
             responder = current.next
         }
