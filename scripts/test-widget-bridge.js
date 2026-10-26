@@ -82,6 +82,41 @@ vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,c
   window.__htmlappNativeResolve(configureCall.id, true, {enabled:true,count:2});
   assert.equal((await tabs).enabled, true);
   assert.equal(selectedTab, 'home', 'Native tabs must select their first destination');
+  let selectedPerItem = null;
+  const seven = window.HTMLAppNative.tabs.configure([
+    {id:'one',title:'One',onSelect:()=>{selectedPerItem='one'}},
+    {id:'two',title:'Two',onSelect:()=>{selectedPerItem='two'}},
+    {id:'three',title:'Three'}, {id:'four',title:'Four'},
+    {id:'five',title:'Five'}, {id:'six',title:'Six'},
+    {id:'seven',title:'Seven',badge:'3'}
+  ]);
+  const sevenCall = messages.shift();
+  assert.equal(sevenCall.args.items.length,7);
+  assert.equal(sevenCall.args.items[0].onSelect,undefined);
+  window.__htmlappNativeResolve(sevenCall.id,true,{enabled:true,count:7});
+  await seven;
+  window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select',{detail:{id:'two'}}));
+  assert.equal(selectedPerItem,'two');
+  const updateTab = window.HTMLAppNative.tabs.update('seven',{badge:''});
+  const updateCall = messages.shift();
+  assert.equal(updateCall.method,'tabs.update');
+  window.__htmlappNativeResolve(updateCall.id,true,{updated:true});
+  await updateTab;
+  const hideTab = window.HTMLAppNative.tabs.setHidden(true);
+  const hideCall = messages.shift();
+  assert.equal(hideCall.method,'tabs.setHidden');
+  window.__htmlappNativeResolve(hideCall.id,true,{ok:true});
+  await hideTab;
+  const pulse = window.HTMLAppNative.tabs.pulse();
+  const pulseCall = messages.shift();
+  assert.equal(pulseCall.method,'tabs.pulse');
+  window.__htmlappNativeResolve(pulseCall.id,true,{ok:true});
+  await pulse;
+  const push = window.HTMLAppNative.push.register();
+  const pushCall = messages.shift();
+  assert.equal(pushCall.method,'push.register');
+  window.__htmlappNativeResolve(pushCall.id,true,{token:'test',appID:'fixture'});
+  assert.equal((await push).appID,'fixture');
   const ble = window.HTMLAppNative.bluetooth.scan(5);
   const bleCall = messages.shift();
   assert.equal(bleCall.method, 'bluetooth.scan');
