@@ -468,6 +468,21 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "Requires permission. Treat cancellation, denial, empty lists, and missing reminders as normal states."
         ),
         .init(
+            id: "push.register",
+            title: "Register for remote APNs alerts",
+            keywords: ["remote notifications", "push message", "APNs", "server notifications"],
+            purpose: "Opt in to iOS push notifications and obtain a device token for the user's own server.",
+            api: "await HTMLAppNative.push.register()",
+            example: """
+            try {
+              const registration = await HTMLAppNative.push.register();
+              // Send registration.token and the app ID to a server you control.
+              console.log('APNs registration ready', registration.appID);
+            } catch (error) { console.log(error.message); }
+            """,
+            constraints: "Requires iOS notification permission, a provisioning profile with aps-environment entitlement, a paid Apple developer setup and an APNs-enabled backend. An APNs token alone cannot send pushes or keep HTML JavaScript running. Do not embed Apple private keys in generated HTML."
+        ),
+        .init(
             id: "notifications.schedule",
             title: "Local notifications and scheduling",
             keywords: ["notification", "notify", "alert later", "schedule notification", "timer alert", "local notification"],
