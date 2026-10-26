@@ -985,3 +985,136 @@ private enum HTMLAppPreviewTabs {
     })();
     """#
 }
+
+@MainActor
+private final class HTMLAppFaceDownShakeExit {
+    private static var transitionOwner: HTMLAppFaceDownShakeExit?
+    private weak var webView: WKWebView?
+    private let motion = CMMotionManager()
+    private let feedback = UIImpactFeedbackGenerator(style: .soft)
+    private var progress: Double = 0
+    private var lastTick: TimeInterval = 0
+    private var lastHaptic: TimeInterval = 0
+    private var finished = false
+    private var progressTrack: UIView?
+    private var progressFill: UIView?
+    private var blackout: UIVisualEffectView?
+    private var darkness: UIView?
+    private var lastGravityZ: Double = -1
+
+    init(webView: WKWebView) { self.webView = webView }
+
+    func start() {
+        guard motion.isDeviceMotionAvailable else { return }
+        motion.deviceMotionUpdateInterval = 1.0 / 30.0
+        motion.startDeviceMotionUpdates(to: .main) { [weak self] sample, _ in
+            guard let sample else { return }
+            Task { @MainActor in self?.update(sample) }
+        }
+    }
+
+    func stop() {
+        if finished && blackout != nil {
+            // The transition continues after the web view is dismissed.
+            Self.transitionOwner = self
+            return
+        }
+        cleanup()
+    }
+
+    private func update(_ sample: CMDeviceMotion) {
+        guard UIApplication.shared.applicationState == .active else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let delta = lastTick == 0 ? 0 : min(0.1, now - lastTick)
+        lastTick = now
+        lastGravityZ = sample.gravity.z
+        if finished {
+            updateBlackout()
+            return
+        }
+        let faceDown = sample.gravity.z > 0.78
+        let a = sample.userAcceleration
+        let shake = sqrt(a.x*a.x + a.y*a.y + a.z*a.z)
+        if faceDown && shake > 0.55 {
+            progress = min(1, progress + delta * min(1.7, shake) / 3.5)
+            if now - lastHaptic > max(0.07, 0.42 - progress * 0.34) {
+                feedback.impactOccurred(intensity: CGFloat(0.15 + progress * 0.85))
+                lastHaptic = now
+            }
+        } else if !faceDown {
+            progress = max(0, progress - delta * 0.65)
+        }
+        if progress > 0 { showProgress() }
+        progressFill?.frame.size.width = (progressTrack?.bounds.width ?? 0) * progress
+        progressTrack?.alpha = faceDown && progress > 0 ? 1 : 0
+        if progress >= 1 { completeExit() }
+    }
+
+    private func showProgress() {
+        guard progressTrack == nil, let window = webView?.window else { return }
+        let track = UIView(frame: CGRect(x: 16, y: window.safeAreaInsets.top + 8,
+                                         width: max(1, window.bounds.width - 32), height: 4))
+        track.backgroundColor = UIColor.white.withAlphaComponent(0.28)
+        track.layer.cornerRadius = 2
+        track.clipsToBounds = true
+        track.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
+        let fill = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 4))
+        fill.backgroundColor = .systemOrange
+        track.addSubview(fill)
+        window.addSubview(track)
+        progressTrack = track
+        progressFill = fill
+    }
+
+    private func completeExit() {
+        guard !finished, let webView, let window = webView.window else { return }
+        finished = true
+        progressTrack?.removeFromSuperview()
+        progressTrack = nil
+        progressFill = nil
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+        blur.frame = window.bounds
+        blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        blur.isUserInteractionEnabled = false
+        let dark = UIView(frame: blur.bounds)
+        dark.backgroundColor = .black
+        dark.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        blur.contentView.addSubview(dark)
+        window.addSubview(blur)
+        blackout = blur
+        darkness = dark
+        Self.transitionOwner = self
+        updateBlackout()
+
+        var responder: UIResponder? = webView
+        while let current = responder {
+            if let controller = current as? UIViewController {
+                controller.dismiss(animated: false)
+                break
+            }
+            responder = current.next
+        }
+    }
+
+    private func updateBlackout() {
+        // z=+1 is face down; z=0 is 90 degrees; z=-1 is face up.
+        let fraction = CGFloat(max(0, min(1, lastGravityZ)))
+        darkness?.alpha = fraction
+        blackout?.alpha = fraction
+        if fraction <= 0.01 {
+            cleanup()
+            Self.transitionOwner = nil
+        }
+    }
+
+    private func cleanup() {
+        motion.stopDeviceMotionUpdates()
+        progressTrack?.removeFromSuperview()
+        blackout?.removeFromSuperview()
+        progressTrack = nil
+        progressFill = nil
+        blackout = nil
+        darkness = nil
+    }
+}
