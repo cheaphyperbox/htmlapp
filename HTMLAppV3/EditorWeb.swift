@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import UIKit
 import UniformTypeIdentifiers
+import CoreMotion
 
 enum EditorMode: Identifiable {
     case new
@@ -282,6 +283,7 @@ struct HTMLWebView: UIViewRepresentable {
         var onJavaScriptError: ((String) -> Void)?
         var lastHTML = ""
         private weak var webView: WKWebView?
+        private var shakeExit: HTMLAppFaceDownShakeExit?
         private var nativePermissions: NativePermissionCoordinator?
         private var locationPermissions: HTMLLocationBridge?
         private var nativeBridge: HTMLNativeAPIBridge?
@@ -298,6 +300,10 @@ struct HTMLWebView: UIViewRepresentable {
         func attach(_ webView: WKWebView, initialHTML: String) {
             self.webView = webView
             lastHTML = initialHTML
+            if appID != "PREVIEW" {
+                shakeExit = HTMLAppFaceDownShakeExit(webView: webView)
+                shakeExit?.start()
+            }
             nativePermissions = NativePermissionCoordinator(webView: webView, appID: appID)
             locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
             nativeBridge = HTMLNativeAPIBridge(webView: webView, appID: appID, permissionCoordinator: nativePermissions)
@@ -307,6 +313,8 @@ struct HTMLWebView: UIViewRepresentable {
         func shutdown() {
             if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
             launchObserver = nil
+            shakeExit?.stop()
+            shakeExit = nil
             nativeBridge?.shutdown()
             nativeBridge = nil
             localNetworkBridge?.shutdown()
