@@ -1074,35 +1074,32 @@ private final class HTMLAppFaceDownShakeExit {
         progressTrack = nil
         progressFill = nil
 
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+        // Use a full-window overlay that survives the SwiftUI fullScreenCover
+        // dismissal. The blur and opaque black veil fade independently.
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
         blur.frame = window.bounds
         blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         blur.isUserInteractionEnabled = false
-        let dark = UIView(frame: blur.bounds)
+        window.addSubview(blur)
+        let dark = UIView(frame: window.bounds)
         dark.backgroundColor = .black
         dark.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        blur.contentView.addSubview(dark)
-        window.addSubview(blur)
+        dark.isUserInteractionEnabled = false
+        window.addSubview(dark)
         blackout = blur
         darkness = dark
         Self.transitionOwner = self
-        updateBlackout()
-        flashTorch()
+        // Begin at full opacity even if the device is tilted while shaking.
+        blur.alpha = 1
+        dark.alpha = 1
 
-        var responder: UIResponder? = webView
-        while let current = responder {
-            if let controller = current as? UIViewController {
-                if let presented = controller.presentingViewController {
-                    presented.dismiss(animated: false)
-                    break
-                }
-                if let navigation = controller.navigationController,
-                   navigation.viewControllers.count > 1 {
-                    navigation.popViewController(animated: false)
-                    break
-                }
-            }
-            responder = current.next
+        // Dismiss the actual SwiftUI full-screen cover rather than attempting
+        // to find a UIKit presenting controller in the WKWebView responder chain.
+        NotificationCenter.default.post(name: Notification.Name("HTMLApp.FaceDownShakeExit"), object: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self, self.finished else { return }
+            self.flashTorch()
+            self.updateBlackout()
         }
     }
 
@@ -1140,6 +1137,7 @@ private final class HTMLAppFaceDownShakeExit {
         motion.stopDeviceMotionUpdates()
         progressTrack?.removeFromSuperview()
         blackout?.removeFromSuperview()
+        darkness?.removeFromSuperview()
         progressTrack = nil
         progressFill = nil
         blackout = nil
