@@ -167,6 +167,11 @@ struct HTMLWebView: UIViewRepresentable {
             forMainFrameOnly: true
         ))
         controller.addUserScript(WKUserScript(
+            source: HTMLAppWebBluetoothScript.source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        controller.addUserScript(WKUserScript(
             source: HTMLLocalNetworkScript.source,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
