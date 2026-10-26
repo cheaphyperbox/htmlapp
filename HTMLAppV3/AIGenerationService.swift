@@ -2062,6 +2062,10 @@ It is valid to return both kinds. If neither device capabilities nor external se
         let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
         return base + contract + """
 
+REMOTE PUSH AND BACKGROUND VOICE:
+- HTMLAppNative.push.register() requests opt-in iOS push registration and returns a token only on APNs-provisioned builds. This does not create a server. Remote notifications require the user's backend to register tokens and send APNs messages; never claim notifications will arrive before that infrastructure exists.
+- A web page or WKWebView cannot reliably run custom JavaScript after suspension. Use the native local notification API for on-device reminders. A real walkie-talkie experience needs Apple's PushToTalk framework, approved signing capability, a channel/push server, and a live audio relay. Do not invent a working native PushToTalk API.
+
 HTMLAPP LIVE ACTIVITY COUNTDOWNS AND WIDGETS:
 - For any Live Activity representing a timer or deadline, include primaryDeadlineMs and optionally secondaryDeadlineMs as absolute Unix milliseconds in liveActivities.start/update. Native WidgetKit displays these with Text(date, style: .timer), so they continue counting while HTMLApp is suspended. Do NOT rely on one-minute JavaScript calls to refresh strings in the Lock Screen.
 - Continue to send strings for fallback content; use liveActivities.update when plans/deadlines actually change, rather than on every second or minute.
