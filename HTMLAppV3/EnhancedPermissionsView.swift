@@ -6,9 +6,12 @@ struct EnhancedAppPermissionsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var choices: [HTMLPermission: HTMLPermissionChoice]
     @State private var sensorChoice: HTMLPermissionChoice
+    @State private var showAll = false
+    @State private var requested: Set<String>
 
     init(app: SavedHTMLApp) {
         self.app = app
+        _requested = State(initialValue: HTMLPermissionStore.requested(appID: app.id))
         _choices = State(initialValue: Dictionary(uniqueKeysWithValues: HTMLPermission.allCases.map {
             ($0, HTMLPermissionStore.choice(for: $0, appID: app.id))
         }))
@@ -30,7 +33,7 @@ struct EnhancedAppPermissionsView: View {
                 }
 
                 Section("HTML App Permissions") {
-                    ForEach(HTMLPermission.allCases) { permission in
+                    ForEach(HTMLPermission.allCases.filter { showAll || requested.contains($0.rawValue) || choices[$0] != .ask }) { permission in
                         permissionRow(
                             title: permission.title,
                             detail: permission.detail,
@@ -39,6 +42,7 @@ struct EnhancedAppPermissionsView: View {
                         )
                     }
 
+                    if showAll || requested.contains("motionSensor") || sensorChoice != .ask {
                     permissionRow(
                         title: "Motion & Orientation",
                         detail: "Allows device orientation, compass direction, accelerometer, and gyroscope events while this HTML app is open.",
@@ -51,6 +55,10 @@ struct EnhancedAppPermissionsView: View {
                             }
                         )
                     )
+                    }
+                    Button(showAll ? "Show requested only" : "Show all permissions") {
+                        showAll.toggle()
+                    }
                 }
 
                 Section {
