@@ -39,6 +39,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         super.init()
     }
 
+    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil }
+
     func handle(_ body: [String: Any]) {
         guard let id = body["id"] as? String,
               let method = body["method"] as? String else { return }
