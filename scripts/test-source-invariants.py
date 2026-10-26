@@ -335,4 +335,16 @@ assert 'Do NOT use navigator.bluetooth' in ai
 assert 'never navigator.bluetooth.requestDevice' in source("HTMLAppV3/DeviceAPICatalog.swift")
 assert 'bluetooth.scan' in source("HTMLAppV3/NativeAPIBridge.swift")
 
+# Web Bluetooth generated apps receive a native-backed chooser; no GATT fiction.
+web_bluetooth = source("HTMLAppV3/HTMLAppWebBluetoothScript.swift")
+ble = source("HTMLAppV3/HTMLAppBluetoothDiscovery.swift")
+assert 'HTMLAppWebBluetoothScript.source' in web_source
+assert 'navigator.bluetooth' in web_bluetooth and 'requestDevice(options = {})' in web_bluetooth
+assert 'HTMLAppNative.bluetooth.scan(6)' in web_bluetooth
+assert 'BLE GATT connections are not supported' in web_bluetooth
+assert 'readBattery(deviceID:' in ble and 'CBUUID(string: "180F")' in ble
+assert 'CBUUID(string: "2A19")' in ble and 'didUpdateValueFor' in ble
+assert 'case "bluetooth.battery":' in native and "battery: (id) => call('bluetooth.battery'" in native
+assert 'id: "bluetooth.battery"' in source("HTMLAppV3/DeviceAPICatalog.swift")
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
