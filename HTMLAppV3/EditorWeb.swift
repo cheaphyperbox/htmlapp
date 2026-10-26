@@ -613,11 +613,12 @@ struct HTMLWebView: UIViewRepresentable {
                 )
                 alert.addAction(UIAlertAction(title: "Don’t Allow", style: .cancel) { _ in
                     HTMLSensorPermissionPolicy.set(.deny, appID: self.appID)
-                    self.resolveSensor(callbackID, value: "denied")
+                    PermissionRequestGate.finish(appID: self.appID, permission: "motion", allowed: false)
                 })
                 alert.addAction(UIAlertAction(title: "Allow", style: .default) { _ in
-                    HTMLSensorPermissionPolicy.set(.allow, appID: self.appID)
-                    self.resolveSensor(callbackID, value: "granted")
+                    let blocked = HTMLSensorPermissionPolicy.choice(appID: self.appID) == .deny
+                    if !blocked { HTMLSensorPermissionPolicy.set(.allow, appID: self.appID) }
+                    PermissionRequestGate.finish(appID: self.appID, permission: "motion", allowed: !blocked)
                 })
                 presenter.present(alert, animated: true)
             }
