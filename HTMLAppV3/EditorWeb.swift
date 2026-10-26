@@ -1095,10 +1095,11 @@ private final class HTMLAppFaceDownShakeExit {
         NotificationCenter.default.post(name: Notification.Name("HTMLApp.FaceDownShakeExit"), object: nil)
         // Start the torch after the cover is dismissed, not while its
         // WebKit capture session might still own the camera.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            guard let self, self.finished else { return }
-            self.flashTorch()
-            self.updateBlackout()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [self] in
+            // Retain the transition through the flash even when the user
+            // rotates upright immediately and the overlay has been removed.
+            flashTorch()
+            if blackout != nil { updateBlackout() }
         }
     }
 
