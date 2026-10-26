@@ -9,6 +9,7 @@ struct HTMLAppMain: App {
     @AppStorage("onboardingComplete") private var onboardingComplete = false
     @AppStorage("htmlapp.lastOpenedVersion") private var lastOpenedVersion = ""
     @AppStorage("htmlapp.previousOpenedVersion") private var previousOpenedVersion = ""
+    @AppStorage("htmlapp.lastSeenBuild") private var lastSeenBuild = ""
     @State private var presentingWhatsNew = false
     @State private var detectedPreviousVersion: String?
     @State private var checkedVersionThisLaunch = false
@@ -85,6 +86,11 @@ struct HTMLAppMain: App {
                     .interactiveDismissDisabled(true)
                 }
                 .onAppear(perform: checkVersionOnLaunch)
+                .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLApp.FaceDownShakeExit"))) { _ in
+                    // The runner is a SwiftUI full-screen cover, not a UIKit
+                    // controller that can reliably be dismissed via responders.
+                    store.runningApp = nil
+                }
                 .task { await store.syncICloud() }
                 .onReceive(NotificationCenter.default.publisher(for: HTMLAppPortableDataStore.localDataChanged)) { _ in
                     if HTMLAppICloudPreferences.includeData { store.requestICloudSync() }
@@ -94,13 +100,8 @@ struct HTMLAppMain: App {
                 }
                 .onChange(of: onboardingComplete) { finished in
                     guard finished else { return }
-                    if lastOpenedVersion.isEmpty {
-                        // On a new installation the tour itself is the introduction.
-                        // Do not show a second full-screen welcome on the same launch.
-                        lastOpenedVersion = HTMLAppReleaseNotes.installedVersion
-                    } else {
-                        checkVersionOnLaunch()
-                    }
+                    checkedVersionThisLaunch = false
+                    checkVersionOnLaunch()
                 }
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
                     HTMLAppHomeScreenGuide(
@@ -140,24 +141,24 @@ struct HTMLAppMain: App {
         }
     }
 
+    private var installedBuildFingerprint: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? HTMLAppReleaseNotes.installedVersion
+        let build = info["CFBundleVersion"] as? String ?? "0"
+        return "\(version)-\(build)"
+    }
+
     private func checkVersionOnLaunch() {
         guard onboardingComplete, !checkedVersionThisLaunch else { return }
         checkedVersionThisLaunch = true
         let installed = HTMLAppReleaseNotes.installedVersion
         guard installed != "Unknown" else { return }
-        if lastOpenedVersion.isEmpty {
-            // Migration: older HTMLApp installations did not store the version.
-            // Offer current notes once without claiming a specific prior version.
-            detectedPreviousVersion = nil
-            presentingWhatsNew = true
-        } else if installed.compare(lastOpenedVersion, options: .numeric) == .orderedDescending {
-            detectedPreviousVersion = lastOpenedVersion
-            presentingWhatsNew = true
-        } else if installed != lastOpenedVersion {
-            // A downgrade is not advertised as an upgrade.
-            previousOpenedVersion = lastOpenedVersion
-            lastOpenedVersion = installed
-        }
+        let fingerprint = installedBuildFingerprint
+        // A new build can contain new changes without a marketing version bump.
+        // Present release notes on first install and on each distinct build.
+        guard lastSeenBuild != fingerprint || lastOpenedVersion != installed else { return }
+        detectedPreviousVersion = lastOpenedVersion.isEmpty ? nil : lastOpenedVersion
+        presentingWhatsNew = true
     }
 
     private func recordVersionSeen() {
@@ -167,6 +168,7 @@ struct HTMLAppMain: App {
             previousOpenedVersion = lastOpenedVersion
         }
         lastOpenedVersion = installed
+        lastSeenBuild = installedBuildFingerprint
     }
 }
 
