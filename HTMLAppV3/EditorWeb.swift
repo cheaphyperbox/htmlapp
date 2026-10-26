@@ -557,6 +557,17 @@ struct HTMLWebView: UIViewRepresentable {
 
         private func requestSensorPermission(callbackID: String) {
             guard appID != "PREVIEW" else { resolveSensor(callbackID, value: "denied"); return }
+            if HTMLSensorPermissionPolicy.choice(appID: appID) == .ask {
+                switch PermissionRequestGate.check(appID: appID, permission: "motion") {
+                case .ignore: resolveSensor(callbackID, value: "denied"); return
+                case .autoDenied:
+                    HTMLSensorPermissionPolicy.set(.deny, appID: appID)
+                    PermissionRequestGate.showNotice(appID: appID, title: "Motion")
+                    resolveSensor(callbackID, value: "denied")
+                    return
+                case .proceed: break
+                }
+            }
             switch HTMLSensorPermissionPolicy.choice(appID: appID) {
             case .allow:
                 resolveSensor(callbackID, value: "granted")
