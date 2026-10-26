@@ -1001,6 +1001,8 @@ private final class HTMLAppFaceDownShakeExit {
     private var progressFill: UIView?
     private var blackout: UIVisualEffectView?
     private var darkness: UIView?
+    private var transitionWindow: UIWindow?
+    private var torchDevice: AVCaptureDevice?
     private var lastGravityZ: Double = -1
 
     init(webView: WKWebView) { self.webView = webView }
@@ -1068,35 +1070,44 @@ private final class HTMLAppFaceDownShakeExit {
     }
 
     private func completeExit() {
-        guard !finished, let webView, let window = webView.window else { return }
+        guard !finished, let webView, let sourceWindow = webView.window,
+              let scene = sourceWindow.windowScene else { return }
         finished = true
         progressTrack?.removeFromSuperview()
         progressTrack = nil
         progressFill = nil
 
-        // Use a full-window overlay that survives the SwiftUI fullScreenCover
-        // dismissal. The blur and opaque black veil fade independently.
+        // A separate, non-key overlay window stays visible when SwiftUI removes
+        // the fullScreenCover's view hierarchy. Attaching to the old window
+        // could place the fade underneath the library or remove it on dismiss.
+        let overlay = UIWindow(windowScene: scene)
+        overlay.frame = sourceWindow.bounds
+        overlay.windowLevel = .alert + 1
+        overlay.backgroundColor = .clear
+        overlay.isUserInteractionEnabled = false
+        let host = UIViewController()
+        host.view.backgroundColor = .clear
+        overlay.rootViewController = host
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
-        blur.frame = window.bounds
+        blur.frame = host.view.bounds
         blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        blur.isUserInteractionEnabled = false
-        window.addSubview(blur)
-        let dark = UIView(frame: window.bounds)
+        let dark = UIView(frame: host.view.bounds)
         dark.backgroundColor = .black
         dark.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        dark.isUserInteractionEnabled = false
-        window.addSubview(dark)
+        host.view.addSubview(blur)
+        host.view.addSubview(dark)
+        overlay.isHidden = false
+        transitionWindow = overlay
         blackout = blur
         darkness = dark
-        Self.transitionOwner = self
-        // Begin at full opacity even if the device is tilted while shaking.
         blur.alpha = 1
         dark.alpha = 1
+        Self.transitionOwner = self
 
-        // Dismiss the actual SwiftUI full-screen cover rather than attempting
-        // to find a UIKit presenting controller in the WKWebView responder chain.
         NotificationCenter.default.post(name: Notification.Name("HTMLApp.FaceDownShakeExit"), object: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        // Start the torch after the cover is dismissed, not while its
+        // WebKit capture session might still own the camera.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             guard let self, self.finished else { return }
             self.flashTorch()
             self.updateBlackout()
@@ -1117,20 +1128,39 @@ private final class HTMLAppFaceDownShakeExit {
     }
 
     private func flashTorch() {
-        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
+        // Explicitly request the rear torch; .default(for: .video) may choose
+        // a camera without a torch on multi-camera devices.
+        let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(for: .video)
+        guard let device, device.hasTorch else { return }
         do {
             try device.lockForConfiguration()
-            guard device.isTorchAvailable else { device.unlockForConfiguration(); return }
-            try device.setTorchModeOn(level: AVCaptureDevice.maxAvailableTorchLevel)
-            device.unlockForConfiguration()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                do {
-                    try device.lockForConfiguration()
-                    device.torchMode = .off
-                    device.unlockForConfiguration()
-                } catch { }
+            guard device.isTorchAvailable else {
+                device.unlockForConfiguration()
+                return
             }
-        } catch { }
+            try device.setTorchModeOn(level: min(AVCaptureDevice.maxAvailableTorchLevel, 1))
+            device.unlockForConfiguration()
+            torchDevice = device
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                guard let self else { return }
+                self.turnOffTorch()
+            }
+        } catch {
+            NSLog("HTMLApp exit torch unavailable: %@", error.localizedDescription)
+        }
+    }
+
+    private func turnOffTorch() {
+        guard let device = torchDevice else { return }
+        torchDevice = nil
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = .off
+            device.unlockForConfiguration()
+        } catch {
+            NSLog("HTMLApp could not disable exit torch: %@", error.localizedDescription)
+        }
     }
 
     private func cleanup() {
@@ -1138,6 +1168,9 @@ private final class HTMLAppFaceDownShakeExit {
         progressTrack?.removeFromSuperview()
         blackout?.removeFromSuperview()
         darkness?.removeFromSuperview()
+        transitionWindow?.isHidden = true
+        transitionWindow?.rootViewController = nil
+        transitionWindow = nil
         progressTrack = nil
         progressFill = nil
         blackout = nil
