@@ -695,6 +695,29 @@ enum HTMLAppDeviceAPIResearch {
         )
     ]
 
+    // Planner queries can request the whole catalog or a focused capability section.
+    // These are documentation lookups during generation, not permission requests.
+    private static let sections: [(name: String, ids: [String])] = [
+        ("bluetooth", ["bluetooth.scan", "bluetooth.battery"]),
+        ("widgets", ["widgets", "live.activities", "background.fetch"]),
+        ("tabs", ["tabs.configure"]),
+        ("device", ["device.info", "device.battery", "device.torch", "device.brightness", "device.keepAwake", "motion.altitude", "motion.pedometer"]),
+        ("motion", ["motion.altitude", "motion.pedometer", "motion.orientation.compass"]),
+        ("storage", ["appStorage", "secureStorage", "storage", "clipboard"]),
+        ("personal data", ["contacts", "photos", "files.pick", "calendar", "reminders"]),
+        ("notifications", ["notifications.schedule", "push.register", "live.activities"]),
+        ("media", ["camera.microphone", "media.audio", "speech", "photos"]),
+        ("network", ["networking", "geolocation", "externalApps.maps", "externalApps.shortcuts"]),
+        ("interface", ["tabs.configure", "haptics", "share.present", "system.open", "speech"]),
+        ("security", ["biometrics.authenticate", "secureStorage", "credentials"])
+    ]
+
+    static var capabilityDirectory: String {
+        let labels = sections.map { $0.name }.joined(separator: ", ")
+        return "Available capability documentation sections: " + labels
+            + ". Request <device_query>all capabilities</device_query> for the complete built-in reference, or request one or more specific sections (for example bluetooth, widgets, tabs, device, or storage). This requests documentation only; the generated app must still check capabilities and obtain user permissions."
+    }
+
     static func research(queries: [String], maxMatchesPerQuery: Int = 6) -> String {
         var seenQueries = Set<String>()
         let uniqueQueries = queries
@@ -709,6 +732,23 @@ enum HTMLAppDeviceAPIResearch {
         ]
 
         for query in uniqueQueries.prefix(8) {
+            let normalized = query.lowercased()
+            if ["all", "all capabilities", "everything", "full catalog", "all native apis", "all htmlapp capabilities"].contains(normalized) {
+                sections.append("DEVICE QUERY: " + query + "\n" + entries.map { $0.renderedReference }.joined(separator: "\n\n"))
+                continue
+            }
+            let matchingSections = Self.sections.filter { item in
+                normalized == item.name || normalized == item.name + " capabilities"
+                    || normalized == item.name + " apis"
+                    || normalized == item.name + " section"
+                    || (item.name == "tabs" && normalized == "tab bar")
+                    || (item.name == "device" && normalized == "device info")
+            }
+            if !matchingSections.isEmpty {
+                let ids = Set(matchingSections.flatMap { $0.ids })
+                sections.append("DEVICE QUERY: " + query + "\n" + entries.filter { ids.contains($0.id) }.map { $0.renderedReference }.joined(separator: "\n\n"))
+                continue
+            }
             let terms = searchTerms(query)
             let normalizedQuery = query.lowercased()
 
