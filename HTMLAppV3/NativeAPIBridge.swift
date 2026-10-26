@@ -1788,12 +1788,21 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             let bytes = (attributes?[.size] as? NSNumber)?.intValue ?? 0
             let relative = folderName + "/" + filename
             let type = UTType(filenameExtension: destination.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            return [
+            var item: [String: Any] = [
                 "name": filename,
                 "url": relative,
                 "mimeType": type,
                 "size": bytes
             ]
+            // Provide a directly renderable URL for photo picker consumers.
+            // Relative file paths alone are not always accessible to generated
+            // HTML pages, particularly when their base URL differs.
+            if namespace == "photos", type.hasPrefix("image/"),
+               bytes > 0, bytes <= 8_000_000,
+               let imageData = try? Data(contentsOf: destination) {
+                item["dataURL"] = "data:\(type);base64,\(imageData.base64EncodedString())"
+            }
+            return item
         } catch {
             return nil
         }
