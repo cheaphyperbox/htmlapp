@@ -238,6 +238,7 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
         After any tool result, reconsider what is actually needed and finish soon.
         """
         var messages: [(String, String)] = [("user", String(prompt.prefix(1800)))]
+        var toolFindings: [String] = []
         for _ in 0..<6 {
             if Task.isCancelled || Date() >= deadline { break }
             let raw: String
@@ -259,9 +260,12 @@ final class AIPrivacyToolRunner: NSObject, CLLocationManagerDelegate {
                   let call = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let name = call["name"] as? String else { break }
             let answer = await tool.execute(name, args: call["args"] as? [String: Any] ?? [:])
+            if !answer.contains("\"error\"") {
+                toolFindings.append("\(name): " + String(answer.prefix(1800)))
+            }
             messages.append(("assistant", raw))
             messages.append(("user", "<tool_result name=\"\(name)\">\(answer)</tool_result>"))
         }
-        return ""
+        return String(toolFindings.joined(separator: "\n").prefix(3500))
     }
 }
