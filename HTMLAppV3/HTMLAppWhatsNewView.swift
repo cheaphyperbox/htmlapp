@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.25"
-    static let compiledBuild = "32"
+    static let compiledVersion = "1.6.26"
+    static let compiledBuild = "33"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.26" { return [
+            Entry(id: "tab-ci", title: "Build validation for native tabs", description: "Updated the source regression check to require tab bars to remain inside their HTML app instead of appearing in editing screens.", symbol: "checkmark.shield", tint: .blue)
+        ] }
         if version == "1.6.25" { return [
             Entry(id: "native-tab-isolation", title: "Native tabs stay inside apps", description: "The real native tab bar no longer mounts onto the global app screen while editing.", symbol: "rectangle.bottomthird.inset.filled", tint: .blue),
             Entry(id: "shake-transition", title: "Shake exit transition improvements", description: "A dedicated overlay window keeps the black-and-blurred fade visible while returning to the Library.", symbol: "iphone.radiowaves.left.and.right", tint: .purple),
