@@ -87,17 +87,22 @@ struct EnhancedAppPermissionsView: View {
 
     @ViewBuilder
     private func permissionRow(title: String, detail: String, symbol: String, selection: Binding<HTMLPermissionChoice>) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: symbol).font(.headline)
-            Text(detail).font(.caption).foregroundStyle(.secondary)
-            Picker(title, selection: selection) {
-                ForEach(HTMLPermissionChoice.allCases) { choice in
-                    Text(choice.title).tag(choice)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label(title, systemImage: symbol)
+                Spacer()
+                Menu {
+                    ForEach(HTMLPermissionChoice.allCases) { choice in
+                        Button(choice.title) { selection.wrappedValue = choice }
+                    }
+                } label: {
+                    Text(selection.wrappedValue.title)
+                        .font(.subheadline.weight(.medium))
                 }
             }
-            .pickerStyle(.segmented)
+            if showAll { Text(detail).font(.caption).foregroundStyle(.secondary) }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 2)
     }
 
     private func binding(for permission: HTMLPermission) -> Binding<HTMLPermissionChoice> {
