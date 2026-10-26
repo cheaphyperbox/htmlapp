@@ -1834,6 +1834,11 @@ enum HTMLNativeAPIScript {
         item.reject(error);
       };
 
+      window.addEventListener('htmlapp:native-tab-select', event => {
+        const fn = window.HTMLAppNative?.tabs?._handlers?.[event.detail?.id];
+        if (typeof fn === 'function') fn(event.detail.id);
+      });
+
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
@@ -1845,19 +1850,34 @@ enum HTMLNativeAPIScript {
           battery: (id) => call('bluetooth.battery', { id: String(id || '') })
         },
         tabs: {
-          configure: async (items) => {
-            const result = await call('tabs.configure', { items });
-            // Ensure the initial tab renders even if its native event was sent
-            // before the HTML app registered its onSelect callback.
-            if (result?.enabled && items?.length) {
+          configure: async (input, opts = {}) => {
+            const items = Array.isArray(input) ? input : input?.items;
+            if (!Array.isArray(items) || items.length < 1 || items.length > 7)
+              throw new RangeError('Provide 1 to 7 native tabs.');
+            const handlers = {};
+            const cleaned = items.map(item => {
+              if (typeof item.onSelect === 'function') handlers[item.id] = item.onSelect;
+              return { id: item.id, title: item.title, symbol: item.symbol, badge: item.badge };
+            });
+            const selected = opts.selected || input?.selected || items[0].id;
+            const result = await call('tabs.configure', { items: cleaned, selected });
+            api.tabs._handlers = handlers;
+            if (result?.enabled) {
               window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {
-                detail: { id: items[0].id }
+                detail: {id: selected}
               }));
             }
             return result;
           },
+          _handlers: {},
           select: (id) => call('tabs.select', { id: String(id || '') }),
-          remove: () => call('tabs.remove'),
+          update: (id, props = {}) => call('tabs.update', {
+            id: String(id || ''), badge: props.badge, title: props.title, symbol: props.symbol
+          }),
+          setHidden: (hidden, animated = true) =>
+            call('tabs.setHidden', { hidden: !!hidden, animated: !!animated }),
+          pulse: () => call('tabs.pulse'),
+          remove: () => { api.tabs._handlers = {}; return call('tabs.remove'); },
           onSelect: (handler) => {
             if (typeof handler !== 'function') throw new TypeError('onSelect requires a function');
             window.addEventListener('htmlapp:native-tab-select', e => handler(e.detail.id));
