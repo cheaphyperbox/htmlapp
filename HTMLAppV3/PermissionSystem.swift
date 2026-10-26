@@ -99,7 +99,13 @@ enum HTMLPermissionChoice: String, CaseIterable, Identifiable {
     case deny
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .ask: return "Ask"
+        case .allow: return "Allow"
+        case .deny: return "Don’t allow"
+        }
+    }
 }
 
 enum HTMLPermissionStore {
