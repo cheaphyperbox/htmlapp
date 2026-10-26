@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.26"
-    static let compiledBuild = "33"
+    static let compiledVersion = "1.6.27"
+    static let compiledBuild = "34"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.27" { return [
+            Entry(id: "shake-regression", title: "Shake exit build validation", description: "Regression tests now protect the new fade and flashlight exit flow instead of requiring the removed legacy gesture handler.", symbol: "checkmark.shield", tint: .blue)
+        ] }
         if version == "1.6.26" { return [
             Entry(id: "tab-ci", title: "Build validation for native tabs", description: "Updated the source regression check to require tab bars to remain inside their HTML app instead of appearing in editing screens.", symbol: "checkmark.shield", tint: .blue)
         ] }
