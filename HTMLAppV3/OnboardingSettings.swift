@@ -422,6 +422,8 @@ struct SettingsView: View {
     @AppStorage("libraryFavoritesOnTop") private var libraryFavoritesOnTop = true
     @AppStorage("askBeforeSwitch") private var askBeforeSwitch = true
     @AppStorage("closeOnFlipShake") private var closeOnFlipShake = false
+    @AppStorage("htmlapp.shakeExitSeconds") private var shakeExitSeconds = 1.0
+    @AppStorage("htmlapp.shakeFadeEndAngle") private var shakeFadeEndAngle = 70.0
     @AppStorage("sourceRefreshDays") private var sourceRefreshDays = 3
     @AppStorage("autoApplyWebsiteUpdates") private var autoApplyWebsiteUpdates = false
     @AppStorage("webClipFullScreen") private var webClipFullScreen = true
@@ -560,12 +562,28 @@ struct SettingsView: View {
                     Toggle("Close app by flipping face down and shaking", isOn: $closeOnFlipShake)
                     Text("While an HTML app is open, hold the phone screen-down and gently shake for about one second to return to Library.")
                         .font(.footnote).foregroundStyle(.secondary)
+                    HStack {
+                        Text("Required shake time")
+                        Spacer()
+                        Text(shakeExitSeconds.formatted(.number.precision(.fractionLength(1))) + " s")
+                    }
+                    Slider(value: $shakeExitSeconds, in: 0.5...5.0, step: 0.1)
+                    Text("Selected shake time: " + shakeExitSeconds.formatted(.number.precision(.fractionLength(1))) + " seconds of detected motion.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Toggle("Ask before switching apps", isOn: $askBeforeSwitch)
                 }
 
                 Section("Developer") {
                     Toggle("Developer Mode", isOn: $developerMode)
                     if developerMode {
+                        HStack {
+                            Text("Fade disappears at")
+                            Spacer()
+                            Text("\(Int(shakeFadeEndAngle)) degrees")
+                        }
+                        Slider(value: $shakeFadeEndAngle, in: 20...180, step: 5)
+                        Text("Selected: \(Int(shakeFadeEndAngle)) degrees from screen-down.")
+                            .font(.footnote).foregroundStyle(.secondary)
                         NavigationLink {
                             ForgeDeveloperDiagnosticsView().environmentObject(store)
                         } label: {
