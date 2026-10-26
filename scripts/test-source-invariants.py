@@ -363,7 +363,11 @@ assert 'BackgroundKeepAlive.shared.stop()' in forge
 assert 'let wasUsingAudio = recording || tapped' in source("HTMLAppV3/ForgeDictation.swift")
 assert 'generationMusic.prefetch()' in source("HTMLAppV3/AISettingsView.swift")
 assert 'closeOnFlipShake' in source("HTMLAppV3/OnboardingSettings.swift")
-assert 'flipShakeCloser.start' in web_source
+assert 'flipShakeCloser.start' not in web_source, "Legacy flip/shake handler must not bypass the fade and torch"
+assert 'HTMLAppFaceDownShakeExit(webView: webView)' in web_source
+assert 'Notification.Name("HTMLApp.FaceDownShakeExit")' in web_source
+assert 'transitionWindow = overlay' in web_source and 'flashTorch()' in web_source
+assert 'store.runningApp = nil' in source("HTMLAppV3/AppCore.swift")
 assert 'sample.gravity.z > 0.82' in source("HTMLAppV3/FlipShakeClose.swift")
 gate = source("HTMLAppV3/PermissionRequestGate.swift")
 assert 'times.count > 10' in gate and 'now - $0 < 15' in gate
