@@ -818,7 +818,7 @@ struct AIGenerationView: View {
                                 }
                                 .allowsHitTesting(!exploringStyles)
                             VStack(spacing: 10) {
-                                ForEach(0..<3, id: \.self) { slot in
+                                ForEach(0..<max(3, styleOptions.count), id: \.self) { slot in
                                     let available = styleOptions.firstIndex(where: { $0.id == slot })
                                     Button {
                                         if let available { selectedStyleIndex = available }
@@ -842,6 +842,16 @@ struct AIGenerationView: View {
                                     .accessibilityLabel("View mockup \(slot + 1)")
                                 }
                             }
+                                Button {
+                                    generateAdditionalStyles()
+                                } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.title2)
+                                        .frame(width: 76, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(exploringStyles || styleOptions.isEmpty)
+                                .accessibilityLabel("Generate three more AI-designed looks")
                             .frame(width: 84)
                             .zIndex(2)
                         }
@@ -929,6 +939,39 @@ struct AIGenerationView: View {
             } message: {
                 Text("Describe what you want changed. Forge will generate three fresh mockups using the same feedback.")
             }
+        }
+    }
+
+    private func generateAdditionalStyles() {
+        guard !exploringStyles else { return }
+        let idea = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !idea.isEmpty else { return }
+        let firstIndex = (styleOptions.map(\.id).max() ?? -1) + 1
+        let appearance = colorScheme == .dark ? "dark" : "light"
+        let quick = quickMode && !AISettingsStore.quickModel.isEmpty
+        exploringStyles = true
+        generationTask = Task {
+            await withTaskGroup(of: ForgeStyleConcept?.self) { group in
+                for index in firstIndex..<(firstIndex + 3) {
+                    group.addTask {
+                        try? await ForgeRunOptions.$quick.withValue(quick) {
+                            try await ForgeStylePreviewService.generateSingle(
+                                for: idea,
+                                feedback: "Invent a completely fresh, original visual direction. Avoid standard style presets and repeat looks.",
+                                index: index,
+                                appearance: appearance,
+                                regeneration: styleRegenerationRound + 1)
+                        }
+                    }
+                }
+                for await concept in group {
+                    if let concept {
+                        styleOptions.append(concept)
+                        styleOptions.sort { $0.id < $1.id }
+                    }
+                }
+            }
+            exploringStyles = false
         }
     }
 
