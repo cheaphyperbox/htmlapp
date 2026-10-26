@@ -938,8 +938,6 @@ private enum HTMLAppPreviewTabs {
           if (!tabs.some(t => t.id === id)) return false;
           active = id;
           document.querySelectorAll('#__htmlappPreviewTabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.id === id)));
-          const handler = callbacks.get(id);
-          if (handler) handler(id);
           window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select', {detail:{id}}));
           return true;
         };
@@ -956,13 +954,14 @@ private enum HTMLAppPreviewTabs {
             button.addEventListener('click', () => select(t.id));
             bar.appendChild(button);
           });
-          bar.hidden = hidden;
+          bar.style.display = hidden ? 'none' : 'flex';
           document.documentElement.style.setProperty('--htmlapp-tabbar-height', hidden ? '0px' : '72px');
         };
         api.configure = async (input, options = {}) => {
           tabs = Array.isArray(input) ? input : (input?.items || []);
           callbacks.clear();
           tabs.forEach(t => { if (typeof t.onSelect === 'function') callbacks.set(t.id,t.onSelect); });
+          api._handlers = Object.fromEntries(callbacks);
           active = options.selected || input?.selected || tabs[0]?.id || '';
           render();
           setTimeout(() => { if (active) select(active); }, 0);
