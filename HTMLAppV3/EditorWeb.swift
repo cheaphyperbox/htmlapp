@@ -88,6 +88,9 @@ struct EditorView: View {
 
 struct WebRunner: View {
     let app: SavedHTMLApp
+    @EnvironmentObject private var store: AppStore
+    @AppStorage("closeOnFlipShake") private var closeOnFlipShake = false
+    @State private var flipShakeCloser = FlipShakeClose()
 
     static func shouldHideStatusBar(in html: String) -> Bool {
         // The tag may use single/double quotes and either attribute order.
@@ -106,7 +109,20 @@ struct WebRunner: View {
         HTMLWebView(html: app.html, appID: app.id)
             .statusBarHidden(Self.shouldHideStatusBar(in: app.html))
             .htmlAppFirstUseToasts()
-            .onAppear { HTMLAppFirstUseTips.show("open") }
+            .onAppear {
+                HTMLAppFirstUseTips.show("open")
+                if closeOnFlipShake {
+                    flipShakeCloser.start { store.runningApp = nil }
+                }
+            }
+            .onChange(of: closeOnFlipShake) { enabled in
+                if enabled {
+                    flipShakeCloser.start { store.runningApp = nil }
+                } else {
+                    flipShakeCloser.stop()
+                }
+            }
+            .onDisappear { flipShakeCloser.stop() }
     }
 }
 
