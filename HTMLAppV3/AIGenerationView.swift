@@ -362,7 +362,7 @@ struct AIGenerationView: View {
                     // Forge task executing after lock. Preserve the existing
                     // generation pipeline rather than paying for a second request.
                     // Use background URLSession when music isn't playing.
-                    if !GenerationMusic.shared.isPlaying {
+                    if !GenerationMusic.shared.isPlaying && !GenerationMusic.shared.isGenerationActive {
                         handoffForgeToBackgroundURLSession()
                     }
                 }
