@@ -841,7 +841,6 @@ struct AIGenerationView: View {
                                     .disabled(available == nil || exploringStyles)
                                     .accessibilityLabel("View mockup \(slot + 1)")
                                 }
-                            }
                                 Button {
                                     generateAdditionalStyles()
                                 } label: {
@@ -852,6 +851,7 @@ struct AIGenerationView: View {
                                 .buttonStyle(.plain)
                                 .disabled(exploringStyles || styleOptions.isEmpty)
                                 .accessibilityLabel("Generate three more AI-designed looks")
+                            }
                             .frame(width: 84)
                             .zIndex(2)
                         }
