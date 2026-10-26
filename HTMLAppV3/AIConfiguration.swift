@@ -287,8 +287,7 @@ RESEARCH RESULTS
         } else {
             resolved = prompt + "\n\nRESEARCH RESULTS\n" + evidence
         }
-        if resolved.contains("window.HTMLAppNative") { return resolved }
-        return resolved + "\n\n" + nativeAPIReference
+        return resolved + "\n\n" + nativeAPIReference + "\n\n" + HTMLAppDeviceAPIResearch.capabilityDirectory
     }
 
     // Legacy aliases remain so older settings state and call sites migrate cleanly.
