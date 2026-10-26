@@ -111,6 +111,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 return
             }
             resolve(id, value: ["selected": tab])
+        case "tabs.setHidden":
+            nativeTabBar?.setHidden(args["hidden"] as? Bool ?? false, animated: args["animated"] as? Bool ?? true)
+            resolve(id, value: ["ok": true])
+        case "tabs.pulse":
+            nativeTabBar?.pulse()
+            resolve(id, value: ["ok": true])
         case "tabs.remove":
             nativeTabBar?.remove()
             nativeTabBar = nil
@@ -119,7 +125,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.remove",
+                    "motion.pedometer", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
