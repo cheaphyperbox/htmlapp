@@ -1903,6 +1903,8 @@ RESEARCH RULES:
 - Prefer documented no-auth APIs and browser-safe free tiers. Never invent a native bridge.
 - If no research is needed, return no query tags.
 - At most six device queries and six public queries.
+- You have access to the complete HTMLApp native capability catalog, not just APIs named in this prompt. You may request <device_query>all capabilities</device_query> to read every documented entry, or a specific section such as <device_query>bluetooth</device_query>, <device_query>widgets</device_query>, <device_query>tabs</device_query>, <device_query>device</device_query>, <device_query>storage</device_query>, <device_query>notifications</device_query>, or a precise API name.
+- Request focused sections when possible to keep the research concise. This is a request for documentation, not an app permission grant. The generated app must still feature-detect APIs and ask the user for permissions.
 
 Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reasoning.
 """
@@ -2059,6 +2061,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
 
     static func systemPrompt(research: String) -> String {
         let base = AISettingsStore.resolvedSystemPrompt(research: research)
+        // The catalog directory is always visible; detailed entries are injected from planner queries.
         let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
         return base + contract + """
 
@@ -2145,8 +2148,7 @@ RULES:
 Decide if <ui_polish_needed> should be yes. Say yes ONLY when the requested edit significantly changes visual identity, layout hierarchy, theme, or multiple screens and a separate UI specialist could meaningfully help. Say no for bug fixes, functional changes, wording, colors on one component, and ordinary small revisions; do not waste a specialist call.
 Keep or improve native-feeling animation and mobile interactions. Do not fabricate facts, APIs, live data or capabilities. If the revision depends on something uncertain, use the documented research below; if no credible API is available, implement an honest local/limited state rather than fake data.
 
-RESEARCH RESULTS:
-\(research.isEmpty ? "No new external API research was needed or no suitable public API was found." : research)
+HTMLAPP CAPABILITY LOOKUP:\n\(HTMLAppDeviceAPIResearch.capabilityDirectory)\n\nRESEARCH RESULTS:\n\(research.isEmpty ? "No new external API research was needed or no suitable public API was found." : research)
 """
     }
 
