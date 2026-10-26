@@ -540,39 +540,37 @@ struct LibraryView: View {
     @ViewBuilder
     private func appMenu(for app: SavedHTMLApp, sourceFolderID: String?) -> some View {
         Menu {
-            Button { store.launch(app) } label: { Label("Open App", systemImage: "play.fill") }
             Button { store.toggleFavorite(app) } label: {
                 Label(app.isFavorite == true ? "Remove Favorite" : "Favorite", systemImage: "star.fill")
             }
             Button { destinationOperation = .moveApp(app, sourceFolderID: sourceFolderID) } label: {
-                Label("Move To", systemImage: "folder")
+                Label("Move", systemImage: "folder")
             }
             Button { permissionsApp = app } label: { Label("Permissions", systemImage: "hand.raised") }
+            Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
+            Button { aiIconApp = app } label: { Label("Regenerate Icon", systemImage: "app.badge") }
         } label: { Label("Everyday Usage", systemImage: "hand.tap") }
         .onAppear { HTMLAppFirstUseTips.show("context") }
+
         Menu {
-            Button {
-                nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id])
-            } label: { Label("Share with Nearby Devices", systemImage: "antenna.radiowaves.left.and.right") }
-            Button { store.installWebClip(for: app) } label: { Label("Add to Home Screen", systemImage: "apps.iphone") }
+            Button { nearbyTransferRoute = NearbyTransferRoute(appIDs: [app.id]) } label: {
+                Label("Nearby Transfer", systemImage: "antenna.radiowaves.left.and.right")
+            }
+            Button { store.installWebClip(for: app) } label: {
+                Label("Add to Homescreen", systemImage: "apps.iphone")
+            }
             Button {
                 UIPasteboard.general.string = "htmlapp://open?id=\(app.id)"
                 HTMLAppFirstUseTips.show("copyLink", appName: app.name)
-            } label: { Label("Copy Link to Open App", systemImage: "link") }
-        } label: { Label("Sharing", systemImage: "square.and.arrow.up") }
-        Menu {
-            Button { aiEditorApp = app } label: { Label("Edit with AI", systemImage: "sparkles") }
-            Button {
-                aiIconApp = app
-            } label: { Label("Regenerate Icon", systemImage: "app.badge") }
-            Button {
-                editHistoryApp = app
-            } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
-            Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
+            } label: { Label("Copy Local link to app", systemImage: "link") }
             Button { store.exportHTML(app) } label: { Label("Export Raw Code", systemImage: "doc.text") }
+        } label: { Label("Sharing", systemImage: "square.and.arrow.up") }
+
+        Menu {
+            Button { editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
+            Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
             Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
             Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
-            Text("Updated \(app.updatedAt.formatted(date: .abbreviated, time: .shortened))")
         } label: { Label("Developer", systemImage: "chevron.left.forwardslash.chevron.right") }
         Button(role: .destructive) { pendingDelete = app } label: { Label("Delete", systemImage: "trash") }
     }
