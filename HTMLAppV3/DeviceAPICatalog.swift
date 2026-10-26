@@ -66,6 +66,15 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "1-7 tabs with unique IDs, titles and catalog SF Symbols. Native system rendering and Liquid Glass on eligible iOS 26 devices are controlled by Apple. HTML must implement each view and a fallback navigation UI when the bridge is absent."
         ),
         .init(
+            id: "motion.altitude",
+            title: "Barometer and relative altitude",
+            keywords: ["altitude", "barometer", "air pressure", "elevation", "pressure kpa"],
+            purpose: "Read the available barometer pressure and relative altitude change since sampling started.",
+            api: "await HTMLAppNative.motion.altitude()",
+            example: "const reading = await HTMLAppNative.motion.altitude(); console.log(reading.relativeAltitudeMeters, reading.pressureKPa);",
+            constraints: "Requires per-app Motion permission and supported barometer hardware. Relative altitude is not absolute GPS elevation and may vary with pressure. Unavailable in preview."
+        ),
+        .init(
             id: "bluetooth.battery",
             title: "Battery of a nearby BLE accessory",
             keywords: ["bluetooth battery", "headphone charge", "accessory battery", "BLE battery level", "peripheral power"],
