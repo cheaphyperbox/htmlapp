@@ -300,6 +300,8 @@ struct HTMLWebView: UIViewRepresentable {
         func shutdown() {
             if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
             launchObserver = nil
+            nativeBridge?.shutdown()
+            nativeBridge = nil
             localNetworkBridge?.shutdown()
             localNetworkBridge = nil
         }
