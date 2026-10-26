@@ -1,9 +1,27 @@
 import Foundation
+import UIKit
 
 @MainActor
 enum PermissionRequestGate {
     enum Verdict { case proceed, ignore, autoDenied }
     private static var recent: [String: [TimeInterval]] = [:]
+    private static var notices: Set<String> = []
+    static func showNotice(appID: String, title: String) {
+        guard !notices.contains(appID + title) else { return }
+        notices.insert(appID + title)
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else { return }
+        var current = root
+        while let next = current.presentedViewController { current = next }
+        if current is UIAlertController { return }
+        let alert = UIAlertController(title: title + " blocked",
+            message: "This HTML app requested this permission more than 10 times in 15 seconds. Open Library, hold this app, and select Permissions to change it.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        current.present(alert, animated: true)
+    }
+
     static func check(appID: String, permission: String) -> Verdict {
         let key = appID + ":" + permission
         let now = ProcessInfo.processInfo.systemUptime
