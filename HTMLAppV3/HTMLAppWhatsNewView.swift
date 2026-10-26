@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.21"
-    static let compiledBuild = "28"
+    static let compiledVersion = "1.6.22"
+    static let compiledBuild = "29"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
