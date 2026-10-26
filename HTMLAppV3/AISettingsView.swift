@@ -23,6 +23,7 @@ struct AIConfigurationSettingsView: View {
     @State private var appearancePreference = AISettingsStore.appearancePreference
     @State private var saved = false
     @State private var showAdvancedRoles = false
+    @State private var showAdvancedGeneration = false
     @State private var musicPrefetchTask: Task<Void, Never>?
 
     var body: some View {
@@ -68,6 +69,12 @@ struct AIConfigurationSettingsView: View {
                 }
             }
 
+            Section {
+                Button(showAdvancedGeneration ? "Hide advanced options" : "Show advanced options") {
+                    showAdvancedGeneration.toggle()
+                }
+            }
+            if showAdvancedGeneration {
             Section {
                 TextField("QUICK! model name", text: $quickModel)
                     .textInputAutocapitalization(.never)
@@ -122,6 +129,7 @@ struct AIConfigurationSettingsView: View {
                 Text("Link to any audio file (MP3, M4A, WAV…). It downloads once, then loops during every app generation or edit and stops when the run finishes.")
             }
 
+            }
             Section("AI & Personal Data") {
                 NavigationLink {
                     AIPrivacySettingsView()
