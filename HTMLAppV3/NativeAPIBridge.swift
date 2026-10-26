@@ -1273,9 +1273,28 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     }
 
     private func savePhotoLibraryAsset(id: String, args: [String: Any]) {
-        guard let relative = args["url"] as? String,
-              let source = localResourceURL(relative) else {
-            reject(id, code: "invalid_arguments", message: "photos.save requires a local relative url returned by HTMLAppNative.files.pick or photos.pick.")
+        guard let rawURL = args["url"] as? String else {
+            reject(id, code: "invalid_arguments", message: "photos.save requires an image URL.")
+            return
+        }
+        let source: URL
+        var temporarySource: URL?
+        if rawURL.hasPrefix("data:image/"),
+           let comma = rawURL.firstIndex(of: ","),
+           let data = Data(base64Encoded: String(rawURL[rawURL.index(after: comma)...])) {
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+            do {
+                try data.write(to: temp, options: .atomic)
+                source = temp
+                temporarySource = temp
+            } catch {
+                reject(id, code: "invalid_arguments", message: "Unable to read image data.")
+                return
+            }
+        } else if let local = localResourceURL(rawURL) {
+            source = local
+        } else {
+            reject(id, code: "invalid_arguments", message: "photos.save requires a URL returned by HTMLAppNative.photos.pick.")
             return
         }
 
@@ -1290,6 +1309,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
 
             let type = UTType(filenameExtension: source.pathExtension)
             let resourceType: PHAssetResourceType = type?.conforms(to: .movie) == true ? .video : .photo
+            _ = temporarySource
             PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
                 request.addResource(with: resourceType, fileURL: source, options: nil)
@@ -1798,9 +1818,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             // Relative file paths alone are not always accessible to generated
             // HTML pages, particularly when their base URL differs.
             if namespace == "photos", type.hasPrefix("image/"),
-               bytes > 0, bytes <= 8_000_000,
+               bytes > 0, bytes <= 20_000_000,
                let imageData = try? Data(contentsOf: destination) {
-                item["dataURL"] = "data:\(type);base64,\(imageData.base64EncodedString())"
+                let displayURL = "data:\(type);base64,\(imageData.base64EncodedString())"
+                item["dataURL"] = displayURL
+                // Legacy apps call fetch(picks[0].url) directly. A relative
+                // native-imports path is not reliably fetchable by WKWebView.
+                item["localURL"] = relative
+                item["url"] = displayURL
             }
             return item
         } catch {
