@@ -52,7 +52,7 @@ enum HTMLAppDeviceAPIResearch {
             title: "Native UIKit Tab Bar with iOS 26 system appearance",
             keywords: ["tab bar", "liquid glass", "tabs", "bottom navigation", "native navigation"],
             purpose: "Let a saved HTMLApp request a genuine iOS tab bar while its HTML/JavaScript owns each destination screen.",
-            api: "HTMLAppNative.tabs.configure(items); HTMLAppNative.tabs.onSelect(handler); HTMLAppNative.tabs.select(id); HTMLAppNative.tabs.remove()",
+            api: "HTMLAppNative.tabs.configure(items); HTMLAppNative.tabs.onSelect(handler); HTMLAppNative.tabs.select(id); HTMLAppNative.tabs.update(id,props); HTMLAppNative.tabs.setHidden(hidden); HTMLAppNative.tabs.pulse(); HTMLAppNative.tabs.remove()",
             example: """
             const support = await HTMLAppNative.capabilities();
             if (support.methods.includes("tabs.configure")) {
@@ -63,7 +63,7 @@ enum HTMLAppDeviceAPIResearch {
               ]);
             }
             """,
-            constraints: "2-5 tabs with unique IDs, titles and catalog SF Symbols. Native system rendering and Liquid Glass on eligible iOS 26 devices are controlled by Apple. HTML must implement each view and a fallback navigation UI when the bridge is absent."
+            constraints: "1-7 tabs with unique IDs, titles and catalog SF Symbols. Native system rendering and Liquid Glass on eligible iOS 26 devices are controlled by Apple. HTML must implement each view and a fallback navigation UI when the bridge is absent."
         ),
         .init(
             id: "bluetooth.battery",
