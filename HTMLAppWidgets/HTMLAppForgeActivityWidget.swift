@@ -4,48 +4,57 @@ import ActivityKit
 
 @available(iOS 16.2, *)
 struct HTMLAppForgeActivityWidget: Widget {
-    private let warning = "Do not leave HTMLApp or turn off your phone for more than 20 seconds at a time for now."
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HTMLAppForgeActivityAttributes.self) { context in
-            VStack(alignment: .leading, spacing: 9) {
-                Label(context.attributes.isEdit ? "HTMLApp AI Edit" : "HTMLApp AI Generation", systemImage: "exclamationmark.triangle.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                Label(context.attributes.isEdit ? "HTMLApp AI Edit" : "HTMLApp AI Generation",
+                      systemImage: "sparkles")
                     .font(.headline)
-                Text(warning).font(.subheadline.weight(.bold)).fixedSize(horizontal: false, vertical: true)
-                Text("Return to HTMLApp to keep the AI working").font(.caption.weight(.semibold))
-                Text(context.state.phase).font(.caption).opacity(0.94)
-                ProgressView(value: context.state.progress).tint(.white)
+                Text(context.state.phase)
+                    .font(.subheadline.weight(.semibold))
+                ProgressView(value: context.state.progress)
+                Text("Open HTMLApp to see the current generation step.")
+                    .font(.caption)
             }
-            .foregroundStyle(.white)
             .padding(14)
-            .activityBackgroundTint(.red)
+            .activityBackgroundTint(.indigo)
             .activitySystemActionForegroundColor(.white)
             .widgetURL(URL(string: "htmlapp://forge"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label("HTMLApp", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                    Label("HTMLApp", systemImage: "sparkles")
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.attributes.isEdit ? "AI edit" : "AI generation").font(.headline)
+                    Text(context.attributes.isEdit ? "AI edit" : "AI generation")
+                        .font(.headline)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(warning).font(.subheadline).fixedSize(horizontal: false, vertical: true)
-                        Text("Return to HTMLApp").font(.caption.weight(.bold))
-                        Text(context.state.phase).font(.caption)
-                        ProgressView(value: context.state.progress).tint(.red)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Current step")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(context.state.phase)
+                            .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        ProgressView(value: context.state.progress)
+                        Text("\(Int(context.state.progress * 100))% complete")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.red)
                 }
             } compactLeading: {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                Image(systemName: "sparkles")
             } compactTrailing: {
-                Text("HTMLApp").font(.caption2).foregroundStyle(.red)
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
             } minimal: {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(.white)
             }
-            .keylineTint(.red)
+            .keylineTint(.indigo)
             .widgetURL(URL(string: "htmlapp://forge"))
         }
     }
