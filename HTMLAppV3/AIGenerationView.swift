@@ -57,6 +57,7 @@ struct AIGenerationView: View {
     @State private var selectedStyle: ForgeStyleConcept?
     @State private var prompt = ""
     @State private var changePrompt = ""
+    @State private var unsavedEditHistory: [String] = []
     @State private var showingChange = false
     @State private var saving = false
     @State private var showCancelConfirmation = false
@@ -143,6 +144,17 @@ struct AIGenerationView: View {
                         }
                     }
                     .disabled(saving)
+                }
+                if !unsavedEditHistory.isEmpty {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            guard !session.isWorking, !saving,
+                                  let previous = unsavedEditHistory.popLast() else { return }
+                            session.acceptExternalHTML(previous)
+                            uiPolishNotice = "Restored an earlier unsaved edit."
+                        } label: { Label("Undo Edit", systemImage: "arrow.uturn.backward") }
+                        .disabled(session.isWorking || saving)
+                    }
                 }
                 if developerMode && (debugTrace.isActive || !debugTrace.history.isEmpty) {
                     ToolbarItem(placement: .confirmationAction) {
@@ -1739,6 +1751,9 @@ struct AIGenerationView: View {
         guard !ForgeBackgroundUpload.shared.isActive, !session.isWorking,
               !browserResearch.isBrowsing else { return }
         runtimeErrors = []
+        if !session.streamedHTML.isEmpty {
+            unsavedEditHistory.append(session.streamedHTML)
+        }
         startForgeActivity(edit: true)
         milestones.reset()
         workTracker.begin(kind: "AI edit", appKey: existingApp?.id ?? draftWorkID)
