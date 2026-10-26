@@ -338,11 +338,12 @@ final class NativePermissionCoordinator: NSObject, CLLocationManagerDelegate {
             )
             alert.addAction(UIAlertAction(title: "Don’t Allow", style: .cancel) { _ in
                 HTMLPermissionStore.set(.deny, for: permission, appID: self.appID)
-                completion(false)
+                PermissionRequestGate.finish(appID: self.appID, permission: permission.rawValue, allowed: false)
             })
             alert.addAction(UIAlertAction(title: "Allow", style: .default) { _ in
-                HTMLPermissionStore.set(.allow, for: permission, appID: self.appID)
-                completion(true)
+                let blocked = HTMLPermissionStore.choice(for: permission, appID: self.appID) == .deny
+                if !blocked { HTMLPermissionStore.set(.allow, for: permission, appID: self.appID) }
+                PermissionRequestGate.finish(appID: self.appID, permission: permission.rawValue, allowed: !blocked)
             })
             presenter.present(alert, animated: true)
         }
