@@ -160,7 +160,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "contacts.create", "photos.pick", "photos.save", "calendar.createEvent",
                     "calendar.events", "calendar.updateEvent", "calendar.deleteEvent",
                     "reminders.create", "reminders.list", "reminders.update", "reminders.delete",
-                    "notifications.schedule", "notifications.cancel", "push.register", "biometrics.authenticate",
+                    "notifications.schedule", "notifications.cancel", "notifications.installSound", "push.register", "biometrics.authenticate",
                     "secureStorage.set", "secureStorage.get", "secureStorage.remove",
                     "appStorage.get", "appStorage.set", "appStorage.remove", "appStorage.all",
                     "appStorage.clear", "liveActivities.start", "liveActivities.update",
@@ -346,6 +346,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.reminders, id: id) { [weak self] in self?.updateReminder(id: id, args: args) }
         case "reminders.delete":
             withPermission(.reminders, id: id) { [weak self] in self?.deleteReminder(id: id, args: args) }
+        case "notifications.installSound":
+            withPermission(.notifications, id: id) { [weak self] in self?.installNotificationSound(id: id, args: args) }
         case "notifications.schedule":
             withPermission(.notifications, id: id) { [weak self] in self?.scheduleNotification(id: id, args: args) }
         case "notifications.cancel":
@@ -1966,6 +1968,7 @@ enum HTMLNativeAPIScript {
         },
         notifications: {
           schedule: (notification) => call('notifications.schedule', notification || {}),
+          installSound: (name, base64) => call('notifications.installSound', {name, base64}),
           cancel: (options = {}) => call('notifications.cancel', options)
         },
         biometrics: {
