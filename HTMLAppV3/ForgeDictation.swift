@@ -189,6 +189,7 @@ final class ForgeDictation: ObservableObject {
             return
         }
         generation = UUID()
+        let wasUsingAudio = recording || tapped
         if recording { status = "Dictation stopped. Review your text before generating." }
         timeout?.cancel(); timeout = nil
         engine.stop()
@@ -196,6 +197,8 @@ final class ForgeDictation: ObservableObject {
         request?.endAudio(); request = nil
         task?.cancel(); task = nil
         recording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if wasUsingAudio {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
