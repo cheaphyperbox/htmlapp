@@ -135,6 +135,20 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             nativeTabBar?.remove()
             nativeTabBar = nil
             resolve(id, value: ["removed": true])
+        case "push.register":
+            withPermission(.notifications, id: id) { [weak self] in
+                guard let self else { return }
+                HTMLAppRemotePushService.shared.register { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let token):
+                        self.resolve(id, value: ["token": token, "appID": self.appID])
+                    case .failure(let error):
+                        self.reject(id, code: "push_unavailable",
+                                    message: error.localizedDescription)
+                    }
+                }
+            }
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
@@ -146,7 +160,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "contacts.create", "photos.pick", "photos.save", "calendar.createEvent",
                     "calendar.events", "calendar.updateEvent", "calendar.deleteEvent",
                     "reminders.create", "reminders.list", "reminders.update", "reminders.delete",
-                    "notifications.schedule", "notifications.cancel", "biometrics.authenticate",
+                    "notifications.schedule", "notifications.cancel", "push.register", "biometrics.authenticate",
                     "secureStorage.set", "secureStorage.get", "secureStorage.remove",
                     "appStorage.get", "appStorage.set", "appStorage.remove", "appStorage.all",
                     "appStorage.clear", "liveActivities.start", "liveActivities.update",
@@ -1884,6 +1898,9 @@ enum HTMLNativeAPIScript {
             if (typeof handler !== 'function') throw new TypeError('onSelect requires a function');
             window.addEventListener('htmlapp:native-tab-select', e => handler(e.detail.id));
           }
+        },
+        push: {
+          register: () => call('push.register')
         },
         symbols: {
           search: (query = '') => call('symbols.search', { query: String(query) }),
