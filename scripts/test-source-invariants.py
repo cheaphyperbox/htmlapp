@@ -265,7 +265,8 @@ assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
 # Regression coverage for divergent AI looks and in-preview JavaScript errors.
 assert 'styleRegenerationRound += 1' in forge
 assert 'regeneration: regenerationRound' in forge
-assert 'MANDATORY composition:' in styles and 'archetypes' in styles
+assert 'archetypes' in styles and 'Mandatory composition:' in styles, "Initial looks must retain distinct layout compositions"
+assert 'freeform = index >= 3' in styles and 'no style presets' in styles, "Additional AI looks must be unrestricted"
 assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
 assert 'Button("Ask AI to Fix")' in forge
 web_source = source("HTMLAppV3/EditorWeb.swift")
