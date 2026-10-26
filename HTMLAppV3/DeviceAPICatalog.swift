@@ -66,6 +66,23 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "2-5 tabs with unique IDs, titles and catalog SF Symbols. Native system rendering and Liquid Glass on eligible iOS 26 devices are controlled by Apple. HTML must implement each view and a fallback navigation UI when the bridge is absent."
         ),
         .init(
+            id: "bluetooth.battery",
+            title: "Battery of a nearby BLE accessory",
+            keywords: ["bluetooth battery", "headphone charge", "accessory battery", "BLE battery level", "peripheral power"],
+            purpose: "Read the standard Battery Level characteristic from a nearby BLE device discovered in the same HTMLApp session.",
+            api: "await HTMLAppNative.bluetooth.battery(device.id)",
+            example: """
+            const {devices} = await HTMLAppNative.bluetooth.scan(6);
+            for (const device of devices) {
+              try {
+                const {percentage} = await HTMLAppNative.bluetooth.battery(device.id);
+                console.log(device.name, percentage);
+              } catch (_) { console.log(device.name, "Battery not available"); }
+            }
+            """,
+            constraints: "User-authorized, foreground Bluetooth only. Reads standard GATT Battery Service 180F / characteristic 2A19, not arbitrary proprietary AirPods or Classic Bluetooth battery values. Connection can fail and an accessory may not expose battery info. Always show unavailable instead of inventing percentage."
+        ),
+        .init(
             id: "bluetooth.scan",
             title: "Nearby Bluetooth Low Energy discovery",
             keywords: ["bluetooth", "BLE", "peripheral", "nearby device", "scan"],
