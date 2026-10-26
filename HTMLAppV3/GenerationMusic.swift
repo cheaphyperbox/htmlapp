@@ -13,7 +13,10 @@ enum GenerationMusicSettings {
     }
 
     static func validatedURL(_ input: String) -> URL? {
-        guard let url = URL(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fileURL = URL(string: trimmed), fileURL.isFileURL,
+           FileManager.default.fileExists(atPath: fileURL.path) { return fileURL }
+        guard let url = URL(string: trimmed),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.user == nil, components.password == nil,
               let host = components.host?.lowercased(), !host.isEmpty else { return nil }
@@ -311,6 +314,7 @@ final class GenerationMusic: ObservableObject {
     }
 
     nonisolated private static func existingCachedAudio(from url: URL) -> URL? {
+        if url.isFileURL { return FileManager.default.fileExists(atPath: url.path) ? url : nil }
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         let key = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
         let ext = ["mp3", "m4a", "wav", "aac", "caf"].contains(url.pathExtension.lowercased()) ? url.pathExtension.lowercased() : "mp3"
@@ -320,6 +324,7 @@ final class GenerationMusic: ObservableObject {
     }
 
     nonisolated private static func cachedAudio(from url: URL) async throws -> URL {
+        if url.isFileURL { return url }
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
         let key = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
         let ext = ["mp3", "m4a", "wav", "aac", "caf"].contains(url.pathExtension.lowercased()) ? url.pathExtension.lowercased() : "mp3"
