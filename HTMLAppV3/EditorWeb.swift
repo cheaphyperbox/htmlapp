@@ -1023,6 +1023,7 @@ private final class HTMLAppFaceDownShakeExit {
             updateBlackout()
             return
         }
+        let requiredSeconds = max(0.5, min(5, UserDefaults.standard.double(forKey: "htmlapp.shakeExitSeconds") == 0 ? 1 : UserDefaults.standard.double(forKey: "htmlapp.shakeExitSeconds")))
         let faceDown = sample.gravity.z > 0.78
         let a = sample.userAcceleration
         let shake = sqrt(a.x*a.x + a.y*a.y + a.z*a.z)
@@ -1031,7 +1032,7 @@ private final class HTMLAppFaceDownShakeExit {
         // progress bar appear without ever reaching the exit threshold.
         if faceDown {
             if shake > 0.35 {
-                progress = min(1, progress + delta * min(3.2, 1.4 + shake * 1.5))
+                progress = min(1, progress + delta * min(3.2, 1.4 + shake * 1.5) / (2.0 * requiredSeconds))
                 if now - lastHaptic > max(0.09, 0.32 - progress * 0.2) {
                     feedback.impactOccurred(intensity: CGFloat(0.2 + progress * 0.8))
                     lastHaptic = now
@@ -1114,7 +1115,10 @@ private final class HTMLAppFaceDownShakeExit {
     private func updateBlackout() {
         // z=+1 is face down; z=0 is 90 degrees; z=-1 is face up.
         // Fade fully by roughly 70 degrees of rotation from face down.
-        let fraction = CGFloat(max(0, min(1, (lastGravityZ - 0.342) / 0.658)))
+        let configuredAngle = UserDefaults.standard.double(forKey: "htmlapp.shakeFadeEndAngle")
+        let endAngle = max(20, min(180, configuredAngle == 0 ? 70 : configuredAngle))
+        let endGravity = cos(endAngle * .pi / 180)
+        let fraction = CGFloat(max(0, min(1, (lastGravityZ - endGravity) / (1 - endGravity))))
         let eased = fraction * fraction * (3 - 2 * fraction)
         darkness?.alpha = eased
         blackout?.alpha = eased
