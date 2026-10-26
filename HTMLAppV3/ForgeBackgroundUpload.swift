@@ -201,6 +201,16 @@ final class ForgeBackgroundUpload: NSObject, URLSessionDataDelegate {
 /// Receives completed URLSession events after iOS relaunches HTMLApp.
 final class HTMLAppBackgroundURLSessionDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
+        Task { @MainActor in HTMLAppRemotePushService.shared.didRegister(token: token) }
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Task { @MainActor in HTMLAppRemotePushService.shared.didFail(error) }
+    }
+
+    func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
         ForgeBackgroundUpload.shared.reconnect(
