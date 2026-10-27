@@ -405,3 +405,17 @@ assert 'id: "motion.altitude"' in source("HTMLAppV3/DeviceAPICatalog.swift")
 assert (root / "docs/apns-ptt-deployment.md").exists()
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
+
+# Native capability parity for newly introduced AI, language and Vision methods.
+catalog = source("HTMLAppV3/DeviceAPICatalog.swift")
+for method in (
+    "ai.available", "ai.complete", "ai.classify",
+    "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+    "language.detect", "language.tokenize", "language.sentiment", "language.entities",
+):
+    assert f'id: "{method}"' in catalog, f"Missing catalog entry: {method}"
+    assert f'"{method}"' in native, f"Missing bridge/capabilities entry: {method}"
+    assert f"call('{method}'" in native, f"Missing JS wrapper: {method}"
+assert 'case .ai: return "sparkles"' in source("HTMLAppV3/PermissionSystem.swift")
+assert 'htmlapp.aiBridge.enabled' in source("HTMLAppV3/AISettingsView.swift")
