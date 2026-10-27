@@ -105,7 +105,11 @@ struct HTMLAppStorageManagementView: View {
         guard let item = selectedDeletion else { return }
         selectedDeletion = nil
         if item.kind == "key" {
-            HTMLAppPortableDataStore.remove(appID: app.id, key: item.key)
+            do {
+                try HTMLAppPortableDataStore.removeChecked(appID: app.id, key: item.key)
+            } catch {
+                errorMessage = "Saved data could not be removed: " + error.localizedDescription
+            }
         } else if let collection = item.collection {
             do {
                 _ = try HTMLAppDocumentDatabase.perform(appID: app.id, method: "db.delete", args: ["collection": collection, "id": item.key])
