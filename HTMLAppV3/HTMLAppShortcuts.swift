@@ -77,6 +77,14 @@ struct HTMLAppSiriShortcuts: AppShortcutsProvider {
             systemImageName: "apps.iphone"
         )
         AppShortcut(
+            intent: OpenSavedHTMLAppActionIntent(),
+            phrases: [
+                "Run an app action in \\(.applicationName)"
+            ],
+            shortTitle: "Run HTML App Action",
+            systemImageName: "play.square"
+        )
+        AppShortcut(
             intent: CreateHTMLAppFromPromptIntent(),
             phrases: [
                 "Create an app with \(.applicationName)",
