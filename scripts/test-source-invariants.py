@@ -435,8 +435,14 @@ assert 'args["json"] as? Bool == true' in native
 
 # Native dispatch must not duplicate Vision patterns in the language handler.
 assert 'case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces", "language.detect"' not in native, "Duplicate Vision dispatch in NaturalLanguage handler"
+# Swift intentionally groups all Vision methods in a single switch case.
+# Check the executable case label, not one standalone 'case' per method.
+vision_case = 'case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":'
+assert vision_case in native.split('case "language.detect"', 1)[0], "Missing executable Vision dispatch group"
+assert native.count(vision_case) == 1, "Vision dispatch group must be unique"
 for method in ("vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces"):
-    assert f'case "{method}"' in native, f"Missing Vision dispatch: {method}"
+    assert f'id: "{method}"' in catalog, f"Missing Vision catalog entry: {method}"
+    assert f"call('{method}'" in native, f"Missing Vision JS wrapper: {method}"
 
 # Requested speech JS aliases route to existing permission-gated transcription.
 for method in ("speech.recognize", "speech.stopRecognizing"):
