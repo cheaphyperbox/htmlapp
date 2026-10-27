@@ -40,6 +40,31 @@ struct CreateHTMLAppFromPromptIntent: AppIntent {
 }
 
 @available(iOS 16.2, *)
+struct OpenSavedHTMLAppActionIntent: AppIntent {
+    static var title: LocalizedStringResource = "Run Saved HTML App Action"
+    static var description = IntentDescription("Open a saved HTML app and deliver an action for it to handle.")
+    static var openAppWhenRun: Bool = true
+
+    @Parameter(title: "App Name")
+    var appName: String
+
+    @Parameter(title: "Action")
+    var action: String
+
+    func perform() async throws -> some IntentResult {
+        let name = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = action.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !command.isEmpty, command.count <= 120 else {
+            throw $action.needsValueError("Provide a saved app and a short action.")
+        }
+        UserDefaults.standard.set(String(name.prefix(120)), forKey: "htmlapp.shortcut.openName")
+        UserDefaults.standard.set(command, forKey: "htmlapp.shortcut.pendingAction")
+        NotificationCenter.default.post(name: Notification.Name("HTMLAppShortcutRequested"), object: nil)
+        return .result()
+    }
+}
+
+@available(iOS 16.2, *)
 struct HTMLAppSiriShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
