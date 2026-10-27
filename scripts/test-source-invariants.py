@@ -410,7 +410,7 @@ print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging 
 # Native capability parity for newly introduced AI, language and Vision methods.
 catalog = source("HTMLAppV3/DeviceAPICatalog.swift")
 for method in (
-    "ai.available", "ai.complete", "ai.classify",
+    "ai.available", "ai.complete", "ai.classify", "speech.listen", "speech.listenStop",
     "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search", "shortcuts.consumeAction",
     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
