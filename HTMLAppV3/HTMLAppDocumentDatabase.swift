@@ -26,6 +26,46 @@ enum HTMLAppDocumentDatabase {
         name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }
     }
 
+    static func exportJSON(appID: String) throws -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
+        let db = try open(appID: appID)
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT collection,id,body FROM documents ORDER BY collection,id", -1, &statement, nil) == SQLITE_OK else {
+            throw NSError(domain: "HTMLAppDatabase", code: 10)
+        }
+        defer { sqlite3_finalize(statement) }
+        var records: [[String: Any]] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let collection = sqlite3_column_text(statement, 0),
+                  let id = sqlite3_column_text(statement, 1),
+                  let body = sqlite3_column_text(statement, 2),
+                  let bytes = String(cString: body).data(using: .utf8),
+                  let document = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { continue }
+            records.append(["collection": String(cString: collection), "id": String(cString: id), "document": document])
+        }
+        return ["format": "htmlapp.sqlite-json.v1", "records": records]
+    }
+
+    static func importJSON(appID: String, payload: [String: Any]) throws -> Int {
+        guard payload["format"] as? String == "htmlapp.sqlite-json.v1",
+              let records = payload["records"] as? [[String: Any]],
+              records.count <= 20000 else { throw NSError(domain: "HTMLAppDatabase", code: 11) }
+        let encoded = try JSONSerialization.data(withJSONObject: payload)
+        guard encoded.count <= 10 * 1024 * 1024 else { throw NSError(domain: "HTMLAppDatabase", code: 12) }
+        for record in records {
+            guard let collection = record["collection"] as? String,
+                  let id = record["id"] as? String,
+                  valid(collection), valid(id),
+                  let document = record["document"] as? [String: Any] else {
+                throw NSError(domain: "HTMLAppDatabase", code: 13)
+            }
+            _ = try perform(appID: appID, method: "db.put", args: ["collection": collection, "id": id, "document": document])
+        }
+        return records.count
+    }
+
     static func perform(appID: String, method: String, args: [String: Any]) throws -> Any {
         guard let collection = args["collection"] as? String, valid(collection) else {
             throw NSError(domain: "HTMLAppDatabase", code: 3)
