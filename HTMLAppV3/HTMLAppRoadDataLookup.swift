@@ -28,7 +28,7 @@ actor HTMLAppRoadDataLookup {
         }
         lastRequests[appID] = Date()
 
-        let query = "[out:json][timeout:10];way(around:100,\(lat),\(lon))[highway][highway!~\"^(footway|cycleway|path|pedestrian|steps|bridleway|corridor|construction)$\"];out tags center;"
+        let query = "[out:json][timeout:10];way(around:100,\(lat),\(lon))[highway][highway!~\"^(footway|cycleway|path|pedestrian|steps|bridleway|corridor|construction)$\"];out tags geom;"
         var url = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         url.queryItems = [URLQueryItem(name: "data", value: query)]
         guard let endpoint = url.url else { throw LookupError.unavailable }
@@ -44,11 +44,16 @@ actor HTMLAppRoadDataLookup {
         }
         let match = ways.compactMap { way -> (Double, [String: Any])? in
             guard let tags = way["tags"] as? [String: String],
-                  let position = way["center"] as? [String: Double],
-                  let wlat = position["lat"], let wlon = position["lon"] else { return nil }
-            let dx = (wlon - longitude) * cos(latitude * .pi / 180) * 111_200
-            let dy = (wlat - latitude) * 111_200
-            let meters = (dx * dx + dy * dy).squareRoot()
+                  let geometry = way["geometry"] as? [[String: Double]],
+                  !geometry.isEmpty else { return nil }
+            // Center-of-way is unreliable for a road that stretches far beyond
+            // the user's position; use the nearest geometry point instead.
+            let meters = geometry.compactMap { point -> Double? in
+                guard let wlat = point["lat"], let wlon = point["lon"] else { return nil }
+                let dx = (wlon - longitude) * cos(latitude * .pi / 180) * 111_200
+                let dy = (wlat - latitude) * 111_200
+                return (dx * dx + dy * dy).squareRoot()
+            }.min() ?? Double.infinity
             let raw = tags["maxspeed"] ?? ""
             return (meters, [
                 "road": tags["name"] ?? tags["ref"] ?? "",
