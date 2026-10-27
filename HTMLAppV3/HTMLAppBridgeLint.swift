@@ -16,7 +16,7 @@ enum HTMLAppBridgeLint {
             let method = source.substring(with: match.range(at: 2))
             let name = namespace + "." + method
             if !known.contains(name), seen.insert(name).inserted {
-                warnings.append("Bridge lint: \\(name) is not in the supported API catalog; feature-detect it and provide a fallback.")
+                warnings.append("Bridge lint: \(name) is not in the supported API catalog; feature-detect it and provide a fallback.")
             }
         }
         if html.contains("navigator.bluetooth.requestDevice(") {
