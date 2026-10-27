@@ -37,7 +37,7 @@ final class HTMLAppHealthReader {
                     return
                 }
                 let sum = statistics?.sumQuantity()
-                let value: Any = sum.map { $0.doubleValue(for: unit) } ?? NSNull()
+                let value: Any = sum.map { $0.doubleValue(for: unit) as Any } ?? NSNull()
                 continuation.resume(returning: ["quantity": quantity, "value": value, "hasData": sum != nil, "start": start.timeIntervalSince1970, "end": end.timeIntervalSince1970])
             }
             store.execute(query)
