@@ -494,4 +494,8 @@ assert 'Modifying saved data can cause issues' in storage_manager
 assert "HTMLAppStorageManagementView(app: app)" in permission_view
 assert "native_timeout" in native and "clearTimeout(item.timer)" in native
 
+assert "r.bottom <= 0 || r.top >= innerHeight" in runtime_verifier
+assert 'let normalized = String(value.reversed().drop(while: { $0 == "/" }).reversed())' in source("HTMLAppV3/AIConfiguration.swift")
+assert '"hasData": sum != nil' in source("HTMLAppV3/HTMLAppHealthReader.swift")
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
