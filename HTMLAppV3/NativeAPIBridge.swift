@@ -150,7 +150,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
-            let ready = enabled && config.isConfigured
+            let permitted = HTMLPermissionStore.choice(for: .ai, appID: appID) == .allow
+            let ready = enabled && permitted && config.isConfigured
             let usageKey = "htmlapp.aiBridge.usage." + appID
             let currentTime = Date().timeIntervalSince1970
             let used = (UserDefaults.standard.array(forKey: usageKey) as? [Double] ?? [])
