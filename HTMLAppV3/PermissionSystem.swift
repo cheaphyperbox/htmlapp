@@ -7,6 +7,7 @@ import WebKit
 
 enum HTMLPermission: String, CaseIterable, Identifiable {
     case ai
+    case spotlight
     case camera
     case microphone
     case location
@@ -30,6 +31,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .ai: return "AI Provider Access"
+        case .spotlight: return "Spotlight Search"
         case .camera: return "Camera"
         case .microphone: return "Microphone"
         case .location: return "Location"
@@ -53,6 +55,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .ai: return "Allows this HTML app to send prompts to your chosen AI provider, unless on-device processing is used. Requests may consume API credits."
+        case .spotlight: return "Allows this saved HTML app to index selected titles and summaries in iOS Spotlight search."
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
@@ -76,6 +79,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .ai: return "sparkles"
+        case .spotlight: return "magnifyingglass"
         case .camera: return "camera.fill"
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
