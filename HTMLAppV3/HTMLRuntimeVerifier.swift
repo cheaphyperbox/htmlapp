@@ -138,13 +138,14 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             case "capabilities.list":
                 ok = true
                 value = [
-                    "methods": HTMLAppDeviceAPIResearch.entries.map(\\.id),
+                    "methods": HTMLAppDeviceAPIResearch.entries.map(\.id),
                     "permissions": [],
                     "qaMock": true, "nativeHardwareAvailable": false
                 ] as [String: Any]
             case "appStorage.get":
                 ok = true
-                value = ["value": mockAppStorage[args["key"] as? String ?? ""] ?? NSNull()] as [String: Any]
+                let stored: Any = mockAppStorage[args["key"] as? String ?? ""] ?? NSNull()
+                value = ["value": stored]
             case "appStorage.set":
                 let key = args["key"] as? String ?? ""
                 guard !key.isEmpty, let text = args["value"] as? String else {
@@ -181,7 +182,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
-        webView?.evaluateJavaScript("window.__htmlappNativeResolve && window.__htmlappNativeResolve.apply(null, \\(json));")
+        webView?.evaluateJavaScript("window.__htmlappNativeResolve && window.__htmlappNativeResolve.apply(null, \(json));")
     }
 
     private func runChecks() async {
