@@ -54,12 +54,8 @@ enum HTMLAppPortableDataStore {
     }
 
     static func clear(appID: String) {
-        let keys = Array(all(appID: appID).keys)
-        queue.sync { try? FileManager.default.removeItem(at: fileURL(appID: appID)) }
-        for key in keys {
-            HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
-        }
-        HTMLAppWidgetReloadCoordinator.request()
+        replace(appID: appID, values: [:])
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
     }
 
     private static func load(appID: String) -> [String: String] {
@@ -72,10 +68,8 @@ enum HTMLAppPortableDataStore {
 
     private static func persist(_ values: [String: String], appID: String) {
         let destination = fileURL(appID: appID)
-        if values.isEmpty {
-            try? FileManager.default.removeItem(at: destination)
-            return
-        }
+        // Persist an explicit empty file so iCloud can distinguish clearing
+        // saved data from a device that has never stored any data.
         guard let data = try? JSONEncoder().encode(values) else { return }
         try? data.write(to: destination, options: .atomic)
     }
