@@ -7,6 +7,7 @@ struct EnhancedAppPermissionsView: View {
     @State private var choices: [HTMLPermission: HTMLPermissionChoice]
     @State private var sensorChoice: HTMLPermissionChoice
     @State private var showAll = false
+    @State private var showingStorageManagement = false
     @State private var requested: Set<String>
 
     init(app: SavedHTMLApp) {
@@ -61,6 +62,11 @@ struct EnhancedAppPermissionsView: View {
                     }
                 }
 
+                Section("Developer · App Data") {
+                    LabeledContent("Portable data", value: ByteCountFormatter.string(fromByteCount: Int64((try? HTMLAppPortableDataStore.fileURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0), countStyle: .file))
+                    LabeledContent("SQLite data", value: ByteCountFormatter.string(fromByteCount: Int64((try? HTMLAppDocumentDatabase.databaseURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0), countStyle: .file))
+                    Button("Manage Storage") { showingStorageManagement = true }
+                }
                 Section {
                     Button("Open HTMLApp in iOS Settings") {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -77,6 +83,7 @@ struct EnhancedAppPermissionsView: View {
                     Text("Haptics do not require a per-app permission. Other protected capabilities remain subject to both this saved-app choice and any iOS system permission that applies.")
                 }
             }
+            .sheet(isPresented: $showingStorageManagement) { HTMLAppStorageManagementView(app: app) }
             .navigationTitle("Permissions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
