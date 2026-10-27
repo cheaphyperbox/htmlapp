@@ -741,8 +741,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "appStorage.all":
             portableDataAll(id: id)
         case "appStorage.clear":
-            HTMLAppPortableDataStore.clear(appID: appID)
-            resolve(id, value: ["cleared": true])
+            do {
+                try HTMLAppPortableDataStore.clearChecked(appID: appID)
+                resolve(id, value: ["cleared": true])
+            } catch {
+                reject(id, code: "storage_write_failed", message: "Could not clear saved app data. Try again after freeing device storage.")
+            }
         case "liveActivities.start":
             if #available(iOS 16.2, *) {
                 withPermission(.liveActivities, id: id) { [weak self] in
@@ -927,8 +931,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: "value_too_large", message: "One portable app-data value cannot exceed 4 MB.")
             return
         }
-        HTMLAppPortableDataStore.set(appID: appID, key: key, value: value)
-        resolve(id, value: ["saved": true])
+        do {
+            try HTMLAppPortableDataStore.setChecked(appID: appID, key: key, value: value)
+            resolve(id, value: ["saved": true])
+        } catch {
+            reject(id, code: "storage_write_failed", message: "Could not save app data. Check device storage and try again.")
+        }
     }
 
     private func portableDataRemove(id: String, args: [String: Any]) {
@@ -937,8 +945,12 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: "invalid_key", message: "A portable app-data key is required.")
             return
         }
-        HTMLAppPortableDataStore.remove(appID: appID, key: key)
-        resolve(id, value: ["removed": true])
+        do {
+            try HTMLAppPortableDataStore.removeChecked(appID: appID, key: key)
+            resolve(id, value: ["removed": true])
+        } catch {
+            reject(id, code: "storage_write_failed", message: "Could not remove saved app data.")
+        }
     }
 
     private func portableDataAll(id: String) {
