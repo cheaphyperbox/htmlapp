@@ -566,4 +566,18 @@ assert "OpenStreetMap Overpass" in road_lookup
 assert '"status": "unknown"' in road_lookup
 assert "lastRequests[appID]" in road_lookup
 
+# Location-based generated apps must use native, permission-gated
+# geocoding and road tags rather than assuming GPS includes either.
+road_data = source("HTMLAppV3/HTMLAppRoadDataLookup.swift")
+contract = source("HTMLAppV3/ForgeProductContract.swift")
+assert "HTMLAppNative.location.reverseGeocode" in contract
+assert "HTMLAppNative.location.roadSpeedLimit" in contract
+assert "Never" in contract or "NEVER" in contract
+assert '"https://overpass.kumi.systems/api/interpreter"' in road_data
+assert 'request.httpMethod = "POST"' in road_data
+assert "zip(vertices, vertices.dropFirst())" in road_data
+assert 'case "location.reverseGeocode":' in native
+assert 'case "location.roadSpeedLimit":' in native
+assert "withPermission(.roadData, id: id)" in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
