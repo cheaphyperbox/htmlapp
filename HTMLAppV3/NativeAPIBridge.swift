@@ -30,6 +30,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private var filePickerCallbackID: String?
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
+    private let speechRecognition = HTMLAppSpeechRecognition()
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
     private var nativeTabBar: HTMLAppNativeTabBar?
@@ -42,7 +43,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         super.init()
     }
 
-    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil }
+    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil; speechRecognition.stop() }
 
     func handle(_ body: [String: Any]) {
         guard let id = body["id"] as? String,
@@ -377,7 +378,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "liveActivities.end", "liveActivities.list", "widgets.configure",
                     "widgets.list", "widgets.remove", "widgets.reload", "background.configure",
                     "background.list", "background.remove", "background.refreshNow",
-                    "speech.speak", "speech.stop"
+                    "speech.speak", "speech.stop", "speech.listen", "speech.listenStop"
                 ],
                 "permissions": HTMLPermission.allCases.map { $0.rawValue },
                 "torchAvailable": AVCaptureDevice.default(for: .video)?.hasTorch ?? false,
