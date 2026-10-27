@@ -2167,6 +2167,9 @@ enum HTMLNativeAPIScript {
           sentiment: (text) => call('language.sentiment', { text: String(text ?? '') }),
           entities: (text) => call('language.entities', { text: String(text ?? '') })
         },
+        shortcuts: {
+          consumeAction: (appName) => call('shortcuts.consumeAction', { appName })
+        },
         db: {
           put: (collection, id, document) => call('db.put', { collection, id, document }),
           get: (collection, id) => call('db.get', { collection, id }),
