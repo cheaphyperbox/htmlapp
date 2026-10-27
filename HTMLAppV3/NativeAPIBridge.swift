@@ -148,7 +148,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 }
                 resolve(id, value: ["entities": entities])
             }
-        case "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search", "db.search":
+        case "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search":
             guard appID != "PREVIEW" else {
                 reject(id, code: "preview_restricted", message: "Database access is unavailable in preview.")
                 return
@@ -177,6 +177,30 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             } catch {
                 reject(id, code: "database_error", message: "Document database operation failed or exceeded its quota.")
             }
+        case "speech.listen":
+            withPermission(.microphone, id: id) { [weak self] in
+                guard let self else { return }
+                let locale = args["locale"] as? String ?? Locale.current.identifier
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        try await self.speechRecognition.start(locale: locale) { [weak self] result in
+                            guard let self else { return }
+                            switch result {
+                            case .success(let transcript):
+                                if transcript["final"] as? Bool == true { self.resolve(id, value: transcript) }
+                            case .failure:
+                                self.reject(id, code: "speech_error", message: "Speech recognition failed.")
+                            }
+                        }
+                    } catch {
+                        self.reject(id, code: "speech_unavailable", message: "Speech recognition requires microphone and speech permission.")
+                    }
+                }
+            }
+        case "speech.listenStop":
+            speechRecognition.stop()
+            resolve(id, value: ["stopped": true])
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
