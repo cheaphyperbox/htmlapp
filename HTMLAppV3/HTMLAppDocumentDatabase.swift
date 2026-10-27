@@ -93,6 +93,22 @@ enum HTMLAppDocumentDatabase {
               records.count <= 20000 else { throw NSError(domain: "HTMLAppDatabase", code: 11) }
         let encoded = try JSONSerialization.data(withJSONObject: payload)
         guard encoded.count <= 10 * 1024 * 1024 else { throw NSError(domain: "HTMLAppDatabase", code: 12) }
+        lock.lock()
+        defer { lock.unlock() }
+        let db = try open(appID: appID)
+        defer { sqlite3_close(db) }
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE TRANSACTION", nil, nil, nil) == SQLITE_OK else {
+            throw NSError(domain: "HTMLAppDatabase", code: 16)
+        }
+        var committed = false
+        defer {
+            if !committed { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "INSERT OR REPLACE INTO documents(collection,id,body) VALUES(?,?,?)", -1, &statement, nil) == SQLITE_OK,
+              let statement else { throw NSError(domain: "HTMLAppDatabase", code: 17) }
+        defer { sqlite3_finalize(statement) }
+        let destructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         for record in records {
             guard let collection = record["collection"] as? String,
                   let id = record["id"] as? String,
@@ -100,8 +116,39 @@ enum HTMLAppDocumentDatabase {
                   let document = record["document"] as? [String: Any] else {
                 throw NSError(domain: "HTMLAppDatabase", code: 13)
             }
-            _ = try perform(appID: appID, method: "db.put", args: ["collection": collection, "id": id, "document": document])
+            let bytes = try JSONSerialization.data(withJSONObject: document)
+            guard bytes.count <= 256 * 1024,
+                  let body = String(data: bytes, encoding: .utf8) else {
+                throw NSError(domain: "HTMLAppDatabase", code: 18)
+            }
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            sqlite3_bind_text(statement, 1, collection, -1, destructor)
+            sqlite3_bind_text(statement, 2, id, -1, destructor)
+            sqlite3_bind_text(statement, 3, body, -1, destructor)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw NSError(domain: "HTMLAppDatabase", code: 19)
+            }
         }
+        var pageCount: OpaquePointer?
+        var pageSize: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA page_count", -1, &pageCount, nil) == SQLITE_OK,
+              sqlite3_prepare_v2(db, "PRAGMA page_size", -1, &pageSize, nil) == SQLITE_OK else {
+            sqlite3_finalize(pageCount)
+            sqlite3_finalize(pageSize)
+            throw NSError(domain: "HTMLAppDatabase", code: 20)
+        }
+        let count = sqlite3_step(pageCount) == SQLITE_ROW ? Int64(sqlite3_column_int64(pageCount, 0)) : Int64.max
+        let size = sqlite3_step(pageSize) == SQLITE_ROW ? Int64(sqlite3_column_int64(pageSize, 0)) : Int64.max
+        sqlite3_finalize(pageCount)
+        sqlite3_finalize(pageSize)
+        guard count * size <= 10 * 1024 * 1024 else {
+            throw NSError(domain: "HTMLAppDatabase", code: 21)
+        }
+        guard sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK else {
+            throw NSError(domain: "HTMLAppDatabase", code: 22)
+        }
+        committed = true
         return records.count
     }
 
