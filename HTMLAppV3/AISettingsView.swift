@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct AIConfigurationSettingsView: View {
+    @AppStorage("htmlapp.aiBridge.enabled") private var aiBridgeEnabled = false
+    @AppStorage("htmlapp.compactOutput.enabled") private var compactOutputEnabled = false
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
@@ -62,6 +64,18 @@ struct AIConfigurationSettingsView: View {
                 Text("Shared provider for normal generation; specialist AIs can use separate endpoints, models, and Keychain keys below.")
             }
 
+            Section("AI in saved apps") {
+                Toggle("Allow saved apps to request AI", isOn: $aiBridgeEnabled)
+                Text("Off by default. Each saved app also needs its own AI permission. Requests can consume API credits.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Generation") {
+                Toggle("Compact output (experimental)", isOn: $compactOutputEnabled)
+                Text("Builds apps from a shared component library so they generate faster. Experimental.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Compact generation is not yet active; standard generation remains in use.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Look & Feel") {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("What kinds of designs do you like?")
