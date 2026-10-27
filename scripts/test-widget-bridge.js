@@ -25,8 +25,30 @@ class CustomEvent {
     this.detail = options.detail;
   }
 }
-vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,console,navigator:{}});
+// Use deterministic virtual timers: the native bridge needs browser timers,
+// but tests must not wait for real 30-180 second deadlines.
+const scheduled = new Map();
+let nextTimer = 0;
+const setTimeout = (callback, delay) => {
+  const token = ++nextTimer;
+  scheduled.set(token, {callback, delay});
+  return token;
+};
+const clearTimeout = token => { scheduled.delete(token); };
+vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,console,navigator:{},setTimeout,clearTimeout});
 (async () => {
+  // A lost native callback must reject with a consistent timeout code and
+  // cleanup its pending timer. Late native callbacks must be harmless.
+  const timeoutRequest = window.HTMLAppNative.device.battery().catch(e=>e);
+  const timeoutCall = messages.shift();
+  assert.equal(timeoutCall.method, 'device.battery');
+  const timeoutTimer = [...scheduled.values()].find(item => item.delay === 30000);
+  assert.ok(timeoutTimer, 'Normal native calls must have a finite timeout');
+  timeoutTimer.callback();
+  const timedOut = await timeoutRequest;
+  assert.equal(timedOut.code, 'native_timeout');
+  window.__htmlappNativeResolve(timeoutCall.id, true, {percentage: 1});
+  assert.equal(scheduled.size, 0, 'Resolved or timed-out native requests must clear their timer');
   const result = window.HTMLAppNative.widgets.configure({id:'focus-streak',snapshot:{value:'7'}}).catch(e=>e);
   const first = messages.shift();
   assert.equal(first.method,'widgets.configure');
@@ -127,5 +149,6 @@ vm.runInNewContext(source, {window,document,CustomEvent,Map,Error,Date,Promise,c
   assert.equal(bleCall.args.seconds, 5);
   window.__htmlappNativeResolve(bleCall.id, true, {devices:[]});
   assert.equal((await ble).devices.length, 0);
-  console.log('Widget bridge: rejection code/message, visible diagnostics, and publication states passed.');
+  assert.equal(scheduled.size, 0, 'No pending native request timers should remain after test completion');
+  console.log('Widget bridge: request timeouts, callback cleanup, rejection diagnostics, and publication states passed.');
 })().catch(e=>{console.error(e);process.exitCode=1});
