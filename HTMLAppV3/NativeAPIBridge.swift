@@ -31,6 +31,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let speechRecognition = HTMLAppSpeechRecognition()
+    private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
     private var nativeTabBar: HTMLAppNativeTabBar?
@@ -43,7 +44,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         super.init()
     }
 
-    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil; speechRecognition.stop() }
+    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil; speechRecognition.stop(); aiTasks.values.forEach { $0.cancel() }; aiTasks.removeAll() }
 
     func handle(_ body: [String: Any]) {
         guard let id = body["id"] as? String,
@@ -244,6 +245,13 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "speech.listenStop":
             speechRecognition.stop()
             resolve(id, value: ["stopped": true])
+        case "ai.cancel":
+            guard let requestID = args["requestID"] as? String, let task = aiTasks.removeValue(forKey: requestID) else {
+                resolve(id, value: ["cancelled": false])
+                return
+            }
+            task.cancel()
+            resolve(id, value: ["cancelled": true])
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
@@ -306,12 +314,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 let totalKey = "htmlapp.aiBridge.total." + self.appID
                 UserDefaults.standard.set(UserDefaults.standard.integer(forKey: totalKey) + 1, forKey: totalKey)
                 let maxTokens = max(64, min(2048, (args["maxTokens"] as? Int) ?? 512))
-                Task { @MainActor [weak self] in
+                self.aiTasks[id] = Task { @MainActor [weak self] in
                     guard let self else { return }
+                    defer { self.aiTasks.removeValue(forKey: id) }
                     do {
                         let result = try await AIProviderClient.complete(
                             config: config, system: system,
                             messages: [("user", prompt)], timeout: 60, maxTokens: maxTokens)
+                        guard !Task.isCancelled else { return }
                         if method == "ai.classify" {
                             let labels = args["labels"] as? [String] ?? []
                             guard let match = labels.first(where: { $0.caseInsensitiveCompare(result.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame }) else {
@@ -331,6 +341,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                             self.resolve(id, value: ["text": result])
                         }
                     } catch {
+                        guard !Task.isCancelled else { return }
                         self.reject(id, code: "ai_request_failed", message: "The configured AI provider could not complete this request.")
                     }
                 }
@@ -443,7 +454,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
-                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
+                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
@@ -2271,7 +2282,8 @@ enum HTMLNativeAPIScript {
         ai: {
           available: () => call('ai.available'),
           complete: (options = {}) => call('ai.complete', options),
-          classify: (options = {}) => call('ai.classify', options)
+          classify: (options = {}) => call('ai.classify', options),
+          cancel: (requestID) => call('ai.cancel', { requestID })
         },
         motion: {
           pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) }),
