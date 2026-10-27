@@ -39,6 +39,7 @@ enum HTMLAppReleaseNotes {
         if version == "1.6.32" { return [Entry(id: "ai-bridge", title: "AI in saved apps", description: "Opt-in per-app AI completion and classification with permission checks and request limits. Experimental compact-output preference added.", symbol: "sparkles", tint: .blue)] }
         if version == "1.6.31" { return [
             Entry(id: "speech-aliases", title: "Speech recognition API compatibility", description: "Saved HTML apps can call speech.recognize and speech.stopRecognizing through the existing permission-controlled foreground transcription engine.", symbol: "waveform", tint: .blue),
+            Entry(id: "bridge-lint", title: "Generated app API checks", description: "Runtime verification now reports unsupported native bridge method calls and Web Bluetooth requestDevice usage.", symbol: "checkmark.shield", tint: .orange),
             Entry(id: "native-routing", title: "Native bridge reliability", description: "Corrected duplicate Vision dispatch patterns and added source regression checks.", symbol: "checkmark.shield", tint: .green),
             Entry(id: "adaptive-fade", title: "Adaptive shake exit", description: "The exit fade uses the last resting phone orientation sampled every three seconds; the torch flash uses a gentler intensity.", symbol: "iphone.radiowaves.left.and.right", tint: .blue)
         ] }
