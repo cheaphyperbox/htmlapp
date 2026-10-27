@@ -2168,6 +2168,7 @@ enum HTMLNativeAPIScript {
           entities: (text) => call('language.entities', { text: String(text ?? '') })
         },
         spotlight: {
+          enable: () => call('spotlight.enable'),
           index: (key, title, summary) => call('spotlight.index', { key, title, summary }),
           remove: (key) => call('spotlight.remove', { key }),
           clear: () => call('spotlight.clear')
