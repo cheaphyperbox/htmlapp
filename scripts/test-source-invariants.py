@@ -504,4 +504,13 @@ assert 'Label("Manage Storage", systemImage: "externaldrive")' in library_source
 assert 'Saved app data:' in library_source
 assert '.sheet(item: $storageManagementApp)' in library_source
 
+# Empty snapshots are meaningful revisions; cloud must send them.
+portable = source("HTMLAppV3/PortableAppDataStore.swift")
+icloud = source("HTMLAppV3/HTMLAppICloudSync.swift")
+assert "replace(appID: appID, values: [:])" in portable
+assert "Persist an explicit empty file" in portable
+assert "fm.fileExists(atPath: localURL.path)" in icloud
+assert "else if !values.isEmpty" not in icloud
+assert 'base.contains("FORGE CORE CONTRACT")' in source("HTMLAppV3/AIGenerationService.swift")
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
