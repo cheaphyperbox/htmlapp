@@ -22,6 +22,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
     private var timeoutTask: Task<Void, Never>?
     private var completed = false
     private var issues: [String] = []
+    private var mockAppStorage: [String: String] = [:]
 
     init(html: String) {
         self.html = html
@@ -122,12 +123,65 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "htmlappRuntimeLog" else {
+        if message.name == "htmlappNative" {
+            // Simulate native calls without touching real permissions or disk.
+            // Every request receives a deterministic response so generated app
+            // tests cannot hang awaiting a non-existent native device.
+            guard message.frameInfo.isMainFrame,
+                  let body = message.body as? [String: Any],
+                  let id = body["id"] as? String,
+                  let method = body["method"] as? String else { return }
+            let args = body["args"] as? [String: Any] ?? [:]
+            let value: Any
+            let ok: Bool
+            switch method {
+            case "capabilities.list":
+                ok = true
+                value = [
+                    "methods": HTMLAppDeviceAPIResearch.entries.map(\\.id),
+                    "permissions": [],
+                    "qaMock": true, "nativeHardwareAvailable": false
+                ] as [String: Any]
+            case "appStorage.get":
+                ok = true
+                value = ["value": mockAppStorage[args["key"] as? String ?? ""] ?? NSNull()] as [String: Any]
+            case "appStorage.set":
+                let key = args["key"] as? String ?? ""
+                guard !key.isEmpty, let text = args["value"] as? String else {
+                    replyToMockRequest(id: id, ok: false, value: ["code": "invalid_arguments", "message": "QA storage set requires key and value."])
+                    return
+                }
+                mockAppStorage[key] = text
+                ok = true
+                value = ["saved": true]
+            case "appStorage.remove":
+                mockAppStorage.removeValue(forKey: args["key"] as? String ?? "")
+                ok = true
+                value = ["removed": true]
+            case "appStorage.all":
+                ok = true
+                value = ["values": mockAppStorage]
+            case "appStorage.clear":
+                mockAppStorage.removeAll()
+                ok = true
+                value = ["cleared": true]
+            default:
+                ok = false
+                value = ["code": "qa_unavailable", "message": "This native action needs actual device capability or permission and is unavailable in offline QA."]
+            }
+            replyToMockRequest(id: id, ok: ok, value: value)
             return
         }
-        if let text = message.body as? String {
-            appendIssue(text)
-        }
+        guard message.name == "htmlappRuntimeLog" else { return }
+        if let text = message.body as? String { appendIssue(text) }
+    }
+
+    private func replyToMockRequest(id: String, ok: Bool, value: Any) {
+        let payload: [Any] = [id, ok, value]
+        guard JSONSerialization.isValidJSONObject(payload),
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript("window.__htmlappNativeResolve && window.__htmlappNativeResolve.apply(null, \\(json));")
     }
 
     private func runChecks() async {
