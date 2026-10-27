@@ -58,6 +58,48 @@ enum HTMLAppPortableDataStore {
         NotificationCenter.default.post(name: localDataChanged, object: nil)
     }
 
+    /// Checked operations for native APIs and destructive developer actions.
+    /// Only publish widget changes after the atomic file write succeeds.
+    static func setChecked(appID: String, key: String, value: String) throws {
+        try queue.sync {
+            var values = load(appID: appID)
+            values[key] = value
+            try persistChecked(values, appID: appID)
+        }
+        HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: value)
+        HTMLAppWidgetReloadCoordinator.request()
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
+    }
+
+    static func removeChecked(appID: String, key: String) throws {
+        try queue.sync {
+            var values = load(appID: appID)
+            values.removeValue(forKey: key)
+            try persistChecked(values, appID: appID)
+        }
+        HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
+        HTMLAppWidgetReloadCoordinator.request()
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
+    }
+
+    static func clearChecked(appID: String) throws {
+        let keys = try queue.sync { () throws -> [String] in
+            let current = load(appID: appID)
+            try persistChecked([:], appID: appID)
+            return Array(current.keys)
+        }
+        for key in keys {
+            HTMLAppWidgetStore.updateFromPortableData(appID: appID, key: key, value: nil)
+        }
+        HTMLAppWidgetReloadCoordinator.request()
+        NotificationCenter.default.post(name: localDataChanged, object: nil)
+    }
+
+    private static func persistChecked(_ values: [String: String], appID: String) throws {
+        let data = try JSONEncoder().encode(values)
+        try data.write(to: fileURL(appID: appID), options: .atomic)
+    }
+
     private static func load(appID: String) -> [String: String] {
         guard let data = try? Data(contentsOf: fileURL(appID: appID)),
               let values = try? JSONDecoder().decode([String: String].self, from: data) else {
