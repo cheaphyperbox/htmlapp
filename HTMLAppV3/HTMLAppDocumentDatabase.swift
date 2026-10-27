@@ -49,6 +49,36 @@ enum HTMLAppDocumentDatabase {
     }
 
     /// Includes SQLite records in an explicit per-app portable data snapshot.
+    static func search(appID: String, collection: String, text: String, limit: Int) throws -> [[String: Any]] {
+        guard valid(collection), !text.isEmpty, text.utf8.count <= 256 else {
+            throw NSError(domain: "HTMLAppDatabase", code: 14)
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        let db = try open(appID: appID)
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT id,body FROM documents WHERE collection=? AND body LIKE ? ESCAPE '\\' ORDER BY id LIMIT ?", -1, &statement, nil) == SQLITE_OK,
+              let statement else { throw NSError(domain: "HTMLAppDatabase", code: 15) }
+        defer { sqlite3_finalize(statement) }
+        let destructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(statement, 1, collection, -1, destructor)
+        let escaped = text.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        sqlite3_bind_text(statement, 2, "%" + escaped + "%", -1, destructor)
+        sqlite3_bind_int(statement, 3, Int32(max(1, min(100, limit))))
+        var matches: [[String: Any]] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let id = sqlite3_column_text(statement, 0),
+                  let body = sqlite3_column_text(statement, 1),
+                  let data = String(cString: body).data(using: .utf8),
+                  let document = try? JSONSerialization.jsonObject(with: data) else { continue }
+            matches.append(["id": String(cString: id), "document": document])
+        }
+        return matches
+    }
+
     static func portableSnapshot(appID: String) -> [String: Any]? {
         try? exportJSON(appID: appID)
     }
