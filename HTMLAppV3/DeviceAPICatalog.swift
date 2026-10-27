@@ -34,6 +34,34 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "ai.complete",
+            title: "AI completion using the configured provider",
+            keywords: ["AI", "chat", "summarize", "rewrite", "extract", "text generation"],
+            purpose: "Generate or transform text without exposing a provider key to the saved HTML app.",
+            api: "await HTMLAppNative.ai.complete({prompt, system?, maxTokens?})",
+            example: "const caps = await HTMLAppNative.capabilities(); if (caps.methods.includes('ai.complete')) { try { const {text} = await HTMLAppNative.ai.complete({prompt:'Summarize this note'}); console.log(text); } catch(e) { console.log('AI unavailable or rate-limited'); } }",
+            constraints: "Requires global AI switch, per-app AI permission and configured provider. Prompts leave the device. Limit 10 requests/minute per app and 8 KiB prompt. Never send sensitive data without user intent. Handle denial and rate limits."
+        ),
+        .init(
+            id: "ai.classify",
+            title: "AI text classification",
+            keywords: ["AI", "classify", "labels", "sentiment"],
+            purpose: "Classify text into one of the provided labels using the configured AI provider.",
+            api: "await HTMLAppNative.ai.classify({text, labels})",
+            example: "const result = await HTMLAppNative.ai.classify({text:'A great day',labels:['positive','negative']}); console.log(result.label);",
+            constraints: "Same global and per-app AI gates and budget as completion. Confidence is null because a generative label is not a calibrated probability."
+        ),
+        .init(
+            id: "ai.available",
+            title: "AI provider availability",
+            keywords: ["AI", "provider", "availability", "budget"],
+            purpose: "Check whether the saved app may request configured AI inference.",
+            api: "await HTMLAppNative.ai.available()",
+            example: "const state = await HTMLAppNative.ai.available(); if (!state.available) showUnavailable();",
+            constraints: "Provider identity is hidden from the page. No on-device or streaming support is advertised until implemented."
+        ),
+
+        .init(
             id: "capabilities.list",
             title: "Discover supported HTMLApp native APIs",
             keywords: ["capabilities", "permissions", "feature detection", "supported APIs", "native"],
