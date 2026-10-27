@@ -1181,7 +1181,12 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             phase = "Retesting changed code"
             let newStructural = HTMLQualityChecks.issues(in: streamedHTML)
             let newRuntime = await HTMLRuntimeVerifier.verify(html: streamedHTML)
+            // Re-run the same core user-workflow checks after a repair.
+            // Fixing JavaScript without implementing the requested feature is
+            // not a complete repair.
+            let newFunctional = Self.coreWorkflowWarnings(prompt: originalPrompt, html: streamedHTML)
             let remaining = HTMLQualityChecks.blockingIssues(newStructural) +
+                newFunctional.filter { $0.hasPrefix("Core workflow:") } +
                 newRuntime.filter {
                     $0.hasPrefix("JavaScript syntax in inline script") ||
                     $0.hasPrefix("JavaScript did not compile") ||
@@ -1198,7 +1203,13 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
             if remaining.contains(where: {
                 $0.hasPrefix("JavaScript syntax in inline script") || $0.hasPrefix("JavaScript did not compile")
             }) {
-                if await selfHealBrokenJavaScript(config: config, issues: remaining) { return }
+                if await selfHealBrokenJavaScript(config: config, issues: remaining) {
+                    let outstandingWorkflows = Self.coreWorkflowWarnings(prompt: originalPrompt, html: streamedHTML)
+                    if !outstandingWorkflows.isEmpty {
+                        verificationReport += " Unresolved core workflows: " + outstandingWorkflows.joined(separator: " ")
+                    }
+                    return
+                }
                 streamedHTML = baseline
                 throw AIGenerationError.brokenJavaScript
             }
