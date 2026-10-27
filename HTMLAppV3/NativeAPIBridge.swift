@@ -147,13 +147,24 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 }
                 resolve(id, value: ["entities": entities])
             }
-        case "db.put", "db.get", "db.delete", "db.query", "db.count":
+        case "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import":
             guard appID != "PREVIEW" else {
                 reject(id, code: "preview_restricted", message: "Database access is unavailable in preview.")
                 return
             }
             do {
-                let result = try HTMLAppDocumentDatabase.perform(appID: appID, method: method, args: args)
+                let result: Any
+                if method == "db.export" {
+                    result = try HTMLAppDocumentDatabase.exportJSON(appID: appID)
+                } else if method == "db.import" {
+                    guard let payload = args["payload"] as? [String: Any] else {
+                        reject(id, code: "invalid_backup", message: "A database backup payload is required.")
+                        return
+                    }
+                    result = ["imported": try HTMLAppDocumentDatabase.importJSON(appID: appID, payload: payload)]
+                } else {
+                    result = try HTMLAppDocumentDatabase.perform(appID: appID, method: method, args: args)
+                }
                 resolve(id, value: result)
             } catch {
                 reject(id, code: "database_error", message: "Document database operation failed or exceeded its quota.")
@@ -342,7 +353,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
-                    "db.put", "db.get", "db.delete", "db.query", "db.count",
+                    "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
@@ -2154,7 +2165,9 @@ enum HTMLNativeAPIScript {
           get: (collection, id) => call('db.get', { collection, id }),
           delete: (collection, id) => call('db.delete', { collection, id }),
           query: (collection, options = {}) => call('db.query', { collection, ...options }),
-          count: (collection) => call('db.count', { collection })
+          count: (collection) => call('db.count', { collection }),
+          export: () => call('db.export'),
+          import: (payload) => call('db.import', { payload })
         },
         ai: {
           available: () => call('ai.available'),
