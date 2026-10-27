@@ -37,7 +37,11 @@ enum HTMLAppReleaseNotes {
         if version == "1.6.34" { return [Entry(id: "vision-tools", title: "On-device image analysis", description: "Saved HTML apps can recognize text and barcodes, classify images, and detect face rectangles using Apple Vision.", symbol: "viewfinder", tint: .blue)] }
         if version == "1.6.33" { return [Entry(id: "language-tools", title: "On-device language tools", description: "Saved HTML apps can detect languages, tokenize text, analyze sentiment and extract named entities using Apple NaturalLanguage.", symbol: "text.book.closed", tint: .blue)] }
         if version == "1.6.32" { return [Entry(id: "ai-bridge", title: "AI in saved apps", description: "Opt-in per-app AI completion and classification with permission checks and request limits. Experimental compact-output preference added.", symbol: "sparkles", tint: .blue)] }
-        if version == "1.6.31" { return [Entry(id: "adaptive-fade", title: "Adaptive shake exit", description: "The exit fade uses the last resting phone orientation sampled every three seconds; the torch flash uses a gentler intensity.", symbol: "iphone.radiowaves.left.and.right", tint: .blue)] }
+        if version == "1.6.31" { return [
+            Entry(id: "speech-aliases", title: "Speech recognition API compatibility", description: "Saved HTML apps can call speech.recognize and speech.stopRecognizing through the existing permission-controlled foreground transcription engine.", symbol: "waveform", tint: .blue),
+            Entry(id: "native-routing", title: "Native bridge reliability", description: "Corrected duplicate Vision dispatch patterns and added source regression checks.", symbol: "checkmark.shield", tint: .green),
+            Entry(id: "adaptive-fade", title: "Adaptive shake exit", description: "The exit fade uses the last resting phone orientation sampled every three seconds; the torch flash uses a gentler intensity.", symbol: "iphone.radiowaves.left.and.right", tint: .blue)
+        ] }
         if version == "1.6.30" { return [
             Entry(id: "capability-lookup", title: "On-demand native capability research", description: "Forge can request the complete HTMLApp capability catalog or focused sections such as Bluetooth, widgets, tabs, and device information before generating or editing apps.", symbol: "books.vertical", tint: .blue)
         ] }
