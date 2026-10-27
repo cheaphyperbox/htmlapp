@@ -48,6 +48,79 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
+        case "ai.available":
+            let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
+            let config = AISettingsStore.configuration
+            let ready = enabled && config.isConfigured
+            resolve(id, value: ["available": ready, "provider": ready ? "configured" : "unavailable",
+                                "onDevice": false, "streaming": false,
+                                "models": ready ? [config.model] : [],
+                                "remainingRequests": ready ? 10 : 0] as [String: Any])
+        case "ai.complete", "ai.classify":
+            guard UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled") else {
+                reject(id, code: "ai_disabled", message: "AI access is disabled in Settings.")
+                return
+            }
+            let config = AISettingsStore.configuration
+            guard config.isConfigured else {
+                reject(id, code: "ai_unavailable", message: "Configure an AI provider in Settings.")
+                return
+            }
+            let prompt: String
+            if method == "ai.classify" {
+                guard let value = args["text"] as? String,
+                      let labels = args["labels"] as? [String], !labels.isEmpty,
+                      labels.count <= 20, labels.allSatisfy({ !$0.isEmpty && $0.count <= 80 }) else {
+                    reject(id, code: "invalid_arguments", message: "Provide text and 1–20 short labels.")
+                    return
+                }
+                prompt = "Classify this text into exactly one of these labels: " + labels.joined(separator: ", ")
+                    + ". Respond with the label only.\nText: " + value
+            } else {
+                guard let value = args["prompt"] as? String else {
+                    reject(id, code: "invalid_arguments", message: "A prompt is required.")
+                    return
+                }
+                prompt = value
+            }
+            let system = (args["system"] as? String) ?? "Be helpful, accurate and concise."
+            guard !prompt.isEmpty, prompt.utf8.count <= 8192, system.utf8.count <= 2048 else {
+                reject(id, code: "prompt_too_large", message: "Prompt or system instruction exceeds the per-request limit.")
+                return
+            }
+            withPermission(.ai, id: id) { [weak self] in
+                guard let self else { return }
+                let key = "htmlapp.aiBridge.usage." + self.appID
+                let now = Date().timeIntervalSince1970
+                let previous = (UserDefaults.standard.array(forKey: key) as? [Double] ?? [])
+                    .filter { now - $0 < 60 }
+                guard previous.count < 10 else {
+                    self.reject(id, code: "rate_limited", message: "AI request limit reached. Try again in one minute.")
+                    return
+                }
+                UserDefaults.standard.set(previous + [now], forKey: key)
+                let maxTokens = max(64, min(2048, (args["maxTokens"] as? Int) ?? 512))
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let result = try await AIProviderClient.complete(
+                            config: config, system: system,
+                            messages: [("user", prompt)], timeout: 60, maxTokens: maxTokens)
+                        if method == "ai.classify" {
+                            let labels = args["labels"] as? [String] ?? []
+                            guard let match = labels.first(where: { $0.caseInsensitiveCompare(result.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame }) else {
+                                self.reject(id, code: "classification_failed", message: "The provider did not return a valid label.")
+                                return
+                            }
+                            self.resolve(id, value: ["label": match, "confidence": NSNull()] as [String: Any])
+                        } else {
+                            self.resolve(id, value: ["text": result])
+                        }
+                    } catch {
+                        self.reject(id, code: "ai_request_failed", message: "The configured AI provider could not complete this request.")
+                    }
+                }
+            }
         case "device.info":
             deviceInfo(id: id)
         case "bluetooth.scan":
@@ -153,7 +226,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
+                    "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
@@ -1947,6 +2020,11 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        ai: {
+          available: () => call('ai.available'),
+          complete: (options = {}) => call('ai.complete', options),
+          classify: (options = {}) => call('ai.classify', options)
+        },
         motion: {
           pedometer: (days = 1) => call('motion.pedometer', { days: Number(days) }),
           altitude: () => call('motion.altitude')
