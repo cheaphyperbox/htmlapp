@@ -82,6 +82,13 @@ enum HTMLAppDocumentDatabase {
             }
             return ["items": rows, "cursor": rows.last?["id"] ?? NSNull()]
         }
+        if method == "db.put" {
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: databaseURL(appID: appID).path)[.size] as? NSNumber)?.intValue ?? 0
+            let incoming = (args["document"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0).count } ?? 0
+            guard fileSize + incoming <= 10 * 1024 * 1024 else {
+                throw NSError(domain: "HTMLAppDatabase", code: 9)
+            }
+        }
         let result = sqlite3_step(statement)
         if method == "db.count" {
             guard result == SQLITE_ROW else { throw NSError(domain: "HTMLAppDatabase", code: 7) }
@@ -93,13 +100,6 @@ enum HTMLAppDocumentDatabase {
             return try JSONSerialization.jsonObject(with: data)
         }
         guard result == SQLITE_DONE else { throw NSError(domain: "HTMLAppDatabase", code: 8) }
-        if method == "db.put" {
-            let size = (try? FileManager.default.attributesOfItem(atPath: databaseURL(appID: appID).path)[.size] as? NSNumber)?.intValue ?? 0
-            if size > 10 * 1024 * 1024 {
-                _ = sqlite3_exec(db, "DELETE FROM documents WHERE collection=? AND id=?", nil, nil, nil)
-                throw NSError(domain: "HTMLAppDatabase", code: 9)
-            }
-        }
         return ["ok": true]
     }
 
