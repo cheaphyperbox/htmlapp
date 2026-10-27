@@ -992,6 +992,9 @@ private final class HTMLAppFaceDownShakeExit {
     private var transitionWindow: UIWindow?
     private var torchDevice: AVCaptureDevice?
     private var lastGravityZ: Double = -1
+    private var lastOrientationSample: TimeInterval = 0
+    private var restingAngleDegrees: Double?
+    private var fadeEndAngleDegrees: Double = 70
 
     init(webView: WKWebView) { self.webView = webView }
 
@@ -1019,6 +1022,14 @@ private final class HTMLAppFaceDownShakeExit {
         let delta = lastTick == 0 ? 0 : min(0.1, now - lastTick)
         lastTick = now
         lastGravityZ = sample.gravity.z
+        if !finished && progress == 0 && sample.gravity.z <= 0.78 {
+            let a = sample.userAcceleration
+            let activity = sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+            if activity < 0.12 && (lastOrientationSample == 0 || now - lastOrientationSample >= 3) {
+                restingAngleDegrees = acos(max(-1, min(1, sample.gravity.z))) * 180 / .pi
+                lastOrientationSample = now
+            }
+        }
         if finished {
             updateBlackout()
             return
@@ -1069,6 +1080,9 @@ private final class HTMLAppFaceDownShakeExit {
     private func completeExit() {
         guard !finished, let webView, let sourceWindow = webView.window,
               let scene = sourceWindow.windowScene else { return }
+        let configuredAngle = UserDefaults.standard.double(forKey: "htmlapp.shakeFadeEndAngle")
+        let fallbackAngle = max(20, min(180, configuredAngle == 0 ? 70 : configuredAngle))
+        fadeEndAngleDegrees = restingAngleDegrees.map { max(20, min(170, $0 - 10)) } ?? fallbackAngle
         finished = true
         progressTrack?.removeFromSuperview()
         progressTrack = nil
@@ -1117,7 +1131,7 @@ private final class HTMLAppFaceDownShakeExit {
         // Fade fully by roughly 70 degrees of rotation from face down.
         let configuredAngle = UserDefaults.standard.double(forKey: "htmlapp.shakeFadeEndAngle")
         let endAngle = max(20, min(180, configuredAngle == 0 ? 70 : configuredAngle))
-        let endGravity = cos(endAngle * .pi / 180)
+        let endGravity = cos(fadeEndAngleDegrees * .pi / 180)
         let fraction = CGFloat(max(0, min(1, (lastGravityZ - endGravity) / (1 - endGravity))))
         let eased = fraction * fraction * (3 - 2 * fraction)
         darkness?.alpha = eased
@@ -1140,7 +1154,8 @@ private final class HTMLAppFaceDownShakeExit {
                 device.unlockForConfiguration()
                 return
             }
-            try device.setTorchModeOn(level: min(AVCaptureDevice.maxAvailableTorchLevel, 1))
+            // Ambient lux is not exposed through a public iOS API; use a low, fixed intensity.
+            try device.setTorchModeOn(level: min(AVCaptureDevice.maxAvailableTorchLevel, 0.05))
             device.unlockForConfiguration()
             torchDevice = device
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
