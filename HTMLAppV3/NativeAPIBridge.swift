@@ -116,7 +116,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                 }
             }
-        case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces", "language.detect", "language.tokenize", "language.sentiment", "language.entities":
+        case "language.detect", "language.tokenize", "language.sentiment", "language.entities":
             guard let input = args["text"] as? String, !input.isEmpty,
                   input.utf8.count <= 32768 else {
                 reject(id, code: "invalid_arguments", message: "Provide nonempty text of at most 32 KiB.")
