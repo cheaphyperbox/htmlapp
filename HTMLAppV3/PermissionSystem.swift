@@ -6,6 +6,7 @@ import UserNotifications
 import WebKit
 
 enum HTMLPermission: String, CaseIterable, Identifiable {
+    case ai
     case camera
     case microphone
     case location
@@ -28,6 +29,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .ai: return "AI Provider Access"
         case .camera: return "Camera"
         case .microphone: return "Microphone"
         case .location: return "Location"
@@ -50,6 +52,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
+        case .ai: return "Allows this HTML app to send prompts to your chosen AI provider, unless on-device processing is used. Requests may consume API credits."
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
