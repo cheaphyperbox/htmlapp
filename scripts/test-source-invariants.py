@@ -460,3 +460,20 @@ assert "call('map.show'" in native
 assert 'id: "map.show"' in catalog
 assert "HTMLAppNativeMapPresenter.show" in native
 assert "MKMapView" in map_source and "prefix(100)" in map_source
+
+# Permission-gated Health and NFC native dispatch; no silent permissions.
+permission_source = source("HTMLAppV3/PermissionSystem.swift")
+for capability, permission in (("health.today", "health"), ("nfc.readNDEF", "nfc"), ("map.show", "location")):
+    assert f'case "{capability}":' in native
+    assert f"withPermission(.{permission}, id: id)" in native
+    assert f'id: "{capability}"' in catalog
+for method in ("health.available", "health.today", "nfc.available", "nfc.readNDEF", "map.show"):
+    assert f"call('{method}'" in native
+for permission in ("health", "nfc"):
+    assert f"case {permission}" in permission_source
+assert "NSHealthShareUsageDescription:" in project and "NFCReaderUsageDescription:" in project
+entitlements = source("HTMLApp/HTMLApp.entitlements")
+assert "com.apple.developer.healthkit" in entitlements
+assert "com.apple.developer.nfc.readersession.formats" in entitlements
+assert "HKStatisticsQuery" in source("HTMLAppV3/HTMLAppHealthReader.swift")
+assert "NFCNDEFReaderSession" in source("HTMLAppV3/HTMLAppNFCReader.swift")
