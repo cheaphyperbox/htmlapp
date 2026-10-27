@@ -20,4 +20,87 @@ enum HTMLAppDocumentDatabase {
         }
         return pointer
     }
+    private static let lock = NSRecursiveLock()
+    private static func valid(_ name: String) -> Bool {
+        !name.isEmpty && name.count <= 80 &&
+        name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }
+    }
+
+    static func perform(appID: String, method: String, args: [String: Any]) throws -> Any {
+        guard let collection = args["collection"] as? String, valid(collection) else {
+            throw NSError(domain: "HTMLAppDatabase", code: 3)
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        let db = try open(appID: appID)
+        defer { sqlite3_close(db) }
+        let id = args["id"] as? String ?? ""
+        if method != "db.query" && method != "db.count" && !valid(id) {
+            throw NSError(domain: "HTMLAppDatabase", code: 4)
+        }
+        let sql: String
+        switch method {
+        case "db.put": sql = "INSERT OR REPLACE INTO documents(collection,id,body) VALUES(?,?,?)"
+        case "db.get": sql = "SELECT body FROM documents WHERE collection=? AND id=?"
+        case "db.delete": sql = "DELETE FROM documents WHERE collection=? AND id=?"
+        case "db.count": sql = "SELECT COUNT(*) FROM documents WHERE collection=?"
+        default: sql = "SELECT id,body FROM documents WHERE collection=? AND id>? ORDER BY id LIMIT ?"
+        }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else { throw NSError(domain: "HTMLAppDatabase", code: 5) }
+        defer { sqlite3_finalize(statement) }
+        func bind(_ value: String, _ position: Int32) {
+            let destructor = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(statement, position, value, -1, destructor)
+        }
+        bind(collection, 1)
+        if method == "db.query" {
+            bind(args["cursor"] as? String ?? "", 2)
+            sqlite3_bind_int(statement, 3, Int32(max(1, min(100, args["limit"] as? Int ?? 50))))
+        } else if method != "db.count" {
+            bind(id, 2)
+        }
+        if method == "db.put" {
+            guard let document = args["document"] as? [String: Any],
+                  JSONSerialization.isValidJSONObject(document),
+                  let bytes = try? JSONSerialization.data(withJSONObject: document),
+                  bytes.count <= 256 * 1024,
+                  let json = String(data: bytes, encoding: .utf8) else {
+                throw NSError(domain: "HTMLAppDatabase", code: 6)
+            }
+            bind(json, 3)
+        }
+        if method == "db.query" {
+            var rows: [[String: Any]] = []
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let key = sqlite3_column_text(statement, 0),
+                      let body = sqlite3_column_text(statement, 1),
+                      let bytes = String(cString: body).data(using: .utf8),
+                      let object = try? JSONSerialization.jsonObject(with: bytes) else { continue }
+                rows.append(["id": String(cString: key), "document": object])
+            }
+            return ["items": rows, "cursor": rows.last?["id"] ?? NSNull()]
+        }
+        let result = sqlite3_step(statement)
+        if method == "db.count" {
+            guard result == SQLITE_ROW else { throw NSError(domain: "HTMLAppDatabase", code: 7) }
+            return ["count": Int(sqlite3_column_int(statement, 0))]
+        }
+        if method == "db.get" {
+            guard result == SQLITE_ROW, let raw = sqlite3_column_text(statement, 0),
+                  let data = String(cString: raw).data(using: .utf8) else { return NSNull() }
+            return try JSONSerialization.jsonObject(with: data)
+        }
+        guard result == SQLITE_DONE else { throw NSError(domain: "HTMLAppDatabase", code: 8) }
+        if method == "db.put" {
+            let size = (try? FileManager.default.attributesOfItem(atPath: databaseURL(appID: appID).path)[.size] as? NSNumber)?.intValue ?? 0
+            if size > 10 * 1024 * 1024 {
+                _ = sqlite3_exec(db, "DELETE FROM documents WHERE collection=? AND id=?", nil, nil, nil)
+                throw NSError(domain: "HTMLAppDatabase", code: 9)
+            }
+        }
+        return ["ok": true]
+    }
+
 }
