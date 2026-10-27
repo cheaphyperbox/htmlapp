@@ -360,7 +360,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
-                    "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import",
+                    "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
+                    "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
