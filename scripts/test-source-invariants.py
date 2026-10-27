@@ -452,3 +452,11 @@ runtime_verifier = source("HTMLAppV3/HTMLRuntimeVerifier.swift")
 assert "HTMLAppDeviceAPIResearch.entries" in bridge_lint
 assert "navigator.bluetooth.requestDevice(" in bridge_lint
 assert "HTMLAppBridgeLint.warnings(in: html)" in runtime_verifier
+
+# Foreground map integration must expose a cataloged, permission-gated route.
+map_source = source("HTMLAppV3/HTMLAppNativeMapPresenter.swift")
+assert 'case "map.show":' in native and 'withPermission(.location, id: id)' in native
+assert "call('map.show'" in native
+assert 'id: "map.show"' in catalog
+assert "HTMLAppNativeMapPresenter.show" in native
+assert "MKMapView" in map_source and "prefix(100)" in map_source
