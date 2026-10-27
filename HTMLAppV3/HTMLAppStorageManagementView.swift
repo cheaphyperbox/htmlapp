@@ -43,7 +43,8 @@ struct HTMLAppStorageManagementView: View {
                 }
                 Section("SQLite Documents") {
                     if records.isEmpty { Text("No SQLite documents").foregroundStyle(.secondary) }
-                    ForEach(Array(records.enumerated()), id: \.offset) { _, record in
+                    ForEach(records.indices, id: \.self) { index in
+                        let record = records[index]
                         let collection = record["collection"] as? String ?? ""
                         let id = record["id"] as? String ?? ""
                         VStack(alignment: .leading, spacing: 4) {
