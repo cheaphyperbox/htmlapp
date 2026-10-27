@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import MapKit
 import UIKit
 import WebKit
@@ -48,6 +49,39 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
+        case "language.detect", "language.tokenize", "language.sentiment", "language.entities":
+            guard let input = args["text"] as? String, !input.isEmpty,
+                  input.utf8.count <= 32768 else {
+                reject(id, code: "invalid_arguments", message: "Provide nonempty text of at most 32 KiB.")
+                return
+            }
+            let tagger = NLTagger(tagSchemes: [.lexicalClass, .sentimentScore, .nameType])
+            tagger.string = input
+            switch method {
+            case "language.detect":
+                resolve(id, value: ["language": NLLanguageRecognizer.dominantLanguage(for: input)?.rawValue ?? "und"])
+            case "language.sentiment":
+                let score = tagger.tag(at: input.startIndex, unit: .paragraph, scheme: .sentimentScore).0?.rawValue
+                resolve(id, value: ["score": Double(score ?? "") ?? 0])
+            case "language.tokenize":
+                var tokens: [[String: Any]] = []
+                tagger.enumerateTags(in: input.startIndex..<input.endIndex, unit: .word, scheme: .lexicalClass, options: [.omitWhitespace]) { tag, range in
+                    if tokens.count < 2048 {
+                        tokens.append(["text": String(input[range]), "type": tag?.rawValue ?? "unknown"])
+                    }
+                    return tokens.count < 2048
+                }
+                resolve(id, value: ["tokens": tokens])
+            default:
+                var entities: [[String: String]] = []
+                tagger.enumerateTags(in: input.startIndex..<input.endIndex, unit: .word, scheme: .nameType, options: [.omitWhitespace, .joinNames]) { tag, range in
+                    if let tag, entities.count < 256 {
+                        entities.append(["text": String(input[range]), "type": tag.rawValue])
+                    }
+                    return entities.count < 256
+                }
+                resolve(id, value: ["entities": entities])
+            }
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
@@ -230,7 +264,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
+                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
@@ -2024,6 +2058,12 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        language: {
+          detect: (text) => call('language.detect', { text: String(text ?? '') }),
+          tokenize: (text) => call('language.tokenize', { text: String(text ?? '') }),
+          sentiment: (text) => call('language.sentiment', { text: String(text ?? '') }),
+          entities: (text) => call('language.entities', { text: String(text ?? '') })
+        },
         ai: {
           available: () => call('ai.available'),
           complete: (options = {}) => call('ai.complete', options),
