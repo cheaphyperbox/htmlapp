@@ -437,3 +437,11 @@ assert 'args["json"] as? Bool == true' in native
 assert 'case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces", "language.detect"' not in native, "Duplicate Vision dispatch in NaturalLanguage handler"
 for method in ("vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces"):
     assert f'case "{method}"' in native, f"Missing Vision dispatch: {method}"
+
+# Requested speech JS aliases route to existing permission-gated transcription.
+for method in ("speech.recognize", "speech.stopRecognizing"):
+    assert f'id: "{method}"' in catalog, f"Missing speech API catalog entry: {method}"
+    assert f'"{method}"' in native, f"Missing speech native dispatch: {method}"
+    assert f"call('{method}'" in native, f"Missing JavaScript speech wrapper: {method}"
+assert 'case "speech.listen", "speech.recognize":' in native
+assert 'case "speech.listenStop", "speech.stopRecognizing":' in native
