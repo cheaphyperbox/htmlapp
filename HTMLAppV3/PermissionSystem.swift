@@ -75,6 +75,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .ai: return "sparkles"
         case .camera: return "camera.fill"
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
