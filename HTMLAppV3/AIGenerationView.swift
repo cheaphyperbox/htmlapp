@@ -8,6 +8,10 @@ struct AIGenerationView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var dictation = ForgeDictation()
+    @StateObject private var forgeConnectivity = HTMLAppForgeConnectivity()
+    @State private var showingOfflineConsent = false
+    @State private var offlineActionIsEdit = false
+    @State private var offlineUnavailableMessage: String?
     @State private var dictationPrefix = ""
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
@@ -179,6 +183,19 @@ struct AIGenerationView: View {
                             .accessibilityLabel("View AI debug trace")
                     }
                 }
+            }
+            .sheet(isPresented: $showingOfflineConsent) {
+                HTMLAppOfflineForgeConsentView(isEdit: offlineActionIsEdit) { effort in
+                    runOfflineForge(edit: offlineActionIsEdit, effort: effort)
+                }
+            }
+            .alert("Offline Forge unavailable", isPresented: Binding(
+                get: { offlineUnavailableMessage != nil },
+                set: { if !$0 { offlineUnavailableMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { offlineUnavailableMessage = nil }
+            } message: {
+                Text(offlineUnavailableMessage ?? "This device cannot use offline Apple Intelligence.")
             }
             .sheet(isPresented: $pendingChoiceQuestion, onDismiss: {
                 if !questionAlreadyAsked { return }
@@ -748,6 +765,56 @@ struct AIGenerationView: View {
         promptDictationActive = false
     }
 
+    /// Returns true if a fully offline action was handled or offered. Never
+    /// changes providers or submits source to a cloud service without consent.
+    private func requestOfflineForgeIfNeeded(edit: Bool) -> Bool {
+        guard !demoMode, forgeConnectivity.hasChecked, forgeConnectivity.isOffline else { return false }
+        if let unavailable = HTMLAppOfflineForge.availabilityMessage {
+            offlineUnavailableMessage = unavailable
+        } else {
+            offlineActionIsEdit = edit
+            showingOfflineConsent = true
+        }
+        return true
+    }
+
+    private func runOfflineForge(edit: Bool, effort: HTMLAppOfflineEffort) {
+        let text = (edit ? changePrompt : prompt).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !session.isWorking else { return }
+        let originalHTML = session.streamedHTML
+        if !edit { session.beginDraft(prompt: text) }
+        session.errorMessage = nil
+        session.isWorking = true
+        session.phase = edit ? "Editing with on-device Apple Intelligence" : "Generating with on-device Apple Intelligence"
+        generationTask?.cancel()
+        generationTask = Task { @MainActor in
+            defer { session.isWorking = false }
+            do {
+                let result = try await HTMLAppOfflineForge.generate(
+                    request: text, existingHTML: edit ? originalHTML : nil, effort: effort
+                ) { phase in session.phase = phase }
+                try Task.checkCancellation()
+                // Only publish an edited app after the entire document passes
+                // local validation. Never replace the original on failure.
+                if edit {
+                    unsavedEditHistory.append(originalHTML)
+                    session.lastEditSummary = "Offline Apple Intelligence edit"
+                    changePrompt = ""
+                    showingChange = true
+                }
+                session.acceptExternalHTML(result)
+                session.phase = "Ready to review — offline"
+                session.errorMessage = nil
+            } catch is CancellationError {
+                session.phase = "Offline generation cancelled"
+                session.errorMessage = nil
+            } catch {
+                session.phase = "Offline generation failed"
+                session.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     private func submitPromptGeneration() {
         if isWidgetVoiceEntry && (promptMicHeld || dictation.recording || dictation.requestingPermission) {
             stopPromptRecording()
@@ -757,6 +824,7 @@ struct AIGenerationView: View {
             return
         }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if requestOfflineForgeIfNeeded(edit: false) { return }
         if existingApp == nil && stylePickerEnabled && !demoMode {
             exploreStyleOptions()
         } else {
@@ -1593,6 +1661,7 @@ struct AIGenerationView: View {
     }
 
     private func generateApp() {
+        if requestOfflineForgeIfNeeded(edit: false) { return }
         if quickModePolicy == "automatic" && autoQuickReason == nil &&
            !AISettingsStore.quickModel.isEmpty && !demoMode && !session.isWorking {
             let source = prompt
@@ -1787,6 +1856,7 @@ struct AIGenerationView: View {
         }
         guard !ForgeBackgroundUpload.shared.isActive, !session.isWorking,
               !browserResearch.isBrowsing else { return }
+        if requestOfflineForgeIfNeeded(edit: true) { return }
         let requestedEdit = changePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !rewriteApproved && rewriteCheckedPrompt != requestedEdit {
             rewriteCheckedPrompt = requestedEdit
