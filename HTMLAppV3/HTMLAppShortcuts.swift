@@ -79,7 +79,7 @@ struct HTMLAppSiriShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: OpenSavedHTMLAppActionIntent(),
             phrases: [
-                "Run an app action in \\(.applicationName)"
+                "Run an app action in \(.applicationName)"
             ],
             shortTitle: "Run HTML App Action",
             systemImageName: "play.square"
