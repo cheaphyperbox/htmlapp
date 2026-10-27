@@ -2167,6 +2167,11 @@ enum HTMLNativeAPIScript {
           sentiment: (text) => call('language.sentiment', { text: String(text ?? '') }),
           entities: (text) => call('language.entities', { text: String(text ?? '') })
         },
+        spotlight: {
+          index: (key, title, summary) => call('spotlight.index', { key, title, summary }),
+          remove: (key) => call('spotlight.remove', { key }),
+          clear: () => call('spotlight.clear')
+        },
         shortcuts: {
           consumeAction: (appName) => call('shortcuts.consumeAction', { appName })
         },
