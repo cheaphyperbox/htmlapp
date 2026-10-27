@@ -432,3 +432,8 @@ assert 'case "ai.cancel":' in native
 assert 'aiTasks.values.forEach { $0.cancel() }' in native
 assert '"remainingBudget"' in native and '"totalRequests"' in native
 assert 'args["json"] as? Bool == true' in native
+
+# Native dispatch must not duplicate Vision patterns in the language handler.
+assert 'case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces", "language.detect"' not in native, "Duplicate Vision dispatch in NaturalLanguage handler"
+for method in ("vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces"):
+    assert f'case "{method}"' in native, f"Missing Vision dispatch: {method}"
