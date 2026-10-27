@@ -2349,7 +2349,9 @@ enum HTMLNativeAPIScript {
         },
         speech: {
           speak: (text, options = {}) => call('speech.speak', { ...options, text: String(text ?? '') }),
-          stop: () => call('speech.stop')
+          stop: () => call('speech.stop'),
+          listen: (locale) => call('speech.listen', { locale }),
+          listenStop: () => call('speech.listenStop')
         }
       };
 
