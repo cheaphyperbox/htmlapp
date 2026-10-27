@@ -48,6 +48,15 @@ enum HTMLAppDocumentDatabase {
         return ["format": "htmlapp.sqlite-json.v1", "records": records]
     }
 
+    /// Includes SQLite records in an explicit per-app portable data snapshot.
+    static func portableSnapshot(appID: String) -> [String: Any]? {
+        try? exportJSON(appID: appID)
+    }
+
+    static func restorePortableSnapshot(appID: String, snapshot: [String: Any]) throws {
+        _ = try importJSON(appID: appID, payload: snapshot)
+    }
+
     static func importJSON(appID: String, payload: [String: Any]) throws -> Int {
         guard payload["format"] as? String == "htmlapp.sqlite-json.v1",
               let records = payload["records"] as? [[String: Any]],
