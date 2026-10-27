@@ -80,6 +80,24 @@ enum HTMLAppPortableDataStore {
         try? data.write(to: destination, options: .atomic)
     }
 
+    static func exportBundle(appID: String) -> [String: Any] {
+        ["format": "htmlapp.portable-data.v2",
+         "values": all(appID: appID),
+         "database": HTMLAppDocumentDatabase.portableSnapshot(appID: appID) ?? [:]]
+    }
+
+    static func importBundle(appID: String, bundle: [String: Any]) throws {
+        guard bundle["format"] as? String == "htmlapp.portable-data.v2",
+              let values = bundle["values"] as? [String: String] else {
+            throw NSError(domain: "HTMLAppPortableData", code: 1)
+        }
+        if let database = bundle["database"] as? [String: Any],
+           database["format"] as? String == "htmlapp.sqlite-json.v1" {
+            try HTMLAppDocumentDatabase.restorePortableSnapshot(appID: appID, snapshot: database)
+        }
+        replace(appID: appID, values: values)
+    }
+
     static func fileURL(appID: String) -> URL {
         let safe = appID.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
         return root.appendingPathComponent(safe.isEmpty ? "invalid" : safe).appendingPathExtension("json")
