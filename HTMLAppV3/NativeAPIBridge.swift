@@ -2252,14 +2252,32 @@ enum HTMLNativeAPIScript {
           return;
         }
         const id = `native-${Date.now()}-${++sequence}`;
-        pending.set(id, { resolve, reject, method });
-        handler.postMessage({ id, method, args });
+        // Pickers and system authorization sheets may stay open longer than
+        // simple data calls. Every pending request still has a finite deadline.
+        const interactive = /^(files\.pick|photos\.pick|contacts\.pick|calendar\.|nfc\.readNDEF|health\.today|biometrics\.|share\.|speech\.listen|speech\.recognize)/.test(method);
+        const deadline = interactive ? 180000 : (method.startsWith('ai.') ? 120000 : 30000);
+        const timer = setTimeout(() => {
+          if (!pending.has(id)) return;
+          pending.delete(id);
+          const error = new Error('Native request timed out: ' + method);
+          error.code = 'native_timeout';
+          reject(error);
+        }, deadline);
+        pending.set(id, { resolve, reject, method, timer });
+        try {
+          handler.postMessage({ id, method, args });
+        } catch (error) {
+          clearTimeout(timer);
+          pending.delete(id);
+          reject(error);
+        }
       });
 
       window.__htmlappNativeResolve = (id, ok, value) => {
         const item = pending.get(id);
         if (!item) return;
         pending.delete(id);
+        clearTimeout(item.timer);
         if (ok) {
           if (item.method === 'widgets.configure') document.getElementById('__htmlappWidgetError')?.remove();
           item.resolve(value);
