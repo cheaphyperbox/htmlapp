@@ -8,6 +8,8 @@ import WebKit
 enum HTMLPermission: String, CaseIterable, Identifiable {
     case ai
     case spotlight
+    case health
+    case nfc
     case camera
     case microphone
     case location
@@ -32,6 +34,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         switch self {
         case .ai: return "AI Provider Access"
         case .spotlight: return "Spotlight Search"
+        case .health: return "Health Data"
+        case .nfc: return "NFC Reader"
         case .camera: return "Camera"
         case .microphone: return "Microphone"
         case .location: return "Location"
@@ -56,6 +60,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         switch self {
         case .ai: return "Allows this HTML app to send prompts to your chosen AI provider, unless on-device processing is used. Requests may consume API credits."
         case .spotlight: return "Allows this saved HTML app to index selected titles and summaries in iOS Spotlight search."
+        case .health: return "Allows this saved app to request read-only HealthKit access to the data types you approve in the iOS Health authorization screen."
+        case .nfc: return "Allows this saved app to initiate foreground NFC tag scans after your approval."
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
@@ -80,6 +86,8 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         switch self {
         case .ai: return "sparkles"
         case .spotlight: return "magnifyingglass"
+        case .health: return "heart.text.square"
+        case .nfc: return "wave.3.right"
         case .camera: return "camera.fill"
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
