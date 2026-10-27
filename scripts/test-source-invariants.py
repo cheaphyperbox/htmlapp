@@ -547,4 +547,23 @@ assert 'HTMLAppPortableDataStore.removeChecked' in native
 assert 'HTMLAppPortableDataStore.clearChecked' in native
 assert '"storage_write_failed"' in native
 
+# Native road speed-limit/precise-address integration must be consent-gated.
+location_lookup = source("HTMLAppV3/HTMLAppAddressLookup.swift")
+road_lookup = source("HTMLAppV3/HTMLAppRoadDataLookup.swift")
+permissions_source = source("HTMLAppV3/PermissionSystem.swift")
+assert 'case "location.reverseGeocode":' in native
+assert 'case "location.roadSpeedLimit":' in native
+assert "withPermission(.roadData, id: id)" in native
+assert "withPermission(.location, id: id)" in native
+assert "call('location.reverseGeocode'" in native
+assert "call('location.roadSpeedLimit'" in native
+for method in ("location.reverseGeocode", "location.roadSpeedLimit"):
+    assert f'id: "{method}"' in catalog
+assert "CLGeocoder()" in location_lookup
+assert "case roadData" in permissions_source
+assert "OpenStreetMap" in permissions_source
+assert "OpenStreetMap Overpass" in road_lookup
+assert '"status": "unknown"' in road_lookup
+assert "lastRequests[appID]" in road_lookup
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
