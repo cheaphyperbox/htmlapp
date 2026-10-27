@@ -484,4 +484,14 @@ assert "com.apple.developer.nfc.readersession.formats" in entitlements
 assert "HKStatisticsQuery" in source("HTMLAppV3/HTMLAppHealthReader.swift")
 assert "NFCNDEFReaderSession" in source("HTMLAppV3/HTMLAppNFCReader.swift")
 
+# Developer storage controls must warn before mutating saved app data.
+storage_manager = source("HTMLAppV3/HTMLAppStorageManagementView.swift")
+permission_view = source("HTMLAppV3/EnhancedPermissionsView.swift")
+assert "HTMLAppPortableDataStore.all(appID: app.id)" in storage_manager
+assert "HTMLAppDocumentDatabase.exportJSON(appID: app.id)" in storage_manager
+assert "HTMLAppDocumentDatabase.perform(appID: app.id, method: \"db.delete\"" in storage_manager
+assert 'Modifying saved data can cause issues' in storage_manager
+assert "HTMLAppStorageManagementView(app: app)" in permission_view
+assert "native_timeout" in native and "clearTimeout(item.timer)" in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
