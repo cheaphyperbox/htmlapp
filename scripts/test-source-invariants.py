@@ -513,4 +513,25 @@ assert "fm.fileExists(atPath: localURL.path)" in icloud
 assert "else if !values.isEmpty" not in icloud
 assert 'base.contains("FORGE CORE CONTRACT")' in source("HTMLAppV3/AIGenerationService.swift")
 
+# Offline Forge may use Apple Foundation Models only after explicit user opt-in.
+offline_source = source("HTMLAppV3/HTMLAppOfflineForge.swift")
+forge_view = source("HTMLAppV3/AIGenerationView.swift")
+ai_settings = source("HTMLAppV3/AISettingsView.swift")
+assert '#if canImport(FoundationModels)' in offline_source
+assert '#available(iOS 26.0, *)' in offline_source
+assert 'SystemLanguageModel.default.availability' in offline_source
+assert 'LanguageModelSession(instructions:' in offline_source
+assert 'NWPathMonitor()' in offline_source
+assert 'case quick, balanced, thorough' in offline_source
+assert 'case .balanced: return 3' in offline_source
+assert 'case .thorough: return 6' in offline_source
+assert 'HTMLRuntimeVerifier.verify(html: result' in offline_source
+assert 'showingOfflineConsent' in forge_view
+assert 'requestOfflineForgeIfNeeded(edit: false)' in forge_view
+assert 'requestOfflineForgeIfNeeded(edit: true)' in forge_view
+assert 'runOfflineForge(edit: offlineActionIsEdit' in forge_view
+assert 'HTMLAppOfflineForge.generate(' in forge_view
+assert 'htmlapp.offlineForge.effort' in offline_source and 'htmlapp.offlineForge.effort' in ai_settings
+assert "No prompt or app code is sent to your cloud provider" in offline_source
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
