@@ -139,7 +139,9 @@ actor HTMLAppICloudSync {
                         incoming.data[id] = decoded
                     }
                     // Do not overwrite an undownloaded iCloud document.
-                } else if !values.isEmpty, let bytes = try? encoder.encode(values) {
+                } else if fm.fileExists(atPath: localURL.path), let bytes = try? encoder.encode(values) {
+                    // Explicit empty local snapshots must overwrite old cloud values.
+                    // A missing local file does not mean the user cleared data.
                     write(bytes, at: url)
                 }
             }
