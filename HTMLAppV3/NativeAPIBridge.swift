@@ -253,10 +253,13 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             let currentTime = Date().timeIntervalSince1970
             let used = (UserDefaults.standard.array(forKey: usageKey) as? [Double] ?? [])
                 .filter { currentTime - $0 < 60 }.count
+            let total = UserDefaults.standard.integer(forKey: "htmlapp.aiBridge.total." + appID)
             resolve(id, value: ["available": ready, "provider": ready ? "configured" : "unavailable",
                                 "onDevice": false, "streaming": false,
                                 "models": ready ? [config.model] : [],
-                                "remainingRequests": ready ? max(0, 10 - used) : 0] as [String: Any])
+                                "remainingRequests": ready ? max(0, 10 - used) : 0,
+                                "remainingBudget": ready ? max(0, 10 - used) : 0,
+                                "totalRequests": total] as [String: Any])
         case "ai.complete", "ai.classify":
             guard UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled") else {
                 reject(id, code: "ai_disabled", message: "AI access is disabled in Settings.")
@@ -300,6 +303,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     return
                 }
                 UserDefaults.standard.set(previous + [now], forKey: key)
+                let totalKey = "htmlapp.aiBridge.total." + self.appID
+                UserDefaults.standard.set(UserDefaults.standard.integer(forKey: totalKey) + 1, forKey: totalKey)
                 let maxTokens = max(64, min(2048, (args["maxTokens"] as? Int) ?? 512))
                 Task { @MainActor [weak self] in
                     guard let self else { return }
@@ -314,6 +319,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                                 return
                             }
                             self.resolve(id, value: ["label": match, "confidence": NSNull()] as [String: Any])
+                        } else if args["json"] as? Bool == true {
+                            guard let data = result.data(using: .utf8),
+                                  let parsed = try? JSONSerialization.jsonObject(with: data),
+                                  parsed is [String: Any] || parsed is [Any] else {
+                                self.reject(id, code: "invalid_json", message: "AI provider did not return valid JSON.")
+                                return
+                            }
+                            self.resolve(id, value: ["text": result, "json": parsed])
                         } else {
                             self.resolve(id, value: ["text": result])
                         }
