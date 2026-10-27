@@ -498,4 +498,10 @@ assert "r.bottom <= 0 || r.top >= innerHeight" in runtime_verifier
 assert 'let normalized = String(value.reversed().drop(while: { $0 == "/" }).reversed())' in source("HTMLAppV3/AIConfiguration.swift")
 assert '"hasData": sum != nil' in source("HTMLAppV3/HTMLAppHealthReader.swift")
 
+library_source = source("HTMLAppV3/LibraryUI.swift")
+assert 'storageManagementApp = app' in library_source
+assert 'Label("Manage Storage", systemImage: "externaldrive")' in library_source
+assert 'Saved app data:' in library_source
+assert '.sheet(item: $storageManagementApp)' in library_source
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
