@@ -147,6 +147,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 }
                 resolve(id, value: ["entities": entities])
             }
+        case "db.put", "db.get", "db.delete", "db.query", "db.count":
+            guard appID != "PREVIEW" else {
+                reject(id, code: "preview_restricted", message: "Database access is unavailable in preview.")
+                return
+            }
+            do {
+                let result = try HTMLAppDocumentDatabase.perform(appID: appID, method: method, args: args)
+                resolve(id, value: result)
+            } catch {
+                reject(id, code: "database_error", message: "Document database operation failed or exceeded its quota.")
+            }
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
@@ -331,6 +342,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             resolve(id, value: [
                 "methods": [
                     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "db.put", "db.get", "db.delete", "db.query", "db.count",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
@@ -2136,6 +2148,13 @@ enum HTMLNativeAPIScript {
           tokenize: (text) => call('language.tokenize', { text: String(text ?? '') }),
           sentiment: (text) => call('language.sentiment', { text: String(text ?? '') }),
           entities: (text) => call('language.entities', { text: String(text ?? '') })
+        },
+        db: {
+          put: (collection, id, document) => call('db.put', { collection, id, document }),
+          get: (collection, id) => call('db.get', { collection, id }),
+          delete: (collection, id) => call('db.delete', { collection, id }),
+          query: (collection, options = {}) => call('db.query', { collection, ...options }),
+          count: (collection) => call('db.count', { collection })
         },
         ai: {
           available: () => call('ai.available'),
