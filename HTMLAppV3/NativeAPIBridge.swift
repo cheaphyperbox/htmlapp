@@ -251,6 +251,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 return
             }
             task.cancel()
+            reject(requestID, code: "cancelled", message: "AI request cancelled.")
             resolve(id, value: ["cancelled": true])
         case "ai.available":
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
