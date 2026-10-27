@@ -37,6 +37,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let altimeter = CMAltimeter()
     private var nativeTabBar: HTMLAppNativeTabBar?
     private let bluetoothDiscovery = HTMLAppBluetoothDiscovery()
+    private var previousBrightness: CGFloat?
+    private var previousIdleTimerDisabled: Bool?
 
     init(webView: WKWebView, appID: String, permissionCoordinator: NativePermissionCoordinator?) {
         self.webView = webView
@@ -45,7 +47,23 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         super.init()
     }
 
-    func shutdown() { nativeTabBar?.remove(); nativeTabBar = nil; speechRecognition.stop(); aiTasks.values.forEach { $0.cancel() }; aiTasks.removeAll() }
+    func shutdown() {
+        nativeTabBar?.remove()
+        nativeTabBar = nil
+        speechRecognition.stop()
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        bluetoothDiscovery.cancel()
+        aiTasks.values.forEach { $0.cancel() }
+        aiTasks.removeAll()
+        if let previousBrightness {
+            UIScreen.main.brightness = previousBrightness
+            self.previousBrightness = nil
+        }
+        if let previousIdleTimerDisabled {
+            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerDisabled
+            self.previousIdleTimerDisabled = nil
+        }
+    }
 
     func handle(_ body: [String: Any]) {
         guard let id = body["id"] as? String,
@@ -510,6 +528,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.displayControl, id: id) { [weak self] in
                 guard let self else { return }
                 if let level = args["level"] as? NSNumber {
+                    if self.previousBrightness == nil { self.previousBrightness = UIScreen.main.brightness }
                     UIScreen.main.brightness = CGFloat(max(0, min(1, level.doubleValue)))
                 }
                 self.resolve(id, value: ["level": Double(UIScreen.main.brightness)])
@@ -611,6 +630,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "device.keepAwake":
             withPermission(.displayControl, id: id) { [weak self] in
                 guard let self else { return }
+                if self.previousIdleTimerDisabled == nil { self.previousIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled }
                 UIApplication.shared.isIdleTimerDisabled = args["enabled"] as? Bool ?? false
                 self.resolve(id, value: ["enabled": UIApplication.shared.isIdleTimerDisabled])
             }
