@@ -55,6 +55,7 @@ struct LibraryView: View {
     @State private var queuedFileImport: HTMLFileImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
+    @State private var storageManagementApp: SavedHTMLApp?
     @State private var refreshingID: String?
 
     @State private var showNewFolder = false
@@ -147,6 +148,7 @@ struct LibraryView: View {
             AIIconGenerationView(app: app).environmentObject(store)
         }
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
+        .sheet(item: $storageManagementApp) { HTMLAppStorageManagementView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
         .onChange(of: importingFile) { showing in
             if !showing { presentQueuedFileImport() }
@@ -569,6 +571,10 @@ struct LibraryView: View {
         Menu {
             Button { editHistoryApp = app } label: { Label("Restore AI Edit", systemImage: "clock.arrow.circlepath") }
             Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
+            let portableBytes = (try? HTMLAppPortableDataStore.fileURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            let databaseBytes = (try? HTMLAppDocumentDatabase.databaseURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            Text("Saved app data: " + ByteCountFormatter.string(fromByteCount: Int64(portableBytes + databaseBytes), countStyle: .file))
+            Button { storageManagementApp = app } label: { Label("Manage Storage", systemImage: "externaldrive") }
             Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
             Button { refresh(app) } label: { Label("Refresh External Sources", systemImage: "arrow.clockwise") }
         } label: { Label("Developer", systemImage: "chevron.left.forwardslash.chevron.right") }
