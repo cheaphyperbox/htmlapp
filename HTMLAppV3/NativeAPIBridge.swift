@@ -52,10 +52,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             let enabled = UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled")
             let config = AISettingsStore.configuration
             let ready = enabled && config.isConfigured
+            let usageKey = "htmlapp.aiBridge.usage." + appID
+            let currentTime = Date().timeIntervalSince1970
+            let used = (UserDefaults.standard.array(forKey: usageKey) as? [Double] ?? [])
+                .filter { currentTime - $0 < 60 }.count
             resolve(id, value: ["available": ready, "provider": ready ? "configured" : "unavailable",
                                 "onDevice": false, "streaming": false,
                                 "models": ready ? [config.model] : [],
-                                "remainingRequests": ready ? 10 : 0] as [String: Any])
+                                "remainingRequests": ready ? max(0, 10 - used) : 0] as [String: Any])
         case "ai.complete", "ai.classify":
             guard UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled") else {
                 reject(id, code: "ai_disabled", message: "AI access is disabled in Settings.")
