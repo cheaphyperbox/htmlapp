@@ -355,9 +355,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
           continue;
         }
         const r = el.getBoundingClientRect();
+        // Do not clamp offscreen elements into the viewport: that probes a
+        // different element and produces false overlay/tapability failures.
+        if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;
         const cx = Math.max(1, Math.min(innerWidth - 1, r.left + r.width / 2));
         const cy = Math.max(1, Math.min(innerHeight - 1, r.top + r.height / 2));
-        if (cy < 0 || cy >= innerHeight || cx < 0 || cx >= innerWidth) continue;
         const hit = document.elementFromPoint(cx, cy);
         if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) covered++;
       }
