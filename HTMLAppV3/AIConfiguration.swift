@@ -28,8 +28,7 @@ struct AIProviderConfiguration: Equatable {
         let value = apiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
         // Normalize trailing slashes before provider-specific endpoint detection.
-        let trimmed = String(value.drop(while: { $0 == "/" }.reversed())).reversed()
-        let normalized = String(trimmed)
+        let normalized = String(value.reversed().drop(while: { $0 == "/" }).reversed())
         if compatibility == .openAI {
             if normalized.hasSuffix("/chat/completions") { return URL(string: normalized) }
             if normalized.hasSuffix("/v1beta/openai") { return URL(string: normalized + "/chat/completions") }
