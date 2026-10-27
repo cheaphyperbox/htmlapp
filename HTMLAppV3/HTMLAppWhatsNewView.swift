@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.37"
-    static let compiledBuild = "44"
+    static let compiledVersion = "1.6.38"
+    static let compiledBuild = "45"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,7 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.38" { return [Entry(id: "spotlight", title: "Spotlight indexing", description: "Saved apps can request permission to index, remove, and clear their own searchable titles and summaries.", symbol: "magnifyingglass", tint: .blue)] }
         if version == "1.6.37" { return [Entry(id: "db-search-shortcuts", title: "Search documents and run Shortcuts actions", description: "Saved apps can search their local documents and consume pending named actions from Siri Shortcuts.", symbol: "magnifyingglass", tint: .blue)] }
         if version == "1.6.36" { return [Entry(id: "portable-db-shortcuts", title: "Portable app data and Shortcuts", description: "SQLite document snapshots can be bundled with portable app data, and Shortcuts can request a named saved-app action.", symbol: "square.and.arrow.up", tint: .blue)] }
         if version == "1.6.35" { return [Entry(id: "sqlite-docs", title: "Local document database", description: "Saved apps can now store, retrieve, list, count, and delete JSON documents in an isolated SQLite database.", symbol: "externaldrive", tint: .blue)] }
