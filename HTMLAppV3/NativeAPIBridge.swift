@@ -221,7 +221,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
             UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.pendingAction")
             resolve(id, value: ["action": pendingAction])
-        case "speech.listen":
+        case "speech.listen", "speech.recognize":
             withPermission(.microphone, id: id) { [weak self] in
                 guard let self else { return }
                 let locale = args["locale"] as? String ?? Locale.current.identifier
@@ -242,7 +242,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                 }
             }
-        case "speech.listenStop":
+        case "speech.listenStop", "speech.stopRecognizing":
             speechRecognition.stop()
             resolve(id, value: ["stopped": true])
         case "ai.cancel":
@@ -470,7 +470,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "liveActivities.end", "liveActivities.list", "widgets.configure",
                     "widgets.list", "widgets.remove", "widgets.reload", "background.configure",
                     "background.list", "background.remove", "background.refreshNow",
-                    "speech.speak", "speech.stop", "speech.listen", "speech.listenStop"
+                    "speech.speak", "speech.stop", "speech.listen", "speech.listenStop", "speech.recognize", "speech.stopRecognizing"
                 ],
                 "permissions": HTMLPermission.allCases.map { $0.rawValue },
                 "torchAvailable": AVCaptureDevice.default(for: .video)?.hasTorch ?? false,
@@ -2444,7 +2444,9 @@ enum HTMLNativeAPIScript {
           speak: (text, options = {}) => call('speech.speak', { ...options, text: String(text ?? '') }),
           stop: () => call('speech.stop'),
           listen: (locale) => call('speech.listen', { locale }),
-          listenStop: () => call('speech.listenStop')
+          recognize: (options = {}) => call('speech.recognize', { locale: options.locale }),
+          listenStop: () => call('speech.listenStop'),
+          stopRecognizing: () => call('speech.stopRecognizing')
         }
       };
 
