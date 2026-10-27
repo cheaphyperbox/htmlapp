@@ -1,5 +1,6 @@
 import Foundation
 import NaturalLanguage
+import Vision
 import MapKit
 import UIKit
 import WebKit
@@ -49,7 +50,71 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
-        case "language.detect", "language.tokenize", "language.sentiment", "language.entities":
+        case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":
+            guard let dataURL = args["imageDataURL"] as? String,
+                  dataURL.hasPrefix("data:image/"),
+                  let separator = dataURL.firstIndex(of: ","),
+                  let bytes = Data(base64Encoded: String(dataURL[dataURL.index(after: separator)...])),
+                  bytes.count <= 8 * 1024 * 1024,
+                  let image = UIImage(data: bytes),
+                  let cgImage = image.cgImage else {
+                reject(id, code: "invalid_image", message: "Supply an image data URL smaller than 8 MiB.")
+                return
+            }
+            // Bound pixel processing to protect memory on older iPhones.
+            let maxDimension: CGFloat = 1600
+            let scale = min(1, maxDimension / max(image.size.width, image.size.height))
+            let processingImage: CGImage
+            if scale < 1 {
+                let target = CGSize(width: max(1, floor(image.size.width * scale)),
+                                    height: max(1, floor(image.size.height * scale)))
+                let renderer = UIGraphicsImageRenderer(size: target)
+                let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+                processingImage = resized.cgImage ?? cgImage
+            } else {
+                processingImage = cgImage
+            }
+            let request: VNRequest
+            switch method {
+            case "vision.recognizeText": request = VNRecognizeTextRequest()
+            case "vision.scanCodes": request = VNDetectBarcodesRequest()
+            case "vision.classifyImage": request = VNClassifyImageRequest()
+            default: request = VNDetectFaceRectanglesRequest()
+            }
+            Task.detached(priority: .userInitiated) { [weak self] in
+                do {
+                    try VNImageRequestHandler(cgImage: processingImage).perform([request])
+                    let output: [String: Any]
+                    switch method {
+                    case "vision.recognizeText":
+                        let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+                        output = ["lines": observations.compactMap { observation -> [String: Any]? in
+                            guard let top = observation.topCandidates(1).first else { return nil }
+                            return ["text": top.string, "confidence": top.confidence,
+                                    "box": ["x": observation.boundingBox.minX, "y": observation.boundingBox.minY,
+                                            "width": observation.boundingBox.width, "height": observation.boundingBox.height]]
+                        }]
+                    case "vision.scanCodes":
+                        let observations = (request.results as? [VNBarcodeObservation]) ?? []
+                        output = ["codes": observations.map { ["value": $0.payloadStringValue ?? "", "symbology": $0.symbology.rawValue] }]
+                    case "vision.classifyImage":
+                        let observations = (request.results as? [VNClassificationObservation]) ?? []
+                        output = ["classes": observations.prefix(8).map { ["label": $0.identifier, "confidence": String($0.confidence)] }]
+                    default:
+                        let observations = (request.results as? [VNFaceObservation]) ?? []
+                        output = ["count": observations.count, "faces": observations.map {
+                            ["x": $0.boundingBox.minX, "y": $0.boundingBox.minY,
+                             "width": $0.boundingBox.width, "height": $0.boundingBox.height]
+                        }]
+                    }
+                    await MainActor.run { [weak self] in self?.resolve(id, value: output) }
+                } catch {
+                    await MainActor.run { [weak self] in
+                        self?.reject(id, code: "vision_unavailable", message: "On-device image analysis failed.")
+                    }
+                }
+            }
+        case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces", "language.detect", "language.tokenize", "language.sentiment", "language.entities":
             guard let input = args["text"] as? String, !input.isEmpty,
                   input.utf8.count <= 32768 else {
                 reject(id, code: "invalid_arguments", message: "Provide nonempty text of at most 32 KiB.")
@@ -2058,6 +2123,12 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        vision: {
+          recognizeText: (imageDataURL) => call('vision.recognizeText', { imageDataURL }),
+          scanCodes: (imageDataURL) => call('vision.scanCodes', { imageDataURL }),
+          classifyImage: (imageDataURL) => call('vision.classifyImage', { imageDataURL }),
+          detectFaces: (imageDataURL) => call('vision.detectFaces', { imageDataURL })
+        },
         language: {
           detect: (text) => call('language.detect', { text: String(text ?? '') }),
           tokenize: (text) => call('language.tokenize', { text: String(text ?? '') }),
