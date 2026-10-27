@@ -1790,6 +1790,12 @@ struct AIGenerationView: View {
                 researchReport: combinedResearch,
                 preplanned: preplanned
             )
+            if session.errorMessage != nil, forgeConnectivity.isOffline,
+               HTMLAppOfflineForge.availabilityMessage == nil {
+                offlineActionIsEdit = false
+                showingOfflineConsent = true
+                return
+            }
             guard session.errorMessage == nil,
                   !session.streamedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             if let chosen = selectedStyle {
@@ -1950,6 +1956,10 @@ Requested edit:
             }
             guard session.errorMessage == nil else {
                 lastFailedChange = change
+                if forgeConnectivity.isOffline && HTMLAppOfflineForge.availabilityMessage == nil {
+                    offlineActionIsEdit = true
+                    showingOfflineConsent = true
+                }
                 return
             }
             lastFailedChange = nil
