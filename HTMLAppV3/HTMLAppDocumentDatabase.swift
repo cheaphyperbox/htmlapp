@@ -209,11 +209,27 @@ enum HTMLAppDocumentDatabase {
             return ["items": rows, "cursor": rows.last?["id"] ?? NSNull()]
         }
         if method == "db.put" {
-            let fileSize = (try? FileManager.default.attributesOfItem(atPath: databaseURL(appID: appID).path)[.size] as? NSNumber)?.intValue ?? 0
-            let incoming = (args["document"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0).count } ?? 0
-            guard fileSize + incoming <= 10 * 1024 * 1024 else {
+            guard sqlite3_exec(db, "BEGIN IMMEDIATE TRANSACTION", nil, nil, nil) == SQLITE_OK else {
+                throw NSError(domain: "HTMLAppDatabase", code: 23)
+            }
+            var committed = false
+            defer { if !committed { sqlite3_exec(db, "ROLLBACK", nil, nil, nil) } }
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw NSError(domain: "HTMLAppDatabase", code: 8)
+            }
+            var quotaStatement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, "SELECT (SELECT page_count FROM pragma_page_count) * (SELECT page_size FROM pragma_page_size)", -1, &quotaStatement, nil) == SQLITE_OK,
+                  let quotaStatement else { throw NSError(domain: "HTMLAppDatabase", code: 24) }
+            defer { sqlite3_finalize(quotaStatement) }
+            guard sqlite3_step(quotaStatement) == SQLITE_ROW,
+                  sqlite3_column_int64(quotaStatement, 0) <= 10 * 1024 * 1024 else {
                 throw NSError(domain: "HTMLAppDatabase", code: 9)
             }
+            guard sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK else {
+                throw NSError(domain: "HTMLAppDatabase", code: 25)
+            }
+            committed = true
+            return ["ok": true]
         }
         let result = sqlite3_step(statement)
         if method == "db.count" {
