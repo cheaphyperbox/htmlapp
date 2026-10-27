@@ -5,6 +5,7 @@ struct AIConfigurationSettingsView: View {
     @AppStorage("htmlapp.aiBridge.enabled") private var aiBridgeEnabled = false
     @AppStorage("htmlapp.compactOutput.enabled") private var compactOutputEnabled = false
     @AppStorage("developerMode") private var developerMode = false
+    @AppStorage("htmlapp.offlineForge.effort") private var offlineForgeEffort = "balanced"
     @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
@@ -74,6 +75,21 @@ struct AIConfigurationSettingsView: View {
                 Text("Builds apps from a shared component library so they generate faster. Experimental.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Compact generation is not yet active; standard generation remains in use.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Offline Forge (Experimental)") {
+                Picker("Default offline effort", selection: $offlineForgeEffort) {
+                    ForEach(HTMLAppOfflineEffort.allCases) { effort in
+                        Text(effort.title).tag(effort.rawValue)
+                    }
+                }
+                LabeledContent("Apple Intelligence") {
+                    Text(HTMLAppOfflineForge.availabilityMessage == nil ? "Ready on this device" : "Unavailable")
+                        .foregroundStyle(HTMLAppOfflineForge.availabilityMessage == nil ? .green : .secondary)
+                }
+                Text(HTMLAppOfflineForge.availabilityMessage ?? "Offline generation is available. You will be asked to confirm before it runs.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("On-device generation needs iOS 26+, an eligible Apple Intelligence device, and a ready language model. Offline generation is generally slower and less capable and may use more battery. Cloud generation remains preferred while connected.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Look & Feel") {
