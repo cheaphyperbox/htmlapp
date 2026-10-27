@@ -2062,7 +2062,7 @@ It is valid to return both kinds. If neither device capabilities nor external se
     static func systemPrompt(research: String) -> String {
         let base = AISettingsStore.resolvedSystemPrompt(research: research)
         // The catalog directory is always visible; detailed entries are injected from planner queries.
-        let contract = base.contains("FORGE PRODUCT CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
+        let contract = base.contains("FORGE CORE CONTRACT") ? "" : "\n\n" + ForgeProductContract.rules
         return base + contract + """
 
 REMOTE PUSH AND BACKGROUND VOICE:
