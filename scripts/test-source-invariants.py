@@ -404,7 +404,7 @@ assert 'case "motion.altitude":' in native and "CMAltimeter" in native
 assert 'id: "motion.altitude"' in source("HTMLAppV3/DeviceAPICatalog.swift")
 assert (root / "docs/apns-ptt-deployment.md").exists()
 
-print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
 
 
 # Native capability parity for newly introduced AI, language and Vision methods.
@@ -483,3 +483,5 @@ assert "com.apple.developer.healthkit" in entitlements
 assert "com.apple.developer.nfc.readersession.formats" in entitlements
 assert "HKStatisticsQuery" in source("HTMLAppV3/HTMLAppHealthReader.swift")
 assert "NFCNDEFReaderSession" in source("HTMLAppV3/HTMLAppNFCReader.swift")
+
+print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
