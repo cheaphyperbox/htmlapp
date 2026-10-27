@@ -29,31 +29,59 @@ actor HTMLAppRoadDataLookup {
         lastRequests[appID] = Date()
 
         let query = "[out:json][timeout:10];way(around:100,\(lat),\(lon))[highway][highway!~\"^(footway|cycleway|path|pedestrian|steps|bridleway|corridor|construction)$\"];out tags geom;"
-        var url = URLComponents(string: "https://overpass-api.de/api/interpreter")!
-        url.queryItems = [URLQueryItem(name: "data", value: query)]
-        guard let endpoint = url.url else { throw LookupError.unavailable }
-        var request = URLRequest(url: endpoint)
-        request.timeoutInterval = 14
-        request.setValue("HTMLApp/1.6.31 (road tag lookup; user-consented)", forHTTPHeaderField: "User-Agent")
-        let (bytes, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              bytes.count <= 512_000,
-              let root = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-              let ways = root["elements"] as? [[String: Any]] else {
-            throw LookupError.unavailable
+        // Public Overpass instances are intermittently unavailable or
+        // overloaded. Try a second independent service after a failure.
+        // Native URLSession avoids WKWebView cross-origin POST limitations.
+        let endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter"
+        ]
+        var ways: [[String: Any]]?
+        for service in endpoints {
+            guard let endpoint = URL(string: service) else { continue }
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 14
+            request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            request.setValue("HTMLApp/1.6.31 (consented road-tag lookup)", forHTTPHeaderField: "User-Agent")
+            var components = URLComponents()
+            components.queryItems = [URLQueryItem(name: "data", value: query)]
+            request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+            do {
+                let (bytes, response) = try await URLSession.shared.data(for: request)
+                guard (response as? HTTPURLResponse)?.statusCode == 200,
+                      bytes.count <= 1_500_000,
+                      let root = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                      let elements = root["elements"] as? [[String: Any]] else { continue }
+                ways = elements
+                break
+            } catch is CancellationError { throw CancellationError() }
+            catch { continue }
         }
+        guard let ways else { throw LookupError.unavailable }
         let match = ways.compactMap { way -> (Double, [String: Any])? in
             guard let tags = way["tags"] as? [String: String],
                   let geometry = way["geometry"] as? [[String: Double]],
                   !geometry.isEmpty else { return nil }
-            // Center-of-way is unreliable for a road that stretches far beyond
-            // the user's position; use the nearest geometry point instead.
-            let meters = geometry.compactMap { point -> Double? in
+            // Measure distance to road segments, not only their vertices.
+            // Long straight roads otherwise appear far away despite passing
+            // directly through the device's position.
+            let vertices: [(Double, Double)] = geometry.compactMap { point in
                 guard let wlat = point["lat"], let wlon = point["lon"] else { return nil }
-                let dx = (wlon - longitude) * cos(latitude * .pi / 180) * 111_200
-                let dy = (wlat - latitude) * 111_200
-                return (dx * dx + dy * dy).squareRoot()
-            }.min() ?? Double.infinity
+                return ((wlon - longitude) * cos(latitude * .pi / 180) * 111_200,
+                        (wlat - latitude) * 111_200)
+            }
+            let meters: Double = {
+                guard let first = vertices.first else { return .infinity }
+                guard vertices.count > 1 else { return hypot(first.0, first.1) }
+                return zip(vertices, vertices.dropFirst()).map { a, b in
+                    let dx = b.0 - a.0
+                    let dy = b.1 - a.1
+                    let squared = dx * dx + dy * dy
+                    let fraction = squared > 0 ? max(0, min(1, -(a.0 * dx + a.1 * dy) / squared)) : 0
+                    return hypot(a.0 + fraction * dx, a.1 + fraction * dy)
+                }.min() ?? .infinity
+            }()
             let raw = tags["maxspeed"] ?? ""
             return (meters, [
                 "road": tags["name"] ?? tags["ref"] ?? "",
