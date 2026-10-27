@@ -85,7 +85,7 @@ struct AIConfigurationSettingsView: View {
                 }
                 LabeledContent("Apple Intelligence") {
                     Text(HTMLAppOfflineForge.availabilityMessage == nil ? "Ready on this device" : "Unavailable")
-                        .foregroundStyle(HTMLAppOfflineForge.availabilityMessage == nil ? .green : .secondary)
+                        .foregroundStyle(HTMLAppOfflineForge.availabilityMessage == nil ? Color.green : Color.secondary)
                 }
                 Text(HTMLAppOfflineForge.availabilityMessage ?? "Offline generation is available. You will be asked to confirm before it runs.")
                     .font(.caption).foregroundStyle(.secondary)
