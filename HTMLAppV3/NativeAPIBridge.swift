@@ -147,14 +147,21 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 }
                 resolve(id, value: ["entities": entities])
             }
-        case "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import":
+        case "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search", "db.search":
             guard appID != "PREVIEW" else {
                 reject(id, code: "preview_restricted", message: "Database access is unavailable in preview.")
                 return
             }
             do {
                 let result: Any
-                if method == "db.export" {
+                if method == "db.search" {
+                    guard let collection = args["collection"] as? String,
+                          let text = args["text"] as? String else {
+                        reject(id, code: "invalid_search", message: "Collection and text are required.")
+                        return
+                    }
+                    result = ["items": try HTMLAppDocumentDatabase.search(appID: appID, collection: collection, text: text, limit: args["limit"] as? Int ?? 50)]
+                } else if method == "db.export" {
                     result = try HTMLAppDocumentDatabase.exportJSON(appID: appID)
                 } else if method == "db.import" {
                     guard let payload = args["payload"] as? [String: Any] else {
@@ -2166,6 +2173,7 @@ enum HTMLNativeAPIScript {
           delete: (collection, id) => call('db.delete', { collection, id }),
           query: (collection, options = {}) => call('db.query', { collection, ...options }),
           count: (collection) => call('db.count', { collection }),
+          search: (collection, text, limit = 50) => call('db.search', { collection, text, limit }),
           export: () => call('db.export'),
           import: (payload) => call('db.import', { payload })
         },
