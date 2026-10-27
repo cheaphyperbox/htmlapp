@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.35"
-    static let compiledBuild = "42"
+    static let compiledVersion = "1.6.36"
+    static let compiledBuild = "43"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,7 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.36" { return [Entry(id: "portable-db-shortcuts", title: "Portable app data and Shortcuts", description: "SQLite document snapshots can be bundled with portable app data, and Shortcuts can request a named saved-app action.", symbol: "square.and.arrow.up", tint: .blue)] }
         if version == "1.6.35" { return [Entry(id: "sqlite-docs", title: "Local document database", description: "Saved apps can now store, retrieve, list, count, and delete JSON documents in an isolated SQLite database.", symbol: "externaldrive", tint: .blue)] }
         if version == "1.6.34" { return [Entry(id: "vision-tools", title: "On-device image analysis", description: "Saved HTML apps can recognize text and barcodes, classify images, and detect face rectangles using Apple Vision.", symbol: "viewfinder", tint: .blue)] }
         if version == "1.6.33" { return [Entry(id: "language-tools", title: "On-device language tools", description: "Saved HTML apps can detect languages, tokenize text, analyze sentiment and extract named entities using Apple NaturalLanguage.", symbol: "text.book.closed", tint: .blue)] }
