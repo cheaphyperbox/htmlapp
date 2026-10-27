@@ -452,7 +452,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "map.show", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -633,6 +633,19 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "system.open":
             withPermission(.externalApps, id: id) { [weak self] in
                 self?.openURL(id: id, value: args["url"] as? String ?? "")
+            }
+        case "map.show":
+            withPermission(.location, id: id) { [weak self] in
+                guard let self else { return }
+                guard let presenter = self.topViewController() else {
+                    self.reject(id, code: "presentation_failed", message: "No foreground view controller is available.")
+                    return
+                }
+                if HTMLAppNativeMapPresenter.show(args, from: presenter) {
+                    self.resolve(id, value: ["presented": true])
+                } else {
+                    self.reject(id, code: "invalid_region", message: "Provide valid latitude and longitude in region.")
+                }
             }
         case "externalApps.maps":
             withPermission(.externalApps, id: id) { [weak self] in
@@ -2249,6 +2262,9 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        map: {
+          show: (options = {}) => call('map.show', options)
+        },
         vision: {
           recognizeText: (imageDataURL) => call('vision.recognizeText', { imageDataURL }),
           scanCodes: (imageDataURL) => call('vision.scanCodes', { imageDataURL }),
