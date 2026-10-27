@@ -66,7 +66,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .nfc: return "Allows this saved app to initiate foreground NFC tag scans after your approval."
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
-        case .location: return "Allows this HTML app to request your current position."
+        case .location: return "Allows this HTML app to request your current position and, when requested, resolve an approximate street address using Apple geocoding."
         case .roadData: return "Allows this saved app to share GPS coordinates with an OpenStreetMap Overpass server to request mapped road and speed-limit tags. Third-party service; requires internet."
         case .motion: return "Allows this HTML app to read motion and walking-step history after iOS permission."
         case .bluetooth: return "Allows this HTML app to discover nearby Bluetooth Low Energy devices when you ask it to scan."
