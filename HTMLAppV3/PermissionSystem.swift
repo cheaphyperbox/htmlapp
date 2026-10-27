@@ -13,6 +13,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case camera
     case microphone
     case location
+    case roadData
     case motion
     case bluetooth
     case notifications
@@ -39,6 +40,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "Camera"
         case .microphone: return "Microphone"
         case .location: return "Location"
+        case .roadData: return "Road Data Lookup"
         case .motion: return "Motion & Steps"
         case .bluetooth: return "Bluetooth Devices"
         case .notifications: return "Notifications"
@@ -65,6 +67,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "Allows this HTML app to capture video."
         case .microphone: return "Allows this HTML app to record audio."
         case .location: return "Allows this HTML app to request your current position."
+        case .roadData: return "Allows this saved app to share GPS coordinates with an OpenStreetMap Overpass server to request mapped road and speed-limit tags. Third-party service; requires internet."
         case .motion: return "Allows this HTML app to read motion and walking-step history after iOS permission."
         case .bluetooth: return "Allows this HTML app to discover nearby Bluetooth Low Energy devices when you ask it to scan."
         case .notifications: return "Allows this HTML app to send native iOS notifications."
@@ -91,6 +94,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .camera: return "camera.fill"
         case .microphone: return "mic.fill"
         case .location: return "location.fill"
+        case .roadData: return "road.lanes"
         case .motion: return "figure.walk"
         case .bluetooth: return "antenna.radiowaves.left.and.right"
         case .notifications: return "bell.fill"
