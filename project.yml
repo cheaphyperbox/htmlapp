@@ -95,6 +95,8 @@ targets:
         NSSpeechRecognitionUsageDescription: Dictate an app idea. Speech may be processed by Apple when on-device recognition is unavailable.
         NSBonjourServices:
           - _htmlapp-share._tcp
+        NSHealthShareUsageDescription: Saved HTML apps can request read-only access to selected Health data after you approve that app and the iOS Health permission.
+        NFCReaderUsageDescription: Saved HTML apps can scan an NFC tag only while you explicitly run a scan.
         NSCameraUsageDescription: HTML apps can use the camera only after you allow that saved app and approve the iOS permission.
         NSMicrophoneUsageDescription: Dictate app ideas in Forge or allow a saved HTMLApp to use the microphone.
         NSLocationWhenInUseUsageDescription: HTML apps can request your location only after you allow that saved app and approve the iOS permission.
