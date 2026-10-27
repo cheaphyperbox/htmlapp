@@ -573,6 +573,7 @@ struct LibraryView: View {
             Button { edit(app) } label: { Label("Edit Raw Code", systemImage: "chevron.left.forwardslash.chevron.right") }
             let portableBytes = (try? HTMLAppPortableDataStore.fileURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             let databaseBytes = (try? HTMLAppDocumentDatabase.databaseURL(appID: app.id).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            Text("App source and icon: " + ByteCountFormatter.string(fromByteCount: Int64(app.html.utf8.count + (app.favicon?.count ?? 0)), countStyle: .file))
             Text("Saved app data: " + ByteCountFormatter.string(fromByteCount: Int64(portableBytes + databaseBytes), countStyle: .file))
             Button { storageManagementApp = app } label: { Label("Manage Storage", systemImage: "externaldrive") }
             Button { UIPasteboard.general.string = app.id } label: { Label("Copy ID", systemImage: "number") }
