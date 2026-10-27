@@ -445,3 +445,10 @@ for method in ("speech.recognize", "speech.stopRecognizing"):
     assert f"call('{method}'" in native, f"Missing JavaScript speech wrapper: {method}"
 assert 'case "speech.listen", "speech.recognize":' in native
 assert 'case "speech.listenStop", "speech.stopRecognizing":' in native
+
+# Generated apps are checked against the catalog before offscreen WebKit testing.
+bridge_lint = source("HTMLAppV3/HTMLAppBridgeLint.swift")
+runtime_verifier = source("HTMLAppV3/HTMLRuntimeVerifier.swift")
+assert "HTMLAppDeviceAPIResearch.entries" in bridge_lint
+assert "navigator.bluetooth.requestDevice(" in bridge_lint
+assert "HTMLAppBridgeLint.warnings(in: html)" in runtime_verifier
