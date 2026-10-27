@@ -31,6 +31,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let eventStore = EKEventStore()
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let speechRecognition = HTMLAppSpeechRecognition()
+    private let nfcReader = HTMLAppNFCReader()
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
@@ -452,7 +453,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "health.available", "health.today", "map.show", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "map.show", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -633,6 +634,21 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "system.open":
             withPermission(.externalApps, id: id) { [weak self] in
                 self?.openURL(id: id, value: args["url"] as? String ?? "")
+            }
+        case "nfc.available":
+            resolve(id, value: ["available": HTMLAppNFCReader.available])
+        case "nfc.readNDEF":
+            withPermission(.nfc, id: id) { [weak self] in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let records = try await self.nfcReader.read()
+                        self.resolve(id, value: ["records": records])
+                    } catch {
+                        self.reject(id, code: "nfc_unavailable", message: "NFC scanning was cancelled, denied, or unavailable.")
+                    }
+                }
             }
         case "health.available":
             resolve(id, value: ["available": HTMLAppHealthReader.available])
@@ -2281,6 +2297,10 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        nfc: {
+          available: () => call('nfc.available'),
+          readNDEF: () => call('nfc.readNDEF')
+        },
         health: {
           available: () => call('health.available'),
           today: (quantity) => call('health.today', { quantity })
