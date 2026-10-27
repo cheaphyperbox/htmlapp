@@ -534,4 +534,17 @@ assert 'HTMLAppOfflineForge.generate(' in forge_view
 assert 'htmlapp.offlineForge.effort' in offline_source and 'htmlapp.offlineForge.effort' in ai_settings
 assert "No prompt or app code is sent to your cloud provider" in offline_source
 
+# Offscreen runtime native mocks must resolve every message deterministically.
+runtime_verifier = source("HTMLAppV3/HTMLRuntimeVerifier.swift")
+assert 'message.name == "htmlappNative"' in runtime_verifier
+assert 'message.frameInfo.isMainFrame' in runtime_verifier
+assert 'private var mockAppStorage: [String: String]' in runtime_verifier
+assert '"qa_unavailable"' in runtime_verifier
+assert 'replyToMockRequest(id: id, ok: ok, value: value)' in runtime_verifier
+assert 'window.__htmlappNativeResolve && window.__htmlappNativeResolve.apply' in runtime_verifier
+assert 'HTMLAppPortableDataStore.setChecked' in native
+assert 'HTMLAppPortableDataStore.removeChecked' in native
+assert 'HTMLAppPortableDataStore.clearChecked' in native
+assert '"storage_write_failed"' in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
