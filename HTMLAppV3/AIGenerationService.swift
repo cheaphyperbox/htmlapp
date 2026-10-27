@@ -1074,6 +1074,20 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 warnings.append("Core workflow: requested distance display is missing.")
             }
         }
+        // A GPS fix supplies coordinates, not a postal address or road limits.
+        // Check that generated location apps use a real lookup API rather than
+        // treating those values as implicit geolocation properties.
+        if (goal.contains("street address") || goal.contains("current address") ||
+            goal.contains("my address") || goal.contains("street name")) &&
+            !code.contains("reversegeocode") && !code.contains("geocod") &&
+            !code.contains("nominatim") {
+            warnings.append("Core workflow: address display requires a geocoding lookup after a GPS fix; GPS alone does not contain a street address.")
+        }
+        if (goal.contains("speed limit") || goal.contains("posted limit")) &&
+            !code.contains("roadspeedlimit") && !code.contains("maxspeed") &&
+            !code.contains("speedlimit") && !code.contains("overpass") {
+            warnings.append("Core workflow: road speed limits require a mapped road-data provider, not GPS speed.")
+        }
         let networkOrLocation = code.contains("fetch(") ||
             code.contains("getcurrentposition") || code.contains("watchposition")
         if networkOrLocation && !code.contains("loading") &&
