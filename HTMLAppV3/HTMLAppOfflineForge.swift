@@ -63,6 +63,8 @@ enum HTMLAppOfflineForge {
             return "This device does not support the Apple Intelligence language model."
         case .unavailable(.modelNotReady):
             return "The on-device Apple Intelligence language model is not ready. Check Apple Intelligence settings when online."
+        case .unavailable(.appleIntelligenceNotEnabled):
+            return "Apple Intelligence is turned off. Enable it in iOS Settings to use Offline Forge."
         case .unavailable:
             return "Apple Intelligence is unavailable. Check that it is enabled on this device."
         }
