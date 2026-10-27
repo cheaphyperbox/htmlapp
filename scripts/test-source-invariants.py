@@ -421,3 +421,8 @@ for method in (
     assert f"call('{method}'" in native, f"Missing JS wrapper: {method}"
 assert 'case .ai: return "sparkles"' in source("HTMLAppV3/PermissionSystem.swift")
 assert 'htmlapp.aiBridge.enabled' in source("HTMLAppV3/AISettingsView.swift")
+
+# Every declared native capability must have an executable switch case.
+for method in ("speech.listen", "speech.listenStop", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear", "shortcuts.consumeAction", "db.search"):
+    assert f'"{method}"' in native.split('case "capabilities.list":')[0], f"Missing executable native handler: {method}"
+assert '"db.search", "db.search"' not in native, "Duplicate database switch case"
