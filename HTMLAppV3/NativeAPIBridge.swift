@@ -177,6 +177,49 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             } catch {
                 reject(id, code: "database_error", message: "Document database operation failed or exceeded its quota.")
             }
+        case "spotlight.enable":
+            withPermission(.spotlight, id: id) { [weak self] in
+                guard let self else { return }
+                UserDefaults.standard.set(true, forKey: "htmlapp.spotlight.enabled." + self.appID)
+                self.resolve(id, value: ["enabled": true])
+            }
+        case "spotlight.index", "spotlight.remove", "spotlight.clear":
+            guard appID != "PREVIEW",
+                  HTMLPermissionStore.choice(for: .spotlight, appID: appID) == .allow,
+                  UserDefaults.standard.bool(forKey: "htmlapp.spotlight.enabled." + appID) else {
+                reject(id, code: "permission_denied", message: "Spotlight indexing requires saved-app permission.")
+                return
+            }
+            let key = args["key"] as? String ?? ""
+            let title = args["title"] as? String ?? ""
+            let summary = args["summary"] as? String ?? ""
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    if method == "spotlight.index" {
+                        try await HTMLAppSpotlightIndex.index(appID: self.appID, key: key, title: title, summary: summary)
+                    } else if method == "spotlight.remove" {
+                        try await HTMLAppSpotlightIndex.remove(appID: self.appID, key: key)
+                    } else {
+                        try await HTMLAppSpotlightIndex.removeAll(appID: self.appID)
+                    }
+                    self.resolve(id, value: ["ok": true])
+                } catch {
+                    self.reject(id, code: "spotlight_error", message: "Spotlight indexing request failed.")
+                }
+            }
+        case "shortcuts.consumeAction":
+            let pendingName = UserDefaults.standard.string(forKey: "htmlapp.shortcut.openName") ?? ""
+            let pendingAction = UserDefaults.standard.string(forKey: "htmlapp.shortcut.pendingAction") ?? ""
+            let currentName = args["appName"] as? String ?? ""
+            guard appID != "PREVIEW", !currentName.isEmpty,
+                  pendingName.caseInsensitiveCompare(currentName) == .orderedSame,
+                  !pendingAction.isEmpty else {
+                resolve(id, value: ["action": NSNull()])
+                return
+            }
+            UserDefaults.standard.removeObject(forKey: "htmlapp.shortcut.pendingAction")
+            resolve(id, value: ["action": pendingAction])
         case "speech.listen":
             withPermission(.microphone, id: id) { [weak self] in
                 guard let self else { return }
