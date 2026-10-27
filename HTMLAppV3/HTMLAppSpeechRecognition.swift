@@ -10,6 +10,9 @@ final class HTMLAppSpeechRecognition {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognizer: SFSpeechRecognizer?
     private var callback: ((Result<[String: Any], Error>) -> Void)?
+    private var timeoutTask: Task<Void, Never>?
+    private var tapInstalled = false
+    private var latestTranscript = ""
 
     var active: Bool { engine.isRunning }
 
@@ -37,10 +40,12 @@ final class HTMLAppSpeechRecognition {
         self.recognizer = recognizer
         self.request = request
         self.callback = onResult
+        latestTranscript = ""
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let result {
+                    self.latestTranscript = result.bestTranscription.formattedString
                     self.callback?(.success(["text": result.bestTranscription.formattedString,
                                              "final": result.isFinal,
                                              "onDevice": request.requiresOnDeviceRecognition]))
@@ -56,19 +61,27 @@ final class HTMLAppSpeechRecognition {
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
         }
+        tapInstalled = true
         engine.prepare()
         do {
             try engine.start()
+            timeoutTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                guard !Task.isCancelled, let self, self.active else { return }
+                self.callback?(.success(["text": self.latestTranscript, "final": true, "timedOut": true]))
+                self.stop()
+            }
         } catch {
-            input.removeTap(onBus: 0)
             stop()
             throw error
         }
     }
 
     func stop() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
         if engine.isRunning { engine.stop() }
-        engine.inputNode.removeTap(onBus: 0)
+        if tapInstalled { engine.inputNode.removeTap(onBus: 0); tapInstalled = false }
         request?.endAudio()
         task?.cancel()
         task = nil
