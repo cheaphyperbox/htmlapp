@@ -8,8 +8,9 @@ enum HTMLRuntimeVerifier {
         guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return ["Runtime: generated HTML was empty."]
         }
+        let staticWarnings = HTMLAppBridgeLint.warnings(in: html)
         let session = HTMLRuntimeCheckSession(html: html)
-        return await session.run(timeout: timeout)
+        return staticWarnings + (await session.run(timeout: timeout))
     }
 }
 
