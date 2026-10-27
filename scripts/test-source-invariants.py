@@ -580,4 +580,7 @@ assert 'case "location.reverseGeocode":' in native
 assert 'case "location.roadSpeedLimit":' in native
 assert "withPermission(.roadData, id: id)" in native
 
+assert "Core workflow: address display requires a geocoding lookup" in ai
+assert "Core workflow: road speed limits require a mapped road-data provider" in ai
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
