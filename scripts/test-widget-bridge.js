@@ -31,7 +31,7 @@ const scheduled = new Map();
 let nextTimer = 0;
 const setTimeout = (callback, delay) => {
   const token = ++nextTimer;
-  scheduled.set(token, {callback, delay});
+  scheduled.set(token, {callback: () => { scheduled.delete(token); callback(); }, delay});
   return token;
 };
 const clearTimeout = token => { scheduled.delete(token); };
