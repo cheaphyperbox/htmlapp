@@ -410,7 +410,7 @@ print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging 
 # Native capability parity for newly introduced AI, language and Vision methods.
 catalog = source("HTMLAppV3/DeviceAPICatalog.swift")
 for method in (
-    "ai.available", "ai.complete", "ai.classify", "speech.listen", "speech.listenStop",
+    "ai.available", "ai.complete", "ai.classify", "ai.cancel", "speech.listen", "speech.listenStop",
     "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search", "shortcuts.consumeAction",
     "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
@@ -426,3 +426,9 @@ assert 'htmlapp.aiBridge.enabled' in source("HTMLAppV3/AISettingsView.swift")
 for method in ("speech.listen", "speech.listenStop", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear", "shortcuts.consumeAction", "db.search"):
     assert f'"{method}"' in native.split('case "capabilities.list":')[0], f"Missing executable native handler: {method}"
 assert '"db.search", "db.search"' not in native, "Duplicate database switch case"
+
+# AI request controls and usage accounting.
+assert 'case "ai.cancel":' in native
+assert 'aiTasks.values.forEach { $0.cancel() }' in native
+assert '"remainingBudget"' in native and '"totalRequests"' in native
+assert 'args["json"] as? Bool == true' in native
