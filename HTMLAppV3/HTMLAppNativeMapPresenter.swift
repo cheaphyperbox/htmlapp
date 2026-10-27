@@ -39,12 +39,9 @@ enum HTMLAppNativeMapPresenter {
         // Do not start tracking a saved app's location unless the existing
         // native location consent flow explicitly authorizes that operation.
         let navigation = UINavigationController(rootViewController: controller)
-        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: navigation, action: #selector(UIViewController.dismissPresentedMap))
+        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak navigation] _ in navigation?.dismiss(animated: true) })
         presenter.present(navigation, animated: true)
         return true
     }
 }
 
-private extension UIViewController {
-    @objc func dismissPresentedMap() { dismiss(animated: true) }
-}
