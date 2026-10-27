@@ -471,7 +471,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "map.show", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "map.show", "location.reverseGeocode", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -686,6 +686,26 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                         self.resolve(id, value: result)
                     } catch {
                         self.reject(id, code: "health_unavailable", message: "Health access is not available or was not authorized for this data type.")
+                    }
+                }
+            }
+        case "location.reverseGeocode":
+            withPermission(.location, id: id) { [weak self] in
+                guard let self else { return }
+                guard let latitude = args["latitude"] as? Double,
+                      let longitude = args["longitude"] as? Double,
+                      latitude.isFinite, longitude.isFinite,
+                      (-90...90).contains(latitude), (-180...180).contains(longitude) else {
+                    self.reject(id, code: "invalid_coordinates", message: "Valid latitude and longitude are required.")
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let result = try await HTMLAppAddressLookup.reverse(latitude: latitude, longitude: longitude)
+                        self.resolve(id, value: result)
+                    } catch {
+                        self.reject(id, code: "geocode_unavailable", message: "Apple could not determine a street address at these coordinates. Check connectivity or try again.")
                     }
                 }
             }
@@ -2354,6 +2374,9 @@ enum HTMLNativeAPIScript {
         health: {
           available: () => call('health.available'),
           today: (quantity) => call('health.today', { quantity })
+        },
+        location: {
+          reverseGeocode: (latitude, longitude) => call('location.reverseGeocode', { latitude, longitude })
         },
         map: {
           show: (options = {}) => call('map.show', options)
