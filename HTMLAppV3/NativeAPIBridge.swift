@@ -772,6 +772,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.contacts, id: id) { [weak self] in self?.createContact(id: id, args: args) }
         case "photos.pick":
             withPermission(.photoLibrary, id: id) { [weak self] in self?.pickPhotos(id: id, args: args) }
+        case "photos.read":
+            readPickedPhoto(id: id, args: args)
         case "photos.save":
             withPermission(.photoLibrary, id: id) { [weak self] in self?.savePhotoLibraryAsset(id: id, args: args) }
         case "calendar.createEvent":
@@ -1712,24 +1714,44 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let destination = folder.appendingPathComponent(name)
             try FileManager.default.copyItem(at: url, to: destination)
-            let data = try Data(contentsOf: destination, options: [.mappedIfSafe])
-            guard !data.isEmpty else { return nil }
+            let attributes = try FileManager.default.attributesOfItem(atPath: destination.path)
+            let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+            guard size > 0 else { return nil }
             let type = UTType(typeIdentifier)?.preferredMIMEType ?? "application/octet-stream"
             let relative = folderName + "/" + name
-            var item: [String: Any] = [
+            // Keep the picker response small, independent of image size.
+            // The injected fetch shim calls photos.read for each URL on demand.
+            return [
                 "name": name, "localURL": relative, "url": relative,
-                "mimeType": type, "size": data.count
+                "mimeType": type, "size": size
             ]
-            // Preserve compatibility with existing apps that fetch(photo.url),
-            // while avoiding unbounded large image allocations.
-            if type.hasPrefix("image/") && data.count <= 12_000_000 {
-                let dataURL = "data:\(type);base64,\(data.base64EncodedString())"
-                item["dataURL"] = dataURL
-                item["url"] = dataURL
-            }
-            return item
         } catch {
             return nil
+        }
+    }
+
+    private func readPickedPhoto(id: String, args: [String: Any]) {
+        guard let relative = args["url"] as? String,
+              relative.hasPrefix("native-imports/photos/"),
+              let file = localResourceURL(relative) else {
+            reject(id, code: "invalid_photo_url", message: "This picked photo is no longer available.")
+            return
+        }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+                let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+                guard size > 0 && size <= 55_000_000 else {
+                    await self?.reject(id, code: "photo_too_large", message: "This image is larger than the per-photo 55 MB import limit.")
+                    return
+                }
+                let data = try Data(contentsOf: file)
+                let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                let dataURL = "data:\(mime);base64,\(data.base64EncodedString())"
+                await self?.resolve(id, value: ["dataURL": dataURL])
+            } catch {
+                await self?.reject(id, code: "photo_read_failed", message: "Could not read the picked photo from local storage.")
+            }
         }
     }
 
@@ -2423,6 +2445,18 @@ enum HTMLNativeAPIScript {
         if (typeof fn === 'function') fn(event.detail.id);
       });
 
+      // PHPicker returns lightweight local asset identifiers. Resolve only
+      // the selected photo being fetched, avoiding one huge JS bridge payload.
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (resource, options) => {
+        const value = typeof resource === 'string' ? resource : (resource?.url || '');
+        const normalized = value.replace(/^\\.\\//, '');
+        if (!normalized.startsWith('native-imports/photos/')) {
+          return originalFetch(resource, options);
+        }
+        return call('photos.read', { url: normalized }).then(result => originalFetch(result.dataURL, options));
+      };
+
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
@@ -2566,6 +2600,7 @@ enum HTMLNativeAPIScript {
         },
         photos: {
           pick: (options = {}) => call('photos.pick', options),
+          read: (url) => call('photos.read', { url }),
           save: (url) => call('photos.save', { url: String(url || '') })
         },
         calendar: {
