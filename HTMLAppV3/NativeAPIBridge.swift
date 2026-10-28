@@ -2470,7 +2470,7 @@ enum HTMLNativeAPIScript {
 
       // PHPicker returns file-backed originals. Fetch the bytes in bounded
       // chunks instead of sending one huge base64 response through WKWebView.
-      const originalFetch = window.fetch.bind(window);
+      const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : () => Promise.reject(new Error('Fetch unavailable'));
       const readPickedPhoto = async (url, options) => {
         const parts = [];
         let offset = 0;
@@ -2495,7 +2495,7 @@ enum HTMLNativeAPIScript {
       };
       window.fetch = (resource, options) => {
         const value = typeof resource === 'string' ? resource : (resource?.url || '');
-        const normalized = value.replace(/^\\.\\//, '');
+        const normalized = value.startsWith('./') ? value.slice(2) : value;
         if (!normalized.startsWith('native-imports/photos/')) {
           return originalFetch(resource, options);
         }
