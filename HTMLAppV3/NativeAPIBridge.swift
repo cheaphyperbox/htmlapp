@@ -1633,76 +1633,103 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             return
         }
 
-        // PHPicker owns the temporary representation. It must be copied before
-        // the loadFileRepresentation completion returns; hopping to MainActor
-        // first lets iOS delete the file before HTMLApp can import it.
+        // Import on a background queue. Sending many full-size data URLs from
+        // the main actor can stall WebKit for a minute or exhaust its memory.
+        // iOS removes PHPicker's temporary file as soon as its callback exits:
+        // copy it synchronously *inside* that callback, then process the copy.
+        let destinationRoot = SourceCache.shared.baseURL(appID: appID)
         let group = DispatchGroup()
-        var imported: [[String: Any]] = []
-        for result in results {
+        let lock = NSLock()
+        var imported = [(Int, [String: Any])]()
+        var failures = 0
+        for (index, result) in results.enumerated() {
             let provider = result.itemProvider
             let typeIdentifier = provider.registeredTypeIdentifiers.first(where: {
                 UTType($0)?.conforms(to: .image) == true
             }) ?? provider.registeredTypeIdentifiers.first(where: {
                 UTType($0)?.conforms(to: .movie) == true
-            }) ?? provider.registeredTypeIdentifiers.first
-            guard let typeIdentifier else { continue }
-
+            })
+            guard let typeIdentifier else { failures += 1; continue }
             group.enter()
-            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, fileError in
-                guard let self else { group.leave(); return }
-                // This callback is not MainActor-isolated. Copy bytes immediately
-                // into a durable staging file owned by HTMLApp.
-                let staging = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("htmlapp-photo-" + UUID().uuidString)
-                    .appendingPathExtension(UTType(typeIdentifier)?.preferredFilenameExtension ?? "jpg")
+            let name = provider.suggestedName
+            let staging = FileManager.default.temporaryDirectory
+                .appendingPathComponent("htmlapp-photo-" + UUID().uuidString)
+                .appendingPathExtension(UTType(typeIdentifier)?.preferredFilenameExtension ?? "jpg")
+            let finish: (Bool) -> Void = { staged in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    defer { try? FileManager.default.removeItem(at: staging); group.leave() }
+                    guard staged,
+                          let item = Self.importPhotoOffMain(url: staging, root: destinationRoot,
+                                                             preferredName: name, typeIdentifier: typeIdentifier) else {
+                        lock.lock(); failures += 1; lock.unlock()
+                        return
+                    }
+                    lock.lock(); imported.append((index, item)); lock.unlock()
+                }
+            }
+            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _ in
                 var staged = false
                 if let url {
-                    do {
-                        try FileManager.default.copyItem(at: url, to: staging)
-                        staged = true
-                    } catch { }
+                    staged = (try? FileManager.default.copyItem(at: url, to: staging)) != nil
                 }
                 if staged {
-                    Task { @MainActor in
-                        if let item = self.importFile(url: staging, namespace: "photos",
-                                                      preferredName: provider.suggestedName,
-                                                      typeIdentifier: typeIdentifier) {
-                            imported.append(item)
-                        }
-                        try? FileManager.default.removeItem(at: staging)
-                        group.leave()
-                    }
+                    finish(true)
                 } else {
-                    // Some iCloud-backed and converted representations can be
-                    // delivered as data but not as a readable temporary file.
                     provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, _ in
-                        Task { @MainActor in
-                            if let data, !data.isEmpty {
-                                do {
-                                    try data.write(to: staging, options: .atomic)
-                                    if let item = self.importFile(url: staging, namespace: "photos",
-                                                                  preferredName: provider.suggestedName,
-                                                                  typeIdentifier: typeIdentifier) {
-                                        imported.append(item)
-                                    }
-                                } catch { }
-                            }
-                            try? FileManager.default.removeItem(at: staging)
-                            group.leave()
-                        }
+                        let saved = data.flatMap { try? $0.write(to: staging, options: .atomic) } != nil
+                        finish(saved)
                     }
                 }
-                _ = fileError
             }
         }
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
             if imported.isEmpty {
                 self.reject(id, code: "photo_import_failed",
-                            message: "The selected media could not be imported. Try downloading it from iCloud Photos and selecting it again.")
+                            message: "The selected photos could not be loaded. Check available storage and iCloud Photos downloads, then retry.")
             } else {
-                self.resolve(id, value: imported)
+                let ordered = imported.sorted { $0.0 < $1.0 }.map { $0.1 }
+                // Older generated apps expect an array directly.
+                self.resolve(id, value: ordered)
+                if failures > 0 {
+                    AIDebugTraceStore.shared.append("PHOTO PICKER", "Imported \\(ordered.count) photos; \\(failures) selected items failed.")
+                }
             }
+        }
+    }
+
+    // This helper must not use the main actor or a shared mutable import cache.
+    // Data conversion and base64 encoding happen off-main.
+    nonisolated private static func importPhotoOffMain(
+        url: URL, root: URL, preferredName: String?, typeIdentifier: String
+    ) -> [String: Any]? {
+        let extensionName = UTType(typeIdentifier)?.preferredFilenameExtension ?? "jpg"
+        let folderName = "native-imports/photos/" + UUID().uuidString
+        let folder = root.appendingPathComponent(folderName, isDirectory: true)
+        let rawName = (preferredName?.isEmpty == false ? preferredName! : "photo") + "." + extensionName
+        let name = String(rawName.components(separatedBy: CharacterSet(charactersIn: "/\\\\:?%*|\\\"<>\\n\\r\\t")).joined(separator: "_").prefix(180))
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let destination = folder.appendingPathComponent(name)
+            try FileManager.default.copyItem(at: url, to: destination)
+            let data = try Data(contentsOf: destination, options: [.mappedIfSafe])
+            guard !data.isEmpty else { return nil }
+            let type = UTType(typeIdentifier)?.preferredMIMEType ?? "application/octet-stream"
+            let relative = folderName + "/" + name
+            var item: [String: Any] = [
+                "name": name, "localURL": relative, "url": relative,
+                "mimeType": type, "size": data.count
+            ]
+            // Preserve compatibility with existing apps that fetch(photo.url),
+            // while avoiding unbounded large image allocations.
+            if type.hasPrefix("image/") && data.count <= 12_000_000 {
+                let dataURL = "data:\\(type);base64,\\(data.base64EncodedString())"
+                item["dataURL"] = dataURL
+                item["url"] = dataURL
+            }
+            return item
+        } catch {
+            return nil
         }
     }
 
