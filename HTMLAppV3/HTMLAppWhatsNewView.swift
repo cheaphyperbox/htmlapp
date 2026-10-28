@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.42"
-    static let compiledBuild = "50"
+    static let compiledVersion = "1.6.43"
+    static let compiledBuild = "51"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,7 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.43" { return [Entry(id: "photo-bridge-js-fix", title: "Photo bridge build fix", description: "Fixed injected JavaScript syntax in the photo importer and made bridge script tests work without a browser fetch implementation.", symbol: "checkmark.shield", tint: .green)] }
         if version == "1.6.42" { return [Entry(id: "photos-import-reliability", title: "Reliable multi-photo imports", description: "Photo import now transfers originals to generated apps in bounded WebKit chunks and prefers native file representations without unnecessary conversion. Large selections no longer require one enormous bridge response.", symbol: "photo.on.rectangle", tint: .blue)] }
         if version == "1.6.41" { return [Entry(id: "photo-picker-resilience", title: "Reliable bulk photo import", description: "Native photo picks now stage files without blocking the UI and load originals on demand, preventing oversized selection callbacks.", symbol: "photo.on.rectangle.angled", tint: .blue)] }
         if version == "1.6.40" { return [Entry(id: "road-throttle", title: "Road lookup resilience", description: "Road speed lookups now return an explicit cooling-down status rather than immediate failures on repeated GPS fixes, and favor nearby roads with speed tags.", symbol: "road.lanes", tint: .blue)] }
