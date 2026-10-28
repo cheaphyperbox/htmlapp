@@ -583,4 +583,11 @@ assert "withPermission(.roadData, id: id)" in native
 assert "Core workflow: address display requires a geocoding lookup" in ai
 assert "Core workflow: road speed limits require a mapped road-data provider" in ai
 
+# Road-data faults must retain distinct codes so apps can show useful retry UI.
+road_lookup = source("HTMLAppV3/HTMLAppRoadDataLookup.swift")
+assert 'case .rateLimited: code = "road_data_rate_limited"' in native
+assert 'case .unavailable: code = "road_data_provider_unavailable"' in native
+assert 'lastRequests.removeValue(forKey: appID)' in road_lookup
+assert 'Date().timeIntervalSince(last) < 15' in road_lookup
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
