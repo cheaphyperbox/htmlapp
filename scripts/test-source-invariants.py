@@ -607,4 +607,9 @@ assert 'configuration.preferredAssetRepresentationMode = .current' in native
 assert "group.notify(queue: .main)" in native
 assert 'imported.sorted { $0.0 < $1.0 }' in native
 
+# The injected photo fetch shim must parse as JavaScript inside Swift's
+# raw multiline source; avoid escaped regular expressions in this path.
+assert "const normalized = value.startsWith('./') ? value.slice(2) : value;" in native
+assert "const originalFetch = typeof window.fetch === 'function'" in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
