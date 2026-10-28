@@ -1745,10 +1745,30 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     await self?.reject(id, code: "photo_too_large", message: "This image is larger than the per-photo 55 MB import limit.")
                     return
                 }
-                let data = try Data(contentsOf: file)
+                // Chunk the response to bound WebKit message size. A single
+                // base64 string for a 20–50 MB original can freeze WebKit and
+                // time out the pending bridge request.
+                let requestedOffset = args["offset"] as? Int ?? 0
+                let requestedLength = args["length"] as? Int ?? size
+                guard requestedOffset >= 0, requestedOffset <= size,
+                      requestedLength > 0 else {
+                    await self?.reject(id, code: "invalid_photo_range", message: "Invalid photo data range.")
+                    return
+                }
+                let offset = requestedOffset
+                let length = min(requestedLength, 192 * 1024, size - offset)
+                let handle = try FileHandle(forReadingFrom: file)
+                defer { try? handle.close() }
+                try handle.seek(toOffset: UInt64(offset))
+                let data = try handle.read(upToCount: length) ?? Data()
                 let mime = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-                let dataURL = "data:\(mime);base64,\(data.base64EncodedString())"
-                await self?.resolve(id, value: ["dataURL": dataURL])
+                await self?.resolve(id, value: [
+                    "data": data.base64EncodedString(),
+                    "mimeType": mime,
+                    "offset": offset,
+                    "total": size,
+                    "complete": offset + data.count >= size
+                ])
             } catch {
                 await self?.reject(id, code: "photo_read_failed", message: "Could not read the picked photo from local storage.")
             }
@@ -2445,16 +2465,38 @@ enum HTMLNativeAPIScript {
         if (typeof fn === 'function') fn(event.detail.id);
       });
 
-      // PHPicker returns lightweight local asset identifiers. Resolve only
-      // the selected photo being fetched, avoiding one huge JS bridge payload.
+      // PHPicker returns file-backed originals. Fetch the bytes in bounded
+      // chunks instead of sending one huge base64 response through WKWebView.
       const originalFetch = window.fetch.bind(window);
+      const readPickedPhoto = async (url, options) => {
+        const parts = [];
+        let offset = 0;
+        let total = null;
+        let mime = 'application/octet-stream';
+        while (true) {
+          if (options?.signal?.aborted) throw new DOMException('Import cancelled', 'AbortError');
+          const piece = await call('photos.read', { url, offset, length: 192 * 1024 });
+          const raw = atob(piece.data || '');
+          const bytes = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+          if (!bytes.length && !piece.complete) throw new Error('Photo import stopped unexpectedly');
+          parts.push(bytes);
+          offset += bytes.length;
+          total = piece.total;
+          mime = piece.mimeType || mime;
+          if (piece.complete) break;
+          if (!Number.isSafeInteger(total) || offset > total) throw new Error('Invalid photo import size');
+        }
+        const blob = new Blob(parts, { type: mime });
+        return new Response(blob, { status: 200, headers: { 'Content-Type': mime } });
+      };
       window.fetch = (resource, options) => {
         const value = typeof resource === 'string' ? resource : (resource?.url || '');
         const normalized = value.replace(/^\\.\\//, '');
         if (!normalized.startsWith('native-imports/photos/')) {
           return originalFetch(resource, options);
         }
-        return call('photos.read', { url: normalized }).then(result => originalFetch(result.dataURL, options));
+        return readPickedPhoto(normalized, options);
       };
 
       const api = {
