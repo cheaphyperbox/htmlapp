@@ -2387,7 +2387,7 @@ enum HTMLNativeAPIScript {
         const id = `native-${Date.now()}-${++sequence}`;
         // Pickers and system authorization sheets may stay open longer than
         // simple data calls. Every pending request still has a finite deadline.
-        const interactive = /^(files\.pick|photos\.pick|contacts\.pick|calendar\.|nfc\.readNDEF|health\.today|biometrics\.|share\.|speech\.listen|speech\.recognize)/.test(method);
+        const interactive = /^(files\.pick|photos\.(?:pick|read)|contacts\.pick|calendar\.|nfc\.readNDEF|health\.today|biometrics\.|share\.|speech\.listen|speech\.recognize)/.test(method);
         const deadline = interactive ? 180000 : (method.startsWith('ai.') ? 120000 : 30000);
         const timer = setTimeout(() => {
           if (!pending.has(id)) return;
