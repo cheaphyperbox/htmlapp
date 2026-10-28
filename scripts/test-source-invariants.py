@@ -600,7 +600,10 @@ assert 'let attributes = try FileManager.default.attributesOfItem(atPath: destin
 assert 'case "photos.read":' in native
 assert 'relative.hasPrefix("native-imports/photos/")' in native
 assert "return call('photos.read', { url: normalized })" in native or "call('photos.read', { url: normalized })" in native
-assert "originalFetch(result.dataURL, options)" in native
+assert "return readPickedPhoto(normalized, options)" in native
+assert "length: 192 * 1024" in native
+assert "FileHandle(forReadingFrom: file)" in native
+assert 'configuration.preferredAssetRepresentationMode = .current' in native
 assert "group.notify(queue: .main)" in native
 assert 'imported.sorted { $0.0 < $1.0 }' in native
 
