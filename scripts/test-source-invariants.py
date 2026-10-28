@@ -593,4 +593,15 @@ assert '"reason": "throttled"' in road_lookup
 assert '"retryAfterSeconds"' in road_lookup
 assert 'let match = candidates.filter' in road_lookup
 
+# Large PHPicker selections must not encode full images on the main actor.
+assert 'nonisolated private static func importPhotoOffMain' in native
+assert 'DispatchQueue.global(qos: .userInitiated).async' in native
+assert 'let attributes = try FileManager.default.attributesOfItem(atPath: destination.path)' in native
+assert 'case "photos.read":' in native
+assert 'relative.hasPrefix("native-imports/photos/")' in native
+assert "return call('photos.read', { url: normalized })" in native or "call('photos.read', { url: normalized })" in native
+assert "originalFetch(result.dataURL, options)" in native
+assert "group.notify(queue: .main)" in native
+assert 'imported.sorted { $0.0 < $1.0 }' in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
