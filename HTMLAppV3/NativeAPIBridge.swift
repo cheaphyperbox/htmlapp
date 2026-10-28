@@ -1723,7 +1723,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             // Preserve compatibility with existing apps that fetch(photo.url),
             // while avoiding unbounded large image allocations.
             if type.hasPrefix("image/") && data.count <= 12_000_000 {
-                let dataURL = "data:\\(type);base64,\\(data.base64EncodedString())"
+                let dataURL = "data:\(type);base64,\(data.base64EncodedString())"
                 item["dataURL"] = dataURL
                 item["url"] = dataURL
             }
