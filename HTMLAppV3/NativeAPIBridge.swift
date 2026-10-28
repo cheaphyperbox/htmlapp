@@ -707,9 +707,16 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                             let result = try await HTMLAppRoadDataLookup.shared.speedLimit(
                                 appID: self.appID, latitude: latitude, longitude: longitude)
                             self.resolve(id, value: result)
+                        } catch let error as HTMLAppRoadDataLookup.LookupError {
+                            let code: String
+                            switch error {
+                            case .rateLimited: code = "road_data_rate_limited"
+                            case .invalidCoordinates: code = "invalid_coordinates"
+                            case .unavailable: code = "road_data_provider_unavailable"
+                            }
+                            self.reject(id, code: code, message: error.localizedDescription)
                         } catch {
-                            self.reject(id, code: "road_data_unavailable",
-                                        message: "Mapped road speed limit is unavailable or temporarily rate limited.")
+                            self.reject(id, code: "road_data_provider_unavailable", message: "Mapped road data request failed. Check connectivity and try again.")
                         }
                     }
                 }
