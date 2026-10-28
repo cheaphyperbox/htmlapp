@@ -23,7 +23,7 @@ actor HTMLAppRoadDataLookup {
         if let entry = cache[cell], Date().timeIntervalSince(entry.time) < 90 {
             return entry.result
         }
-        if let last = lastRequests[appID], Date().timeIntervalSince(last) < 45 {
+        if let last = lastRequests[appID], Date().timeIntervalSince(last) < 15 {
             throw LookupError.rateLimited
         }
         lastRequests[appID] = Date()
@@ -58,7 +58,11 @@ actor HTMLAppRoadDataLookup {
             } catch is CancellationError { throw CancellationError() }
             catch { continue }
         }
-        guard let ways else { throw LookupError.unavailable }
+        guard let ways else {
+            // A failed provider request must not consume a full throttle period.
+            lastRequests.removeValue(forKey: appID)
+            throw LookupError.unavailable
+        }
         let match = ways.compactMap { way -> (Double, [String: Any])? in
             guard let tags = way["tags"] as? [String: String],
                   let geometry = way["geometry"] as? [[String: Double]],
