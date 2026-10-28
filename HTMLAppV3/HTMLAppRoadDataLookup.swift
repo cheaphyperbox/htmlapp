@@ -24,7 +24,17 @@ actor HTMLAppRoadDataLookup {
             return entry.result
         }
         if let last = lastRequests[appID], Date().timeIntervalSince(last) < 15 {
-            throw LookupError.rateLimited
+            // Frequent GPS fixes must not convert an otherwise healthy UI
+            // into an immediate native-bridge error. Expose a retry interval.
+            return [
+                "status": "unknown",
+                "provider": "OpenStreetMap Overpass",
+                "source": "volunteer-mapped road tags",
+                "authoritative": false,
+                "reason": "throttled",
+                "retryAfterSeconds": max(1, 15 - Int(Date().timeIntervalSince(last))),
+                "warning": "Road lookup is cooling down; mapped speed limits are not guaranteed."
+            ]
         }
         lastRequests[appID] = Date()
 
@@ -63,7 +73,7 @@ actor HTMLAppRoadDataLookup {
             lastRequests.removeValue(forKey: appID)
             throw LookupError.unavailable
         }
-        let match = ways.compactMap { way -> (Double, [String: Any])? in
+        let candidates = ways.compactMap { way -> (Double, [String: Any])? in
             guard let tags = way["tags"] as? [String: String],
                   let geometry = way["geometry"] as? [[String: Double]],
                   !geometry.isEmpty else { return nil }
@@ -92,7 +102,13 @@ actor HTMLAppRoadDataLookup {
                 "mappedMaxspeed": raw,
                 "distanceMeters": meters
             ])
-        }.min { $0.0 < $1.0 }
+        }
+        // Prefer an explicitly tagged and sufficiently close road over a
+        // closer unnamed/untagged foot-adjacent carriageway. Never match a
+        // distant road solely because it has a speed tag.
+        let match = candidates.filter {
+            $0.0 <= 35 && !($0.1["mappedMaxspeed"] as? String ?? "").isEmpty
+        }.min { $0.0 < $1.0 } ?? candidates.min { $0.0 < $1.0 }
         var result: [String: Any] = [
             "status": "unknown",
             "provider": "OpenStreetMap Overpass",
