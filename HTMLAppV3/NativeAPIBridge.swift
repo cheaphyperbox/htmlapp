@@ -1614,6 +1614,9 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             return
         }
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        // Prefer the existing original representation, avoiding expensive
+        // HEIC/RAW/video transcodes when the user taps Add.
+        configuration.preferredAssetRepresentationMode = .current
         configuration.selectionLimit = max(1, min(args["limit"] as? Int ?? 1, 20))
         switch (args["media"] as? String ?? "any").lowercased() {
         case "images": configuration.filter = .images
