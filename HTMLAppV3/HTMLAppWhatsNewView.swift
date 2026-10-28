@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.39"
-    static let compiledBuild = "47"
+    static let compiledVersion = "1.6.40"
+    static let compiledBuild = "48"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,7 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.40" { return [Entry(id: "road-throttle", title: "Road lookup resilience", description: "Road speed lookups now return an explicit cooling-down status rather than immediate failures on repeated GPS fixes, and favor nearby roads with speed tags.", symbol: "road.lanes", tint: .blue)] }
         if version == "1.6.39" { return [Entry(id: "road-data-reliability", title: "Road data diagnostics", description: "Improved mapped road lookup failure reporting and reduced throttling after provider outages. Each new source update now increments the release identity.", symbol: "road.lanes", tint: .blue)] }
         if version == "1.6.38" { return [Entry(id: "spotlight", title: "Spotlight indexing", description: "Saved apps can request permission to index, remove, and clear their own searchable titles and summaries.", symbol: "magnifyingglass", tint: .blue)] }
         if version == "1.6.37" { return [Entry(id: "db-search-shortcuts", title: "Search documents and run Shortcuts actions", description: "Saved apps can search their local documents and consume pending named actions from Siri Shortcuts.", symbol: "magnifyingglass", tint: .blue)] }
