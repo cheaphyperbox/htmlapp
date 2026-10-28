@@ -1740,6 +1740,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             reject(id, code: "invalid_photo_url", message: "This picked photo is no longer available.")
             return
         }
+        let requestedOffset = args["offset"] as? Int ?? 0
+        let requestedLength = args["length"] as? Int ?? 192 * 1024
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
@@ -1751,8 +1753,6 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 // Chunk the response to bound WebKit message size. A single
                 // base64 string for a 20–50 MB original can freeze WebKit and
                 // time out the pending bridge request.
-                let requestedOffset = args["offset"] as? Int ?? 0
-                let requestedLength = args["length"] as? Int ?? size
                 guard requestedOffset >= 0, requestedOffset <= size,
                       requestedLength > 0 else {
                     await self?.reject(id, code: "invalid_photo_range", message: "Invalid photo data range.")
