@@ -567,11 +567,14 @@ final class AIGenerationSession: ObservableObject {
             if !research.isEmpty { lastResearch = research }
 
             phase = "Patching the app"
+            let focusedSource = ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange)
+            let sourceContext = focusedSource ?? "<htmlapp_existing>\n" + streamedHTML + "\n</htmlapp_existing>"
+            AIDebugTraceStore.shared.append("EDIT SOURCE CONTEXT",
+                focusedSource == nil ? "Full source included for safe patching." :
+                    "Explicit selector match: focused excerpts supplied; patch recovery retains complete original.")
             let user = """
 Current app:
-<htmlapp_existing>
-\(streamedHTML)
-</htmlapp_existing>
+\(sourceContext)
 
 Requested change:
 \(improvedChange)
