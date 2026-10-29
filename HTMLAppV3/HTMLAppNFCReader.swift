@@ -75,8 +75,10 @@ final class HTMLAppNFCReader: NSObject, NFCNDEFReaderSessionDelegate {
                             Task { @MainActor in self?.finishWrite(.failure(error)) }
                         } else {
                             session.alertMessage = "NFC text saved."
-                            session.invalidate()
-                            Task { @MainActor in self?.finishWrite(.success(true)) }
+                            Task { @MainActor in
+                                self?.finishWrite(.success(true))
+                                session.invalidate()
+                            }
                         }
                     }
                 }
