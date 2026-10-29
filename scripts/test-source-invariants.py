@@ -740,4 +740,19 @@ assert 'PKCanvasView()' in drawing
 assert 'png.count <= 12_000_000' in drawing
 assert 'native-imports/drawings/' in drawing
 
+# Held Whisper recording retries transient audio-session failures automatically.
+dictation_source = source("HTMLAppV3/ForgeDictation.swift")
+forge_source = source("HTMLAppV3/AIGenerationView.swift")
+release_notes = source("HTMLAppV3/HTMLAppWhatsNewView.swift")
+assert 'for attempt in 1...3' in dictation_source
+assert 'guard generation == requestedGeneration, !Task.isCancelled else { return }' in dictation_source
+assert 'recorder.prepareToRecord()' in dictation_source
+assert 'try await Task.sleep(nanoseconds: 250_000_000)' in dictation_source
+assert 'dictation.recording ? Color.red : Color(.systemGray4)' in forge_source
+assert '.scaleEffect(promptMicHeld ? 1.25 : 1)' in forge_source
+assert '.scaleEffect(microphoneArmed ? 1.25 : 1)' in forge_source
+assert 'Experimental silent audio is optional' not in release_notes
+assert 'BackgroundKeepAlive.shared.start()' in forge_source
+assert 'BackgroundKeepAlive.shared.stop()' in forge_source
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
