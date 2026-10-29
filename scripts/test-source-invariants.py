@@ -638,4 +638,13 @@ assert "plannerRole: true" in ai
 assert 'body["temperature"] = 0.9' in ai
 assert 'body["reasoning_effort"] = ForgeRunOptions.quick ? "low" : "medium"' in ai
 
+# Expanded native bridges must be reflected in dispatch, JS wrappers and catalog.
+nfc = source("HTMLAppV3/HTMLAppNFCReader.swift")
+assert 'case "nfc.writeText":' in native
+assert 'writeText: (text) => call(\'nfc.writeText\', { text })' in native
+assert 'id: "nfc.writeText"' in catalog
+assert 'NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)' in nfc
+assert 'tag.queryNDEFStatus' in nfc and 'tag.writeNDEF(message)' in nfc
+assert 'title: "Write NFC Tag?"' in native
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
