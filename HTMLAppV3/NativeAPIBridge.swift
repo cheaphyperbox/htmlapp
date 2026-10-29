@@ -417,6 +417,35 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                 }
             }
+        case "bluetooth.gattRead", "bluetooth.gattWrite":
+            withPermission(.bluetooth, id: id) { [weak self] in
+                guard let self else { return }
+                guard let deviceID = args["id"] as? String,
+                      let service = args["service"] as? String,
+                      let characteristic = args["characteristic"] as? String else {
+                    self.reject(id, code: "invalid_arguments", message: "Provide scanned device id, service UUID, and characteristic UUID.")
+                    return
+                }
+                let data: Data?
+                if method == "bluetooth.gattWrite" {
+                    guard let base64 = args["dataBase64"] as? String,
+                          let bytes = Data(base64Encoded: base64), bytes.count <= 512 else {
+                        self.reject(id, code: "invalid_arguments", message: "GATT writes require up to 512 base64-decoded bytes.")
+                        return
+                    }
+                    data = bytes
+                } else { data = nil }
+                self.bluetoothDiscovery.gatt(
+                    deviceID: deviceID, service: service, characteristic: characteristic,
+                    writeData: data) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let value): self.resolve(id, value: value)
+                    case .failure(let error):
+                        self.reject(id, code: "gatt_unavailable", message: error.localizedDescription)
+                    }
+                }
+            }
         case "bluetooth.battery":
             guard let deviceID = args["id"] as? String else {
                 reject(id, code: "invalid_device", message: "Provide the ID of a device from a BLE scan.")
@@ -511,7 +540,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
+                    "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "bluetooth.gattRead", "bluetooth.gattWrite", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
                     "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
@@ -2711,7 +2740,10 @@ enum HTMLNativeAPIScript {
         },
         bluetooth: {
           scan: (seconds = 6) => call('bluetooth.scan', { seconds: Number(seconds) }),
-          battery: (id) => call('bluetooth.battery', { id: String(id || '') })
+          battery: (id) => call('bluetooth.battery', { id: String(id || '') }),
+          gattRead: (id, service, characteristic) => call('bluetooth.gattRead', { id, service, characteristic }),
+          gattWrite: (id, service, characteristic, dataBase64) =>
+            call('bluetooth.gattWrite', { id, service, characteristic, dataBase64 })
         },
         tabs: {
           configure: async (input, opts = {}) => {
