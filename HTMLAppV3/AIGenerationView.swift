@@ -13,6 +13,7 @@ struct AIGenerationView: View {
     @State private var offlineActionIsEdit = false
     @State private var offlineUnavailableMessage: String?
     @State private var dictationPrefix = ""
+    @State private var nextRequestFromVoice = false
     @State private var dictationForEdit = false
     @State private var generationTask: Task<Void, Never>?
     @State private var polishTask: Task<UIOverhaulResult, Error>?
@@ -434,6 +435,7 @@ struct AIGenerationView: View {
                 let words = dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !words.isEmpty {
                     prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + words
+                    nextRequestFromVoice = true
                 }
                 submitPromptGeneration()
             }
@@ -760,6 +762,7 @@ struct AIGenerationView: View {
         dictation.stop()
         if !dictation.transcript.isEmpty {
             prompt = dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + dictation.transcript
+            nextRequestFromVoice = true
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         promptDictationActive = false
@@ -1730,6 +1733,8 @@ struct AIGenerationView: View {
         milestones.add(.plan, "Reading your request", bytes: prompt.utf8.count, key: "initial")
         lastFailedChange = nil
         let originalPrompt = prompt
+        let sourceFromVoice = nextRequestFromVoice
+        nextRequestFromVoice = false
         let pendingPreflight = preparedStylePrompt == originalPrompt ? preparedStyleTask : nil
         preparedStylePrompt = nil
         preparedStyleTask = nil
@@ -1788,7 +1793,8 @@ struct AIGenerationView: View {
                 prompt: designBrief,
                 originalUserPrompt: originalPrompt,
                 researchReport: combinedResearch,
-                preplanned: preplanned
+                preplanned: preplanned,
+                fromVoice: sourceFromVoice
             )
             if session.errorMessage != nil, forgeConnectivity.isOffline,
                HTMLAppOfflineForge.availabilityMessage == nil {
