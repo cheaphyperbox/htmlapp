@@ -32,6 +32,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let speechRecognition = HTMLAppSpeechRecognition()
     private let nfcReader = HTMLAppNFCReader()
+    private let coreHaptics = HTMLAppCoreHapticsService()
     private var documentScanner: HTMLAppDocumentScanner?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
@@ -53,6 +54,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         nativeTabBar = nil
         speechRecognition.stop()
         speechSynthesizer.stopSpeaking(at: .immediate)
+        coreHaptics.stop()
         bluetoothDiscovery.cancel()
         aiTasks.values.forEach { $0.cancel() }
         aiTasks.removeAll()
@@ -505,7 +507,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -678,6 +680,16 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 guard let self else { return }
                 UIPasteboard.general.string = args["text"] as? String ?? ""
                 self.resolve(id, value: ["written": true])
+            }
+        case "haptics.pattern":
+            guard let pulses = args["pulses"] as? [[String: Any]] else {
+                reject(id, code: "invalid_arguments", message: "Provide a bounded array of haptic pulses.")
+                return
+            }
+            do {
+                resolve(id, value: try coreHaptics.play(pulses))
+            } catch {
+                reject(id, code: "haptics_failed", message: error.localizedDescription)
             }
         case "haptics.play":
             let values = (args["pattern"] as? [NSNumber])?.map { $0.intValue } ?? [8]
