@@ -667,4 +667,13 @@ assert 'VNDocumentCameraViewController(delegate:' not in scanner
 assert 'native-imports/scans/' in scanner
 assert 'min(scan.pageCount, 20)' in scanner
 
+# Custom haptics must be bounded and stop with the owning app.
+haptics = source("HTMLAppV3/HTMLAppCoreHapticsService.swift")
+assert 'case "haptics.pattern":' in native
+assert 'id: "haptics.pattern"' in catalog
+assert 'coreHaptics.stop()' in native
+assert 'pulses.count <= 16' in haptics
+assert '(0...5).contains(time)' in haptics
+assert 'CHHapticEngine.capabilitiesForHardware().supportsHaptics' in haptics
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
