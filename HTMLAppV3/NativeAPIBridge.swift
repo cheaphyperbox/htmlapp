@@ -665,15 +665,29 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     self.reject(id, code: "invalid_arguments", message: "Provide at most 2048 UTF-8 bytes of NDEF text.")
                     return
                 }
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    do {
-                        let written = try await self.nfcReader.writeText(text)
-                        self.resolve(id, value: ["written": written])
-                    } catch {
-                        self.reject(id, code: "nfc_write_failed", message: error.localizedDescription)
-                    }
+                guard let presenter = self.topViewController() else {
+                    self.reject(id, code: "presentation_failed", message: "Cannot present NFC write confirmation.")
+                    return
                 }
+                let alert = UIAlertController(
+                    title: "Write NFC Tag?",
+                    message: "This saved app wants to replace the data on a nearby NFC tag with its text. Existing tag data may be permanently lost.",
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+                    self?.reject(id, code: "cancelled", message: "NFC write cancelled.")
+                })
+                alert.addAction(UIAlertAction(title: "Continue", style: .default) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        do {
+                            let written = try await self.nfcReader.writeText(text)
+                            self.resolve(id, value: ["written": written])
+                        } catch {
+                            self.reject(id, code: "nfc_write_failed", message: error.localizedDescription)
+                        }
+                    }
+                })
+                presenter.present(alert, animated: true)
             }
         case "nfc.readNDEF":
             withPermission(.nfc, id: id) { [weak self] in
