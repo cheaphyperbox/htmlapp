@@ -104,7 +104,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     await self?.reject(id, code: "pdf_read_failed", message: error.localizedDescription)
                 }
             }
-        case "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":
+        case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":
             guard let dataURL = args["imageDataURL"] as? String,
                   dataURL.hasPrefix("data:image/"),
                   let separator = dataURL.firstIndex(of: ","),
@@ -504,7 +504,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
