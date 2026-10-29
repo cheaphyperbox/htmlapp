@@ -165,7 +165,7 @@ final class ForgeDictation: ObservableObject {
                     status = "Microphone could not start after automatic retries. Check whether another app is using the mic."
                     return
                 }
-                status = "Reconnecting microphone… (\\(attempt + 1)/3)"
+                status = "Reconnecting microphone… (\(attempt + 1)/3)"
                 do { try await Task.sleep(nanoseconds: 250_000_000) }
                 catch { return }
             }
