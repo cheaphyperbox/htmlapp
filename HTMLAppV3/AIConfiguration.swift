@@ -280,14 +280,14 @@ RESEARCH RESULTS
         let evidence = research.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "No additional device-capability or public-API research was needed."
             : research
-        let prompt = systemPrompt + "\n\nUSER VISUAL TASTE\n" + creativeDirection
-        let resolved: String
-        if prompt.contains(researchPlaceholder) {
-            resolved = prompt.replacingOccurrences(of: researchPlaceholder, with: evidence)
-        } else {
-            resolved = prompt + "\n\nRESEARCH RESULTS\n" + evidence
-        }
-        return resolved + "\n\n" + nativeAPIReference + "\n\n" + HTMLAppDeviceAPIResearch.capabilityDirectory
+        // Keep the stable native contracts before dynamic research. This gives
+        // prefix-caching providers an identical reusable instruction prefix.
+        let stable = systemPrompt.replacingOccurrences(of: researchPlaceholder, with: "")
+            .replacingOccurrences(of: "RESEARCH RESULTS", with: "")
+        return stable + "\n\n" + nativeAPIReference +
+            "\n\n" + HTMLAppDeviceAPIResearch.capabilityDirectory +
+            "\n\nRESEARCH RESULTS\n" + evidence +
+            "\n\nUSER VISUAL TASTE\n" + creativeDirection
     }
 
     // Legacy aliases remain so older settings state and call sites migrate cleanly.
