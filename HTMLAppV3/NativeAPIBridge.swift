@@ -35,6 +35,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let coreHaptics = HTMLAppCoreHapticsService()
     private let gamepads = HTMLAppGamepadService()
     private var documentScanner: HTMLAppDocumentScanner?
+    private var drawingPresenter: HTMLAppDrawingPresenter?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
@@ -606,7 +607,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "gamepad.list", "gamepad.start", "gamepad.stop", "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "gamepad.list", "gamepad.start", "gamepad.stop", "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "drawing.open", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.localAvailable", "ai.localComplete", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -983,6 +984,26 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.contacts, id: id) { [weak self] in self?.listContacts(id: id, args: args) }
         case "contacts.create":
             withPermission(.contacts, id: id) { [weak self] in self?.createContact(id: id, args: args) }
+        case "drawing.open":
+            guard appID != "PREVIEW" else {
+                reject(id, code: "preview_restricted", message: "Native drawing is unavailable in preview.")
+                return
+            }
+            guard drawingPresenter == nil, let presenter = topViewController() else {
+                reject(id, code: "presentation_failed", message: "A drawing sheet is already open or cannot be presented.")
+                return
+            }
+            let drawing = HTMLAppDrawingPresenter(
+                root: SourceCache.shared.baseURL(appID: appID)) { [weak self] result in
+                guard let self else { return }
+                self.drawingPresenter = nil
+                switch result {
+                case .success(let data): self.resolve(id, value: data)
+                case .failure(let error): self.reject(id, code: "drawing_cancelled", message: error.localizedDescription)
+                }
+            }
+            drawingPresenter = drawing
+            presenter.present(UINavigationController(rootViewController: drawing), animated: true)
         case "documents.scan":
             withPermission(.camera, id: id) { [weak self] in
                 guard let self else { return }
@@ -2932,6 +2953,9 @@ enum HTMLNativeAPIScript {
           pick: () => call('contacts.pick'),
           list: (options = {}) => call('contacts.list', options),
           create: (contact) => call('contacts.create', contact || {})
+        },
+        drawing: {
+          open: () => call('drawing.open')
         },
         documents: {
           scan: () => call('documents.scan')
