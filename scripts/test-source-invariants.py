@@ -725,4 +725,19 @@ assert 'fromVoice: Bool = false' in ai
 assert '!fromVoice && (ForgeRunOptions.quick' in ai
 assert 'nextRequestFromVoice' in forge
 
+# UI-capability cleanup is owned by each saved app instance.
+gamepad = source("HTMLAppV3/HTMLAppGamepadService.swift")
+drawing = source("HTMLAppV3/HTMLAppDrawingPresenter.swift")
+assert 'case "gamepad.start":' in native and 'case "gamepad.stop":' in native
+assert 'id: "gamepad.start"' in catalog and 'id: "gamepad.stop"' in catalog
+assert 'gamepads.stop()' in native
+assert '1.0 / 30.0' in gamepad and 'GCController.stopWirelessControllerDiscovery()' in gamepad
+assert "window.dispatchEvent(new CustomEvent('htmlapp:gamepad'" in native
+assert 'case "drawing.open":' in native and 'id: "drawing.open"' in catalog
+assert 'HTMLAppDrawingPresenter(' in native
+assert 'navigation.isModalInPresentation = true' in native
+assert 'PKCanvasView()' in drawing
+assert 'png.count <= 12_000_000' in drawing
+assert 'native-imports/drawings/' in drawing
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
