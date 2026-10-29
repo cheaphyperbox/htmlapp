@@ -26,7 +26,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
               writeData: Data?, subscribe: Bool = false,
               onNotification: (([String: Any]) -> Void)? = nil,
               completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        guard gattCallback == nil, batteryCallback == nil,
+        guard gattCallback == nil, batteryCallback == nil, notificationSink == nil,
               let id = UUID(uuidString: deviceID),
               let peripheral = peripherals[id],
               let manager, manager.state == .poweredOn,
@@ -76,7 +76,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
     private let batteryCharacteristic = CBUUID(string: "2A19")
 
     func readBattery(deviceID: String, completion: @escaping (Result<Int, Error>) -> Void) {
-        guard batteryCallback == nil, gattCallback == nil,
+        guard batteryCallback == nil, gattCallback == nil, notificationSink == nil,
               let uuid = UUID(uuidString: deviceID),
               let peripheral = peripherals[uuid],
               let manager, manager.state == .poweredOn else {
@@ -288,7 +288,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
     }
 
     func scan(seconds: Double, completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
-        guard self.completion == nil else {
+        guard self.completion == nil, notificationSink == nil, gattCallback == nil else {
             completion(.failure(NSError(domain: "HTMLAppBluetooth", code: 2,
                                         userInfo: [NSLocalizedDescriptionKey: "A Bluetooth scan is already running."])))
             return
