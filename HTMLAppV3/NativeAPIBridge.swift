@@ -1003,7 +1003,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 }
             }
             drawingPresenter = drawing
-            presenter.present(UINavigationController(rootViewController: drawing), animated: true)
+            let navigation = UINavigationController(rootViewController: drawing)
+            navigation.modalPresentationStyle = .fullScreen
+            navigation.isModalInPresentation = true
+            presenter.present(navigation, animated: true)
         case "documents.scan":
             withPermission(.camera, id: id) { [weak self] in
                 guard let self else { return }
