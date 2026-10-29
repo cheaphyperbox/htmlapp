@@ -1357,7 +1357,8 @@ enum AIProviderClient {
         messages: [(String, String)],
         timeout: TimeInterval = 300,
         maxTokens: Int? = nil,
-        retryOnTransient: Bool = true
+        retryOnTransient: Bool = true,
+        plannerRole: Bool = false
     ) async throws -> String {
         guard let endpoint = config.endpointURL() else { throw AIGenerationError.invalidEndpoint }
         await logRequest(kind: "COMPLETE", config: config, endpoint: endpoint, system: system, messages: messages)
@@ -1376,7 +1377,8 @@ enum AIProviderClient {
                         messages: messages,
                         stream: false,
                         maxTokens: maxTokens,
-                        tokenParameterOverride: tokenParameterOverride
+                        tokenParameterOverride: tokenParameterOverride,
+                        plannerRole: plannerRole
                     )
                 )
                 let (data, response) = try await URLSession.shared.data(for: request)
@@ -1596,7 +1598,8 @@ enum AIProviderClient {
         messages: [(String, String)],
         stream: Bool,
         maxTokens: Int?,
-        tokenParameterOverride: String? = nil
+        tokenParameterOverride: String? = nil,
+        plannerRole: Bool = false
     ) -> [String: Any] {
         switch config.compatibility {
         case .openAI:
@@ -1618,6 +1621,15 @@ enum AIProviderClient {
                host == "api.openai.com", reasoningModel,
                !model.contains("-pro") {
                 body["reasoning_effort"] = "low"
+            }
+            // Creative sampling is safe only for compatible non-reasoning
+            // models on the first-party endpoint.
+            if plannerRole && !reasoningModel && host == "api.openai.com" {
+                body["temperature"] = 0.9
+            }
+            if plannerRole && reasoningModel && host == "api.openai.com",
+               !model.contains("-pro") {
+                body["reasoning_effort"] = ForgeRunOptions.quick ? "low" : "medium"
             }
             return body
         case .anthropic:
@@ -1940,7 +1952,8 @@ Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reason
                 messages: [("user", prompt)],
                 timeout: 45,
                 maxTokens: 1800,
-                retryOnTransient: false
+                retryOnTransient: false,
+                plannerRole: true
             )
             let brief = value("brief", in: text).trimmed
             return AIPlanningResult(
