@@ -612,4 +612,18 @@ assert 'imported.sorted { $0.0 < $1.0 }' in native
 assert "const normalized = value.startsWith('./') ? value.slice(2) : value;" in native
 assert "const originalFetch = typeof window.fetch === 'function'" in native
 
+# Forge improvements: stable instructions precede dynamic user research;
+# voice recognition applies vocabulary bias; bridge lint detects empty calls.
+config = source("HTMLAppV3/AIConfiguration.swift")
+dictation = source("HTMLAppV3/ForgeDictation.swift")
+bridge_lint = source("HTMLAppV3/HTMLAppBridgeLint.swift")
+prompt_section = config.split("static func resolvedSystemPrompt(research: String) -> String {", 1)[1].split("// Legacy aliases", 1)[0]
+assert prompt_section.index("nativeAPIReference") < prompt_section.index("RESEARCH RESULTS\\n")
+assert prompt_section.index("HTMLAppDeviceAPIResearch.capabilityDirectory") < prompt_section.index("USER VISUAL TASTE")
+assert 'request.contextualStrings = [' in dictation
+assert 'request.addsPunctuation = true' in dictation
+assert 'let arities: [String: Int]' in bridge_lint
+assert '"location.reverseGeocode": 2' in bridge_lint
+assert 'requires \\(required) argument(s)' in bridge_lint
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
