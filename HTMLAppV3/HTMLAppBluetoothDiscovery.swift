@@ -13,16 +13,19 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
     private var batteryPeripheral: CBPeripheral?
     private var batteryCallback: ((Result<Int, Error>) -> Void)?
     private var batteryTimeout: Task<Void, Never>?
-    private enum GATTOperation { case read, write(Data) }
+    private enum GATTOperation { case read, write(Data), subscribe }
     private var gattPeripheral: CBPeripheral?
     private var gattService: CBUUID?
     private var gattCharacteristic: CBUUID?
     private var gattOperation: GATTOperation?
     private var gattCallback: ((Result<[String: Any], Error>) -> Void)?
     private var gattTimeout: Task<Void, Never>?
+    private var notificationSink: (([String: Any]) -> Void)?
 
     func gatt(deviceID: String, service: String, characteristic: String,
-              writeData: Data?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+              writeData: Data?, subscribe: Bool = false,
+              onNotification: (([String: Any]) -> Void)? = nil,
+              completion: @escaping (Result<[String: Any], Error>) -> Void) {
         guard gattCallback == nil, batteryCallback == nil,
               let id = UUID(uuidString: deviceID),
               let peripheral = peripherals[id],
@@ -36,7 +39,8 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
         gattPeripheral = peripheral
         gattService = CBUUID(string: service)
         gattCharacteristic = CBUUID(string: characteristic)
-        gattOperation = writeData.map { .write($0) } ?? .read
+        gattOperation = subscribe ? .subscribe : (writeData.map { .write($0) } ?? .read)
+        notificationSink = subscribe ? onNotification : nil
         gattCallback = completion
         peripheral.delegate = self
         manager.connect(peripheral, options: nil)
@@ -62,6 +66,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
         gattService = nil
         gattCharacteristic = nil
         gattOperation = nil
+        notificationSink = nil
         let callback = gattCallback
         gattCallback = nil
         callback?(result)
@@ -162,6 +167,14 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
                 return
             }
             switch operation {
+            case .subscribe:
+                guard characteristic.properties.contains(.notify) ||
+                      characteristic.properties.contains(.indicate) else {
+                    finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 21,
+                        userInfo: [NSLocalizedDescriptionKey: "Characteristic does not support notifications."])))
+                    return
+                }
+                peripheral.setNotifyValue(true, for: characteristic)
             case .read:
                 guard characteristic.properties.contains(.read) else {
                     finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 17,
@@ -192,6 +205,20 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
+        if gattPeripheral === peripheral, notificationSink != nil,
+           gattCallback == nil, case .subscribe = gattOperation {
+            if let error {
+                notificationSink?(["error": error.localizedDescription])
+                finishGATT(.failure(error))
+            } else if let value = characteristic.value {
+                notificationSink?([
+                    "deviceID": peripheral.identifier.uuidString,
+                    "dataBase64": value.base64EncodedString(),
+                    "characteristic": characteristic.uuid.uuidString
+                ])
+            }
+            return
+        }
         if gattPeripheral === peripheral, gattCallback != nil {
             if let error {
                 finishGATT(.failure(error))
@@ -216,6 +243,41 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
             return
         }
         finishBattery(.success(Int(level)))
+    }
+
+    func peripheral(_ peripheral: CBPeripheral,
+                    didUpdateNotificationStateFor characteristic: CBCharacteristic,
+                    error: Error?) {
+        guard gattPeripheral === peripheral, gattCallback != nil,
+              case .subscribe = gattOperation else { return }
+        if let error {
+            finishGATT(.failure(error))
+        } else if characteristic.isNotifying {
+            gattTimeout?.cancel()
+            gattTimeout = nil
+            let callback = gattCallback
+            gattCallback = nil
+            callback?(.success(["subscribed": true, "deviceID": peripheral.identifier.uuidString]))
+        } else {
+            finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 22,
+                userInfo: [NSLocalizedDescriptionKey: "BLE subscription could not be activated."])))
+        }
+    }
+
+    func stopSubscription() {
+        if let peripheral = gattPeripheral {
+            manager?.cancelPeripheralConnection(peripheral)
+        }
+        if gattCallback != nil {
+            finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 23,
+                userInfo: [NSLocalizedDescriptionKey: "BLE subscription cancelled."])))
+        } else {
+            gattPeripheral = nil
+            gattService = nil
+            gattCharacteristic = nil
+            gattOperation = nil
+            notificationSink = nil
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,
@@ -294,6 +356,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
         timeout?.cancel()
         timeout = nil
         completion = nil
+        if gattCallback == nil && notificationSink != nil { stopSubscription() }
         if gattCallback != nil {
             finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 20,
                 userInfo: [NSLocalizedDescriptionKey: "BLE operation cancelled."])))
