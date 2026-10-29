@@ -71,7 +71,7 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
     private let batteryCharacteristic = CBUUID(string: "2A19")
 
     func readBattery(deviceID: String, completion: @escaping (Result<Int, Error>) -> Void) {
-        guard batteryCallback == nil,
+        guard batteryCallback == nil, gattCallback == nil,
               let uuid = UUID(uuidString: deviceID),
               let peripheral = peripherals[uuid],
               let manager, manager.state == .poweredOn else {
@@ -131,14 +131,14 @@ final class HTMLAppBluetoothDiscovery: NSObject, CBCentralManagerDelegate, CBPer
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        if gattPeripheral === peripheral, let expected = gattService {
+        if gattPeripheral === peripheral, let expected = gattService, let wanted = gattCharacteristic {
             guard error == nil,
                   let service = peripheral.services?.first(where: { $0.uuid == expected }) else {
                 finishGATT(.failure(NSError(domain: "HTMLAppBluetooth", code: 15,
                     userInfo: [NSLocalizedDescriptionKey: "GATT service unavailable."])))
                 return
             }
-            peripheral.discoverCharacteristics([gattCharacteristic!], for: service)
+            peripheral.discoverCharacteristics([wanted], for: service)
             return
         }
         guard batteryPeripheral === peripheral else { return }
