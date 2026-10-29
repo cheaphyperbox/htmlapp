@@ -471,7 +471,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -672,6 +672,29 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
         case "health.available":
             resolve(id, value: ["available": HTMLAppHealthReader.available])
+        case "health.range":
+            withPermission(.health, id: id) { [weak self] in
+                guard let self else { return }
+                guard let quantity = args["quantity"] as? String,
+                      let start = args["start"] as? Double,
+                      let end = args["end"] as? Double,
+                      start.isFinite, end.isFinite,
+                      start < end, end - start <= 366 * 86_400 else {
+                    self.reject(id, code: "invalid_arguments", message: "Provide quantity, start and end Unix timestamps for up to 366 days.")
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let result = try await HTMLAppHealthReader().readRange(
+                            quantity, start: Date(timeIntervalSince1970: start),
+                            end: Date(timeIntervalSince1970: end))
+                        self.resolve(id, value: result)
+                    } catch {
+                        self.reject(id, code: "health_unavailable", message: error.localizedDescription)
+                    }
+                }
+            }
         case "health.today":
             withPermission(.health, id: id) { [weak self] in
                 guard let self else { return }
@@ -2511,7 +2534,8 @@ enum HTMLNativeAPIScript {
         },
         health: {
           available: () => call('health.available'),
-          today: (quantity) => call('health.today', { quantity })
+          today: (quantity) => call('health.today', { quantity }),
+          range: (quantity, start, end) => call('health.range', { quantity, start, end })
         },
         location: {
           reverseGeocode: (latitude, longitude) => call('location.reverseGeocode', { latitude, longitude }),
