@@ -417,7 +417,32 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     }
                 }
             }
-        case "bluetooth.gattRead", "bluetooth.gattWrite":
+        case "bluetooth.gattSubscribe":
+            withPermission(.bluetooth, id: id) { [weak self] in
+                guard let self else { return }
+                guard let deviceID = args["id"] as? String,
+                      let service = args["service"] as? String,
+                      let characteristic = args["characteristic"] as? String else {
+                    self.reject(id, code: "invalid_arguments", message: "Provide device ID and service and characteristic UUIDs.")
+                    return
+                }
+                self.bluetoothDiscovery.gatt(
+                    deviceID: deviceID, service: service, characteristic: characteristic,
+                    writeData: nil, subscribe: true,
+                    onNotification: { [weak self] data in
+                        self?.emitBLEEvent(data)
+                    }) { [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let value): self.resolve(id, value: value)
+                    case .failure(let error): self.reject(id, code: "gatt_subscribe_failed", message: error.localizedDescription)
+                    }
+                }
+            }
+        case "bluetooth.gattStop":
+            bluetoothDiscovery.stopSubscription()
+            resolve(id, value: ["stopped": true])
+        case "bluetooth.gattRead", "bluetooth.gattWrite", "bluetooth.gattSubscribe", "bluetooth.gattStop":
             withPermission(.bluetooth, id: id) { [weak self] in
                 guard let self else { return }
                 guard let deviceID = args["id"] as? String,
@@ -2545,6 +2570,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         return current
     }
 
+    private func emitBLEEvent(_ detail: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(detail),
+              let data = try? JSONSerialization.data(withJSONObject: detail),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript(
+            "window.dispatchEvent(new CustomEvent('htmlapp:ble', { detail: \\(json) }));")
+    }
+
     private func resolve(_ id: String, value: Any) {
         sendCallback(id: id, ok: true, value: value)
     }
@@ -2743,7 +2776,10 @@ enum HTMLNativeAPIScript {
           battery: (id) => call('bluetooth.battery', { id: String(id || '') }),
           gattRead: (id, service, characteristic) => call('bluetooth.gattRead', { id, service, characteristic }),
           gattWrite: (id, service, characteristic, dataBase64) =>
-            call('bluetooth.gattWrite', { id, service, characteristic, dataBase64 })
+            call('bluetooth.gattWrite', { id, service, characteristic, dataBase64 }),
+          gattSubscribe: (id, service, characteristic) =>
+            call('bluetooth.gattSubscribe', { id, service, characteristic }),
+          gattStop: () => call('bluetooth.gattStop')
         },
         tabs: {
           configure: async (input, opts = {}) => {
