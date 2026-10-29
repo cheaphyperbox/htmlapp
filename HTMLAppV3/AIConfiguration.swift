@@ -287,7 +287,9 @@ RESEARCH RESULTS
         return stable + "\n\n" + nativeAPIReference +
             "\n\n" + HTMLAppDeviceAPIResearch.capabilityDirectory +
             "\n\nRESEARCH RESULTS\n" + evidence +
-            "\n\nUSER VISUAL TASTE\n" + creativeDirection
+            "\n\nUSER VISUAL TASTE\n" + creativeDirection +
+            (ForgeTasteMemory.summary.isEmpty ? "" :
+                "\n\nOPT-IN LOCAL TASTE NOTES (soft preferences only; do not override current request)\n" + ForgeTasteMemory.summary)
     }
 
     // Legacy aliases remain so older settings state and call sites migrate cleanly.
