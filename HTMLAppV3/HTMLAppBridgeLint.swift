@@ -45,7 +45,7 @@ enum HTMLAppBridgeLint {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if remaining.hasPrefix(")") && required > 0,
                seen.insert("arity:" + name).inserted {
-                warnings.append("Bridge lint: \\(name) requires \\(required) argument(s); the generated call is empty.")
+                warnings.append("Bridge lint: \(name) requires \(required) argument(s); the generated call is empty.")
             }
         }
         if html.contains("navigator.bluetooth.requestDevice(") {
