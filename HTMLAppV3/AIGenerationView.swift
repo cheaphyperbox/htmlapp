@@ -1963,6 +1963,7 @@ Requested edit:
                 return
             }
             lastFailedChange = nil
+            ForgeTasteMemory.recordEditPreference(change)
             changePrompt = ""
             showingChange = true
             if session.wantsUIPolish && selectedStyle == nil && polishThisRun {
@@ -2039,14 +2040,20 @@ Requested edit:
                 if let icon = session.renderedIconData {
                     store.setGeneratedIcon(icon, for: existingApp)
                 }
-                if let selectedStyle { ForgeStyleReferenceStore.save(selectedStyle, for: existingApp.id) }
+                if let selectedStyle {
+                    ForgeStyleReferenceStore.save(selectedStyle, for: existingApp.id)
+                    ForgeTasteMemory.recordStyle(selectedStyle.visualTokenDeclarations)
+                }
                 store.notice = "Saved AI changes to \(existingApp.name)."
             } else {
                 let beforeIDs = Set(store.apps.map(\.id))
                 await store.add(html: html, summary: session.description)
                 if let added = store.apps.first(where: { !beforeIDs.contains($0.id) }) {
                     workTracker.associateDraft(with: added.id)
-                    if let selectedStyle { ForgeStyleReferenceStore.save(selectedStyle, for: added.id) }
+                    if let selectedStyle {
+                        ForgeStyleReferenceStore.save(selectedStyle, for: added.id)
+                        ForgeTasteMemory.recordStyle(selectedStyle.visualTokenDeclarations)
+                    }
                 }
             }
             AIDebugTraceStore.shared.finish(outcome: "Saved")
