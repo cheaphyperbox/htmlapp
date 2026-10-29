@@ -334,8 +334,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 reject(id, code: "ai_disabled", message: "Enable generated-app AI access in HTMLApp Settings.")
                 return
             }
+            let system = (args["system"] as? String) ?? "Be helpful, accurate and concise."
             guard let prompt = args["prompt"] as? String, prompt.utf8.count <= 4000,
-                  let system = args["system"] as? String ?? "Be helpful, accurate and concise.",
                   system.utf8.count <= 1200 else {
                 reject(id, code: "invalid_arguments", message: "Provide a short prompt and optional system instruction.")
                 return
