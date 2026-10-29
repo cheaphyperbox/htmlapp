@@ -71,7 +71,40 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
-        case "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":
+        case "image.filter":
+            guard let relative = args["url"] as? String,
+                  let effect = args["effect"] as? String,
+                  let source = localResourceURL(relative),
+                  relative.hasPrefix("native-imports/") || relative.hasPrefix("native-outputs/") else {
+                reject(id, code: "invalid_media_url", message: "Choose an app-owned imported image first.")
+                return
+            }
+            let root = SourceCache.shared.baseURL(appID: appID)
+            Task.detached(priority: .userInitiated) { [weak self] in
+                do {
+                    let result = try HTMLAppMediaToolkit.filterImage(source: source, root: root, effect: effect)
+                    await self?.resolve(id, value: result)
+                } catch {
+                    await self?.reject(id, code: "image_processing_failed", message: error.localizedDescription)
+                }
+            }
+        case "pdf.inspect":
+            guard let relative = args["url"] as? String,
+                  relative.hasPrefix("native-imports/"),
+                  let source = localResourceURL(relative),
+                  source.pathExtension.lowercased() == "pdf" else {
+                reject(id, code: "invalid_pdf_url", message: "Select an imported PDF from this saved app.")
+                return
+            }
+            Task.detached(priority: .userInitiated) { [weak self] in
+                do {
+                    let result = try HTMLAppMediaToolkit.inspectPDF(source: source)
+                    await self?.resolve(id, value: result)
+                } catch {
+                    await self?.reject(id, code: "pdf_read_failed", message: error.localizedDescription)
+                }
+            }
+        case "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces":
             guard let dataURL = args["imageDataURL"] as? String,
                   dataURL.hasPrefix("data:image/"),
                   let separator = dataURL.firstIndex(of: ","),
@@ -2576,6 +2609,12 @@ enum HTMLNativeAPIScript {
         },
         map: {
           show: (options = {}) => call('map.show', options)
+        },
+        image: {
+          filter: (url, effect) => call('image.filter', { url, effect })
+        },
+        pdf: {
+          inspect: (url) => call('pdf.inspect', { url })
         },
         vision: {
           recognizeText: (imageDataURL) => call('vision.recognizeText', { imageDataURL }),
