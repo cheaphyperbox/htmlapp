@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.44"
-    static let compiledBuild = "52"
+    static let compiledVersion = "1.6.45"
+    static let compiledBuild = "53"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,15 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.45" { return [
+            Entry(id: "forge-planner", title: "Smarter Forge planning", description: "Provider-gated creative sampling and planner-specific reasoning improve design planning without changing reliable coding defaults.", symbol: "sparkles", tint: .blue),
+            Entry(id: "taste-memory", title: "Optional visual taste memory", description: "Learn small style preferences from selected designs and edits when enabled, with a clear settings switch and reset option.", symbol: "paintpalette", tint: .purple),
+            Entry(id: "health-history", title: "HealthKit date ranges", description: "Generated apps can request permission to inspect bounded HealthKit history with accurate missing-data states.", symbol: "heart.text.square", tint: .red),
+            Entry(id: "nfc-writing", title: "NFC text writing", description: "User-confirmed writes to compatible NDEF tags now include capacity and writable-status checks.", symbol: "wave.3.right", tint: .orange),
+            Entry(id: "native-media", title: "Native document and image tools", description: "VisionKit scanning, PDF page/text inspection and file-backed Core Image filters add media functions without large WebKit data messages.", symbol: "doc.viewfinder", tint: .blue),
+            Entry(id: "bluetooth-gatt", title: "Bluetooth GATT controls", description: "Bounded read, confirmed write and foreground notification subscriptions for discovered BLE devices, with app-exit cleanup.", symbol: "dot.radiowaves.left.and.right", tint: .cyan),
+            Entry(id: "core-haptics", title: "Custom haptics", description: "Generated apps can play bounded Core Haptics patterns on supported devices.", symbol: "hand.tap", tint: .indigo)
+        ] }
         if version == "1.6.44" { return [Entry(id: "forge-voice-bridge", title: "Smarter Forge instructions and voice", description: "Reordered stable AI capability instructions for provider prompt caching, added punctuation and app vocabulary to voice dictation, and expanded native bridge argument checks.", symbol: "sparkles", tint: .blue)] }
         if version == "1.6.43" { return [Entry(id: "photo-bridge-js-fix", title: "Photo bridge build fix", description: "Fixed injected JavaScript syntax in the photo importer and made bridge script tests work without a browser fetch implementation.", symbol: "checkmark.shield", tint: .green)] }
         if version == "1.6.42" { return [Entry(id: "photos-import-reliability", title: "Reliable multi-photo imports", description: "Photo import now transfers originals to generated apps in bounded WebKit chunks and prefers native file representations without unnecessary conversion. Large selections no longer require one enormous bridge response.", symbol: "photo.on.rectangle", tint: .blue)] }
