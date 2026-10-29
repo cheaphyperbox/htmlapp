@@ -471,7 +471,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -657,6 +657,24 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
         case "nfc.available":
             resolve(id, value: ["available": HTMLAppNFCReader.available])
+        case "nfc.writeText":
+            withPermission(.nfc, id: id) { [weak self] in
+                guard let self else { return }
+                guard let text = args["text"] as? String,
+                      !text.isEmpty, text.utf8.count <= 2048 else {
+                    self.reject(id, code: "invalid_arguments", message: "Provide at most 2048 UTF-8 bytes of NDEF text.")
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    do {
+                        let written = try await self.nfcReader.writeText(text)
+                        self.resolve(id, value: ["written": written])
+                    } catch {
+                        self.reject(id, code: "nfc_write_failed", message: error.localizedDescription)
+                    }
+                }
+            }
         case "nfc.readNDEF":
             withPermission(.nfc, id: id) { [weak self] in
                 guard let self else { return }
@@ -2530,7 +2548,8 @@ enum HTMLNativeAPIScript {
         capabilities: () => call('capabilities.list'),
         nfc: {
           available: () => call('nfc.available'),
-          readNDEF: () => call('nfc.readNDEF')
+          readNDEF: () => call('nfc.readNDEF'),
+          writeText: (text) => call('nfc.writeText', { text })
         },
         health: {
           available: () => call('health.available'),
