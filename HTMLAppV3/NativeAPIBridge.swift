@@ -2768,7 +2768,8 @@ enum HTMLNativeAPIScript {
           writeText: (text) => call('clipboard.writeText', { text: String(text ?? '') })
         },
         haptics: {
-          play: (pattern = [8]) => call('haptics.play', { pattern: Array.isArray(pattern) ? pattern : [pattern] })
+          play: (pattern = [8]) => call('haptics.play', { pattern: Array.isArray(pattern) ? pattern : [pattern] }),
+          pattern: (pulses = []) => call('haptics.pattern', { pulses })
         },
         share: {
           present: (options = {}) => call('share.present', options)
