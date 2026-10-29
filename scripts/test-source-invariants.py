@@ -676,4 +676,19 @@ assert 'pulses.count <= 16' in haptics
 assert '(0...5).contains(time)' in haptics
 assert 'CHHapticEngine.capabilitiesForHardware().supportsHaptics' in haptics
 
+# BLE GATT is consent-gated, bounded and scoped to scanned devices.
+ble = source("HTMLAppV3/HTMLAppBluetoothDiscovery.swift")
+for method in ["bluetooth.gattRead", "bluetooth.gattWrite", "bluetooth.gattSubscribe", "bluetooth.gattStop"]:
+    assert ('case "' + method + '"') in native or method == "bluetooth.gattWrite"
+    assert ('id: "' + method + '"') in catalog
+assert '"bluetooth.gattRead", "bluetooth.gattWrite"' in native
+assert "self.bluetoothDiscovery.gatt(" in native
+assert "withPermission(.bluetooth, id: id)" in native
+assert "self?.emitBLEEvent(data)" in native
+assert "window.dispatchEvent(new CustomEvent('htmlapp:ble'" in native
+assert "gattCallback == nil, batteryCallback == nil, notificationSink == nil" in ble
+assert "writeData?.count ?? 0) <= 512" in ble
+assert "gattTimeout = Task" in ble
+assert "func stopSubscription()" in ble
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
