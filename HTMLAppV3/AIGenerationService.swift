@@ -278,7 +278,7 @@ final class AIGenerationSession: ObservableObject {
         }
     }
 
-    func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "", preplanned: AIPlanningResult? = nil) async {
+    func generate(prompt: String, originalUserPrompt: String? = nil, researchReport: String = "", preplanned: AIPlanningResult? = nil, fromVoice: Bool = false) async {
         let config = AISettingsStore.configuration
         guard config.isConfigured else { errorMessage = AIGenerationError.notConfigured.localizedDescription; return }
         editingExistingApp = false
@@ -292,7 +292,7 @@ final class AIGenerationSession: ObservableObject {
         do {
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
             let improved: String
-            if ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt) {
+            if !fromVoice && (ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt)) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
                 let localCapabilities = AIHTMLAgent.fastPathCapabilityQueries(for: originalPrompt)
@@ -317,7 +317,8 @@ final class AIGenerationSession: ObservableObject {
                     planning = try await optionalStage("Prompt improvement") {
                         try await AIHTMLAgent.planPrompt(
                             originalUserPrompt ?? prompt,
-                            config: AISettingsStore.configuration(for: .planner)
+                            config: AISettingsStore.configuration(for: .planner),
+                            fromVoice: fromVoice
                         )
                     }
                 }
@@ -1917,7 +1918,7 @@ Draw a distinctive, purpose-specific 1024px icon in IconScript. Use a crisp iOS-
         return queries
     }
 
-    static func planPrompt(_ prompt: String, config: AIProviderConfiguration) async throws -> AIPlanningResult {
+    static func planPrompt(_ prompt: String, config: AIProviderConfiguration, fromVoice: Bool = false) async throws -> AIPlanningResult {
         let system = """
 You are HTMLApp Forge's combined product-planning and capability-research planner. Turn the user's raw app idea into a compact implementation-ready brief AND decide what device/public API research is actually required.
 
@@ -1952,7 +1953,8 @@ Resolve ambiguity with ordinary reversible defaults. Do not expose hidden reason
             let text = try await AIProviderClient.complete(
                 config: AISettingsStore.quickModel.isEmpty ? config : ForgeRunOptions.$quick.withValue(true) { AISettingsStore.configuration(for: .planner) },
                 system: system,
-                messages: [("user", prompt)],
+                messages: [("user", fromVoice ?
+                    "This request was dictated aloud. Silently correct likely speech mishearings using context, but do not change intended app names or requirements.\\n\\n" + prompt : prompt)],
                 timeout: 45,
                 maxTokens: 1800,
                 retryOnTransient: false,
