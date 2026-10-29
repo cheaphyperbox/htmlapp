@@ -2575,7 +2575,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
               let data = try? JSONSerialization.data(withJSONObject: detail),
               let json = String(data: data, encoding: .utf8) else { return }
         webView?.evaluateJavaScript(
-            "window.dispatchEvent(new CustomEvent('htmlapp:ble', { detail: \\(json) }));")
+            "window.dispatchEvent(new CustomEvent('htmlapp:ble', { detail: \(json) }));")
     }
 
     private func resolve(_ id: String, value: Any) {
