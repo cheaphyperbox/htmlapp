@@ -869,8 +869,10 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     let status = AVCaptureDevice.authorizationStatus(for: .video)
-                    let granted = status == .authorized ||
-                        (status == .notDetermined && (await AVCaptureDevice.requestAccess(for: .video)))
+                    var granted = status == .authorized
+                    if status == .notDetermined {
+                        granted = await AVCaptureDevice.requestAccess(for: .video)
+                    }
                     guard granted else {
                         self.reject(id, code: "camera_denied", message: "Allow camera access in iOS Settings to scan documents.")
                         return
