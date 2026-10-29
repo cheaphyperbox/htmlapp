@@ -56,6 +56,16 @@ final class ForgeDictation: ObservableObject {
             try audio.setActive(true)
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
+            request.addsPunctuation = true
+            // Bias speech recognition toward common app-building terms.
+            // This is vocabulary guidance, not an LLM or cloud transcription.
+            request.contextualStrings = [
+                "HTMLApp", "Forge", "SwiftUI", "WebKit", "HealthKit",
+                "MapKit", "CoreML", "ARKit", "NFC", "Bluetooth",
+                "widget", "widgets", "haptics", "Live Activities",
+                "JavaScript", "CSS", "HTML", "SQLite", "Shortcuts",
+                "dark mode", "local storage", "push notifications"
+            ]
             request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
             self.request = request
             transcript = ""
