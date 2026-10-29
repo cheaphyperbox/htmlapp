@@ -324,6 +324,49 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                                 "remainingRequests": ready ? max(0, 10 - used) : 0,
                                 "remainingBudget": ready ? max(0, 10 - used) : 0,
                                 "totalRequests": total] as [String: Any])
+        case "ai.localAvailable":
+            resolve(id, value: [
+                "available": HTMLAppLocalAgent.availabilityMessage == nil,
+                "reason": HTMLAppLocalAgent.availabilityMessage ?? ""
+            ])
+        case "ai.localComplete":
+            guard UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled") else {
+                reject(id, code: "ai_disabled", message: "Enable generated-app AI access in HTMLApp Settings.")
+                return
+            }
+            guard let prompt = args["prompt"] as? String, prompt.utf8.count <= 4000,
+                  let system = args["system"] as? String ?? "Be helpful, accurate and concise.",
+                  system.utf8.count <= 1200 else {
+                reject(id, code: "invalid_arguments", message: "Provide a short prompt and optional system instruction.")
+                return
+            }
+            withPermission(.ai, id: id) { [weak self] in
+                guard let self else { return }
+                let key = "htmlapp.localAI.usage." + self.appID
+                let now = Date().timeIntervalSince1970
+                let previous = (UserDefaults.standard.array(forKey: key) as? [Double] ?? [])
+                    .filter { now - $0 < 60 }
+                guard previous.count < 4 else {
+                    self.reject(id, code: "rate_limited", message: "Local AI is limited to four requests per minute per saved app.")
+                    return
+                }
+                UserDefaults.standard.set(previous + [now], forKey: key)
+                let json = args["format"] as? String == "json"
+                self.aiTasks[id] = Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    defer { self.aiTasks.removeValue(forKey: id) }
+                    do {
+                        let result = try await HTMLAppLocalAgent.complete(
+                            prompt: prompt, system: system, json: json)
+                        guard !Task.isCancelled else { return }
+                        self.resolve(id, value: result)
+                    } catch is CancellationError {
+                        self.reject(id, code: "cancelled", message: "On-device AI request cancelled.")
+                    } catch {
+                        self.reject(id, code: "local_ai_failed", message: error.localizedDescription)
+                    }
+                }
+            }
         case "ai.complete", "ai.classify":
             guard UserDefaults.standard.bool(forKey: "htmlapp.aiBridge.enabled") else {
                 reject(id, code: "ai_disabled", message: "AI access is disabled in Settings.")
@@ -564,7 +607,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
-                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
+                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.localAvailable", "ai.localComplete", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
                     "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "bluetooth.gattRead", "bluetooth.gattWrite", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
                     "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
                     "haptics.play", "share.present", "system.open", "externalApps.maps",
@@ -2763,6 +2806,8 @@ enum HTMLNativeAPIScript {
         },
         ai: {
           available: () => call('ai.available'),
+          localAvailable: () => call('ai.localAvailable'),
+          localComplete: (options = {}) => call('ai.localComplete', options),
           complete: (options = {}) => call('ai.complete', options),
           classify: (options = {}) => call('ai.classify', options),
           cancel: (requestID) => call('ai.cancel', { requestID })
