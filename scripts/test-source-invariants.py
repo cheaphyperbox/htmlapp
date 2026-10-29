@@ -657,4 +657,14 @@ assert 'id: "image.filter"' in catalog and 'id: "pdf.inspect"' in catalog
 assert 'size <= 30_000_000' in media and 'size <= 25_000_000' in media
 assert 'max(image.extent.width, image.extent.height) <= 8000' in media
 
+# Document camera requires explicit app and OS camera access.
+scanner = source("HTMLAppV3/HTMLAppDocumentScanner.swift")
+assert 'case "documents.scan":' in native and 'id: "documents.scan"' in catalog
+assert 'withPermission(.camera, id: id)' in native
+assert 'AVCaptureDevice.requestAccess(for: .video)' in native
+assert 'VNDocumentCameraViewController.isSupported' in scanner
+assert 'VNDocumentCameraViewController(delegate:' not in scanner
+assert 'native-imports/scans/' in scanner
+assert 'min(scan.pageCount, 20)' in scanner
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
