@@ -626,4 +626,16 @@ assert 'let arities: [String: Int]' in bridge_lint
 assert '"location.reverseGeocode": 2' in bridge_lint
 assert 'requires \\(required) argument(s)' in bridge_lint
 
+# New HealthKit history calls must be guarded by app and HealthKit consent.
+health = source("HTMLAppV3/HTMLAppHealthReader.swift")
+catalog = source("HTMLAppV3/DeviceAPICatalog.swift")
+assert 'case "health.range":' in native
+assert 'withPermission(.health, id: id)' in native
+assert "readRange(" in health
+assert 'case unavailable, invalidType, invalidRange' in health
+assert '"health.range"' in native and 'id: "health.range"' in catalog
+assert "plannerRole: true" in ai
+assert 'body["temperature"] = 0.9' in ai
+assert 'body["reasoning_effort"] = ForgeRunOptions.quick ? "low" : "medium"' in ai
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
