@@ -33,6 +33,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let speechRecognition = HTMLAppSpeechRecognition()
     private let nfcReader = HTMLAppNFCReader()
     private let coreHaptics = HTMLAppCoreHapticsService()
+    private let gamepads = HTMLAppGamepadService()
     private var documentScanner: HTMLAppDocumentScanner?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
@@ -55,6 +56,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         speechRecognition.stop()
         speechSynthesizer.stopSpeaking(at: .immediate)
         coreHaptics.stop()
+        gamepads.stop()
         bluetoothDiscovery.cancel()
         aiTasks.values.forEach { $0.cancel() }
         aiTasks.removeAll()
@@ -604,7 +606,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "gamepad.list", "gamepad.start", "gamepad.stop", "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.localAvailable", "ai.localComplete", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -778,6 +780,19 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 UIPasteboard.general.string = args["text"] as? String ?? ""
                 self.resolve(id, value: ["written": true])
             }
+        case "gamepad.list":
+            resolve(id, value: ["controllers": gamepads.list()])
+        case "gamepad.start":
+            guard appID != "PREVIEW" else {
+                reject(id, code: "preview_restricted", message: "Live gamepads are unavailable in preview.")
+                return
+            }
+            resolve(id, value: ["controllers": gamepads.start { [weak self] state in
+                self?.emitGamepadEvent(state)
+            }])
+        case "gamepad.stop":
+            gamepads.stop()
+            resolve(id, value: ["stopped": true])
         case "haptics.pattern":
             guard let pulses = args["pulses"] as? [[String: Any]] else {
                 reject(id, code: "invalid_arguments", message: "Provide a bounded array of haptic pulses.")
@@ -2613,6 +2628,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         return current
     }
 
+    private func emitGamepadEvent(_ detail: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(detail),
+              let data = try? JSONSerialization.data(withJSONObject: detail),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript(
+            "window.dispatchEvent(new CustomEvent('htmlapp:gamepad', { detail: \\(json) }));")
+    }
+
     private func emitBLEEvent(_ detail: [String: Any]) {
         guard JSONSerialization.isValidJSONObject(detail),
               let data = try? JSONSerialization.data(withJSONObject: detail),
@@ -2879,6 +2902,11 @@ enum HTMLNativeAPIScript {
         clipboard: {
           readText: () => call('clipboard.readText'),
           writeText: (text) => call('clipboard.writeText', { text: String(text ?? '') })
+        },
+        gamepad: {
+          list: () => call('gamepad.list'),
+          start: () => call('gamepad.start'),
+          stop: () => call('gamepad.stop')
         },
         haptics: {
           play: (pattern = [8]) => call('haptics.play', { pattern: Array.isArray(pattern) ? pattern : [pattern] }),
