@@ -117,31 +117,58 @@ final class ForgeDictation: ObservableObject {
             status = "Allow Microphone for HTMLApp in iOS Settings. Whisper needs no Apple Speech permission."
             return
         }
-        do {
-            stop()
-            let audio = AVAudioSession.sharedInstance()
-            try audio.setCategory(.record, mode: .default, options: .duckOthers)
-            try audio.setActive(true)
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("htmlapp-dictation-" + UUID().uuidString + ".wav")
-            let recorder = try AVAudioRecorder(url: url, settings: [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: 16000,
-                AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false
-            ])
-            guard recorder.record() else {
-                throw NSError(domain: "Dictation", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not record microphone audio."])
+        // Transient audio-session contention can make AVAudioRecorder.record()
+        // return false even though microphone access was granted. Retry only
+        // while this press is still active; never retry permission denial.
+        for attempt in 1...3 {
+            guard generation == requestedGeneration, !Task.isCancelled else { return }
+            var candidateURL: URL?
+            do {
+                let audio = AVAudioSession.sharedInstance()
+                try audio.setCategory(.record, mode: .default, options: .duckOthers)
+                try audio.setActive(true)
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("htmlapp-dictation-" + UUID().uuidString + ".wav")
+                candidateURL = url
+                let recorder = try AVAudioRecorder(url: url, settings: [
+                    AVFormatIDKey: Int(kAudioFormatLinearPCM),
+                    AVSampleRateKey: 16000,
+                    AVNumberOfChannelsKey: 1,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false
+                ])
+                recorder.prepareToRecord()
+                guard recorder.record() else {
+                    throw NSError(domain: "Dictation", code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Recorder could not start."])
+                }
+                guard generation == requestedGeneration, !Task.isCancelled else {
+                    recorder.stop()
+                    try? FileManager.default.removeItem(at: url)
+                    try? audio.setActive(false, options: .notifyOthersOnDeactivation)
+                    return
+                }
+                offlineURL = url
+                offlineRecorder = recorder
+                offlineMode = true
+                transcript = ""
+                recording = true
+                status = tapToStop
+                    ? "Recording for Whisper… Tap the mic to stop recording."
+                    : "Recording for Whisper… Release to transcribe offline."
+                return
+            } catch {
+                if let candidateURL { try? FileManager.default.removeItem(at: candidateURL) }
+                try? AVAudioSession.sharedInstance()
+                    .setActive(false, options: .notifyOthersOnDeactivation)
+                if attempt == 3 {
+                    status = "Microphone could not start after automatic retries. Check whether another app is using the mic."
+                    return
+                }
+                status = "Reconnecting microphone… (\\(attempt + 1)/3)"
+                do { try await Task.sleep(nanoseconds: 250_000_000) }
+                catch { return }
             }
-            offlineURL = url
-            offlineRecorder = recorder
-            offlineMode = true
-            transcript = ""
-            recording = true
-            status = tapToStop ? "Recording for Whisper… Tap the mic to stop recording." : "Recording for Whisper… Release to transcribe offline."
-        } catch {
-            status = "Offline recording could not start: " + error.localizedDescription
-            stop()
         }
     }
 
