@@ -6,6 +6,8 @@ struct AIConfigurationSettingsView: View {
     @AppStorage("htmlapp.compactOutput.enabled") private var compactOutputEnabled = false
     @AppStorage("developerMode") private var developerMode = false
     @AppStorage("htmlapp.offlineForge.effort") private var offlineForgeEffort = "balanced"
+    @AppStorage("htmlapp.forgeTaste.enabled") private var forgeTasteEnabled = false
+    @State private var showTasteCleared = false
     @AppStorage("ai.quickMode.policy") private var quickModePolicy = "automatic"
     @AppStorage("ai.quickLowReasoning") private var quickLowReasoning = true
     @AppStorage("generationMusic.enabled") private var musicEnabled = false
@@ -76,6 +78,18 @@ struct AIConfigurationSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Compact generation is not yet active; standard generation remains in use.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Visual taste memory") {
+                Toggle("Learn my visual preferences", isOn: $forgeTasteEnabled)
+                Text("Optional. HTMLApp keeps a small local summary of selected design tokens and recurring visual edit requests. It does not store whole prompts, app source or names. The summary is included in future cloud AI instructions while enabled.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !ForgeTasteMemory.summary.isEmpty {
+                    Text(ForgeTasteMemory.summary).font(.caption.monospaced()).textSelection(.enabled)
+                    Button("Clear learned preferences", role: .destructive) {
+                        ForgeTasteMemory.clear()
+                        showTasteCleared = true
+                    }
+                }
             }
             Section("Offline Forge (Experimental)") {
                 Picker("Default offline effort", selection: $offlineForgeEffort) {
