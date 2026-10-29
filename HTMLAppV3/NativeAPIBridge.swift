@@ -2633,7 +2633,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
               let data = try? JSONSerialization.data(withJSONObject: detail),
               let json = String(data: data, encoding: .utf8) else { return }
         webView?.evaluateJavaScript(
-            "window.dispatchEvent(new CustomEvent('htmlapp:gamepad', { detail: \\(json) }));")
+            "window.dispatchEvent(new CustomEvent('htmlapp:gamepad', { detail: \(json) }));")
     }
 
     private func emitBLEEvent(_ detail: [String: Any]) {
