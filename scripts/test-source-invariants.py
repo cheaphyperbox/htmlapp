@@ -647,4 +647,14 @@ assert 'NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRea
 assert 'tag.queryNDEFStatus' in nfc and 'tag.writeNDEF(message)' in nfc
 assert 'title: "Write NFC Tag?"' in native
 
+# File-backed media services must remain app-sandbox scoped and bounded.
+media = source("HTMLAppV3/HTMLAppMediaToolkit.swift")
+assert 'case "image.filter":' in native and 'case "pdf.inspect":' in native
+assert "HTMLAppMediaToolkit.filterImage(" in native
+assert "HTMLAppMediaToolkit.inspectPDF(" in native
+assert 'relative.hasPrefix("native-imports/")' in native
+assert 'id: "image.filter"' in catalog and 'id: "pdf.inspect"' in catalog
+assert 'size <= 30_000_000' in media and 'size <= 25_000_000' in media
+assert 'max(image.extent.width, image.extent.height) <= 8000' in media
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
