@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.45"
-    static let compiledBuild = "53"
+    static let compiledVersion = "1.6.46"
+    static let compiledBuild = "54"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.46" { return [
+            Entry(id: "whisper-retry", title: "Reliable Whisper microphone", description: "Transient microphone startup failures retry automatically while the user keeps holding, without another manual attempt.", symbol: "mic", tint: .blue),
+            Entry(id: "mic-recording-status", title: "Clear recording indicator", description: "The microphone turns red only after recording begins, and enlarges while held to make its state more visible.", symbol: "waveform", tint: .orange)
+        ] }
         if version == "1.6.45" { return [
             Entry(id: "forge-planner", title: "Smarter Forge planning", description: "Provider-gated creative sampling and planner-specific reasoning improve design planning without changing reliable coding defaults.", symbol: "sparkles", tint: .blue),
             Entry(id: "taste-memory", title: "Optional visual taste memory", description: "Learn small style preferences from selected designs and edits when enabled, with a clear settings switch and reset option.", symbol: "paintpalette", tint: .purple),
