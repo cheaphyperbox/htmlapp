@@ -691,4 +691,38 @@ assert "writeData?.count ?? 0) <= 512" in ble
 assert "gattTimeout = Task" in ble
 assert "func stopSubscription()" in ble
 
+# Offline generated-app agents must remain local and consent-gated.
+local_ai = source("HTMLAppV3/HTMLAppLocalAgent.swift")
+assert 'case "ai.localComplete":' in native
+assert 'case "ai.localAvailable":' in native
+assert 'withPermission(.ai, id: id)' in native
+assert '"htmlapp.localAI.usage."' in native
+assert 'previous.count < 4' in native
+assert 'HTMLAppLocalAgent.complete(' in native
+assert 'id: "ai.localComplete"' in catalog
+assert 'id: "ai.localAvailable"' in catalog
+assert 'LanguageModelSession(instructions: instruction)' in local_ai
+assert 'JSONSerialization.jsonObject(with: data)' in local_ai
+assert 'prompt.utf8.count <= 4000' in local_ai
+assert 'ProcessInfo.processInfo.thermalState != .critical' in local_ai
+
+# Large patch edits use safe literal selector anchors; no arbitrary model source replacement.
+focused = source("HTMLAppV3/ForgeFocusedEditContext.swift")
+assert 'ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange)' in ai
+assert 'occurrences > 4 { return nil }' in focused
+assert 'snippets.utf8.count <= 11_000' in focused
+
+# Optional taste summaries are locally bounded and removable.
+taste = source("HTMLAppV3/ForgeTasteMemory.swift")
+assert 'htmlapp.forgeTaste.enabled' in taste
+assert 'static func clear()' in taste
+assert 'ForgeTasteMemory.summary' in source("HTMLAppV3/AIConfiguration.swift")
+assert 'ForgeTasteMemory.recordStyle' in forge
+assert 'ForgeTasteMemory.recordEditPreference' in forge
+
+# Dictated app requests must not be fast-path skipped before intent cleanup.
+assert 'fromVoice: Bool = false' in ai
+assert '!fromVoice && (ForgeRunOptions.quick' in ai
+assert 'nextRequestFromVoice' in forge
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
