@@ -103,7 +103,7 @@ enum HTMLAppReleaseNotes {
             Entry(id: "sharing", title: "Organized app actions", description: "App menus group everyday actions, sharing and developer tools. Raw code exports use HTML files.", symbol: "square.and.arrow.up", tint: .indigo)
         ] }
         if version == "1.6.22" { return [
-            Entry(id: "audio", title: "More dependable generation audio", description: "Music URL prefetch and safer dictation teardown reduce interruptions. Experimental silent audio is optional; background processing remains best-effort.", symbol: "waveform", tint: .purple),
+            Entry(id: "audio", title: "More dependable generation audio", description: "Music URL prefetch and safer dictation teardown reduce interruptions. Background continuity remains best-effort and depends on iOS scheduling.", symbol: "waveform", tint: .purple),
             Entry(id: "gesture", title: "Flip and shake to close", description: "An optional face-down shake returns from a saved app to Library.", symbol: "iphone.radiowaves.left.and.right", tint: .blue),
             Entry(id: "tabs", title: "Up to seven native tabs", description: "Apps can request compact UIKit tabs with badges, JavaScript selection callbacks and animations.", symbol: "square.stack", tint: .mint),
             Entry(id: "permissions", title: "Quieter permissions", description: "Repeated requests are coalesced and abusive prompts are blocked, with permissions shown in a simpler list.", symbol: "hand.raised.fill", tint: .orange)
