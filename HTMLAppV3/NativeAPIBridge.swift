@@ -32,6 +32,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let speechSynthesizer = AVSpeechSynthesizer()
     private let speechRecognition = HTMLAppSpeechRecognition()
     private let nfcReader = HTMLAppNFCReader()
+    private var documentScanner: HTMLAppDocumentScanner?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
@@ -504,7 +505,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         case "capabilities.list":
             resolve(id, value: [
                 "methods": [
-                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
+                    "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
                     "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
                     "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
                     "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
@@ -858,6 +859,43 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             withPermission(.contacts, id: id) { [weak self] in self?.listContacts(id: id, args: args) }
         case "contacts.create":
             withPermission(.contacts, id: id) { [weak self] in self?.createContact(id: id, args: args) }
+        case "documents.scan":
+            withPermission(.camera, id: id) { [weak self] in
+                guard let self else { return }
+                guard self.documentScanner == nil else {
+                    self.reject(id, code: "scanner_busy", message: "A document scan is already open.")
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let status = AVCaptureDevice.authorizationStatus(for: .video)
+                    let granted = status == .authorized ||
+                        (status == .notDetermined && (await AVCaptureDevice.requestAccess(for: .video)))
+                    guard granted else {
+                        self.reject(id, code: "camera_denied", message: "Allow camera access in iOS Settings to scan documents.")
+                        return
+                    }
+                    guard let presenter = self.topViewController() else {
+                        self.reject(id, code: "presentation_failed", message: "No view controller can present the scanner.")
+                        return
+                    }
+                    let scanner = HTMLAppDocumentScanner(
+                        root: SourceCache.shared.baseURL(appID: self.appID)) { [weak self] result in
+                        guard let self else { return }
+                        self.documentScanner = nil
+                        switch result {
+                        case .success(let pages): self.resolve(id, value: ["pages": pages])
+                        case .failure(let error): self.reject(id, code: "scan_failed", message: error.localizedDescription)
+                        }
+                    }
+                    self.documentScanner = scanner
+                    do { try scanner.present(from: presenter) }
+                    catch {
+                        self.documentScanner = nil
+                        self.reject(id, code: "scan_unavailable", message: error.localizedDescription)
+                    }
+                }
+            }
         case "photos.pick":
             withPermission(.photoLibrary, id: id) { [weak self] in self?.pickPhotos(id: id, args: args) }
         case "photos.read":
@@ -2738,6 +2776,9 @@ enum HTMLNativeAPIScript {
           pick: () => call('contacts.pick'),
           list: (options = {}) => call('contacts.list', options),
           create: (contact) => call('contacts.create', contact || {})
+        },
+        documents: {
+          scan: () => call('documents.scan')
         },
         photos: {
           pick: (options = {}) => call('photos.pick', options),
