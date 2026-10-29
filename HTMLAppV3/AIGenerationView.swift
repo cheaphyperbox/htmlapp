@@ -616,8 +616,9 @@ struct AIGenerationView: View {
                             Image(systemName: promptMicHeld ? "stop.fill" : "mic.fill")
                                 .font(.system(size: 34, weight: .semibold))
                                 .frame(width: 86, height: 86)
-                                .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
-                                .background(promptMicHeld ? Color.red : Color(.systemGray4),
+                                .scaleEffect(promptMicHeld ? 1.25 : 1)
+                                .foregroundStyle(dictation.recording ? Color.white : Color.primary)
+                                .background(dictation.recording ? Color.red : Color(.systemGray4),
                                             in: RoundedRectangle(cornerRadius: 24))
                         }
                         .buttonStyle(.plain)
@@ -626,8 +627,9 @@ struct AIGenerationView: View {
                         Image(systemName: "mic.fill")
                             .font(.system(size: 34, weight: .semibold))
                             .frame(width: 86, height: 86)
-                            .foregroundStyle(promptMicHeld ? Color.white : Color.primary)
-                            .background(promptMicHeld ? Color.red : Color(.systemGray4),
+                                .scaleEffect(promptMicHeld ? 1.25 : 1)
+                            .foregroundStyle(dictation.recording ? Color.white : Color.primary)
+                            .background(dictation.recording ? Color.red : Color(.systemGray4),
                                         in: RoundedRectangle(cornerRadius: 24))
                             .contentShape(RoundedRectangle(cornerRadius: 24))
                             .highPriorityGesture(
@@ -1430,14 +1432,14 @@ struct AIGenerationView: View {
             origin.x + side <= size.width && origin.y + side <= size.height
         return Image(systemName: "mic.fill")
             .font(.system(size: 25, weight: .semibold))
-            .foregroundStyle(microphoneArmed ? Color.white : Color.primary.opacity(0.85))
+            .foregroundStyle((microphoneArmed && dictation.recording) ? Color.white : Color.primary.opacity(0.85))
             .frame(width: side, height: side)
-            .background(microphoneArmed ? Color.red : Color(.systemGray4),
+            .background((microphoneArmed && dictation.recording) ? Color.red : Color(.systemGray4),
                         in: RoundedRectangle(cornerRadius: 18))
             .overlay(RoundedRectangle(cornerRadius: 18)
                 .strokeBorder(.white.opacity(0.55), lineWidth: 1))
             .rotationEffect(.degrees(microphoneArmed ? 0 : -16))
-            .scaleEffect(microphoneArmed ? 1.07 : 1)
+            .scaleEffect(microphoneArmed ? 1.25 : 1)
             .shadow(color: .black.opacity(0.18), radius: 9, y: 3)
             .offset(x: origin.x, y: origin.y)
             .animation(.spring(response: 0.22, dampingFraction: 0.72), value: microphoneArmed)
