@@ -125,6 +125,9 @@ jobs:
       - name: Test JavaScript widget rejection diagnostics
         run: node scripts/test-widget-bridge.js
 
+      - name: Test car display runtime
+        run: node scripts/test-car-display.js
+
       - name: Check Swift source syntax before dependency compilation
         shell: bash
         run: |
@@ -306,3 +309,4 @@ jobs:
           curl --fail --silent --show-error --retry 2 --connect-timeout 10 --max-time 25 \
             -H 'Content-Type: application/json' \
             --data-binary "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
+

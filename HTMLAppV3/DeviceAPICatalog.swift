@@ -33,6 +33,14 @@ enum HTMLAppDeviceAPIResearch {
     ]
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
+        .init(
+            id: "display.environment", title: "Car display and viewport adaptation",
+            keywords: ["CarPlay", "car", "landscape", "display", "viewport", "dashboard"],
+            purpose: "Adapt saved HTML apps to a car compatibility display and short landscape viewports.",
+            api: "window.HTMLAppDisplay; window.addEventListener('htmlapp:display-change', handler)",
+            example: "const render = env => document.body.classList.toggle('car', env?.mode === 'car'); render(window.HTMLAppDisplay); window.addEventListener('htmlapp:display-change', event => render(event.detail));",
+            constraints: "Read-only snapshot: mode car/standard and width/height in CSS pixels. Root data-htmlapp-display and --htmlapp-viewport-height are supplied too. This is compatibility for setups that already launch the app, not native CarPlay templates, entitlement approval or a vehicle-motion signal. Keep controls at least 48px, content scrollable above --htmlapp-tabbar-height, and detailed interaction parked-only."
+        ),
         .init(id: "location.roadSpeedLimit", title: "Look up mapped road speed tag", keywords: ["speed limit", "driving", "roads", "speedometer", "maxspeed", "OpenStreetMap"], purpose: "Look up a nearby mapped road's explicitly tagged speed limit, when available, using a public OpenStreetMap service.", api: "HTMLAppNative.location.roadSpeedLimit(latitude, longitude)", example: "const coords = await new Promise((ok,err)=>navigator.geolocation.getCurrentPosition(p=>ok(p.coords),err,{enableHighAccuracy:true})); try { const road = await HTMLAppNative.location.roadSpeedLimit(coords.latitude,coords.longitude); if (road.status==='mapped') console.log(road.speedLimit, road.unit); else console.log('Speed limit unavailable'); } catch(e) { console.warn('Road lookup unavailable'); }", constraints: "Requires BOTH per-app Location and Road Data permissions. Sends rounded GPS coordinates to a third-party OSM Overpass server; requires internet, is throttled and caches results. Not an official driving speed-limit API; no limit is returned without a numeric explicit unit. Nearby road matching and volunteer tags can be wrong, absent or out of date. Never show an inferred or fabricated limit as authoritative."),
         .init(id: "location.reverseGeocode", title: "Find street address from coordinates", keywords: ["street", "address", "reverse geocoding", "current address", "geocode", "GPS"], purpose: "Resolve an approximate street address after the saved app has obtained coordinates using foreground geolocation.", api: "HTMLAppNative.location.reverseGeocode(latitude, longitude)", example: "navigator.geolocation.getCurrentPosition(async pos => { try { const address = await HTMLAppNative.location.reverseGeocode(pos.coords.latitude, pos.coords.longitude); console.log(address.formattedAddress, address.street); } catch (e) { console.warn('Address unavailable', e); } }, console.error, {enableHighAccuracy:true});", constraints: "Requires per-app Location permission; uses Apple's geocoding service and may need internet. Returns approximate addresses only; a street number is not always available. Explicitly ask permission before showing or sharing the precise address. Reverse geocoding does not supply speed limits."),
         .init(id: "health.available", title: "HealthKit availability", keywords: ["health", "fitness"], purpose: "Determine whether HealthKit is supported before requesting read-only health data.", api: "HTMLAppNative.health.available()", example: "const status = await HTMLAppNative.health.available(); if (!status.available) document.body.textContent='Health unavailable';", constraints: "Device availability alone does not establish signing entitlement or consent; health.today can fail."),
@@ -775,6 +783,7 @@ enum HTMLAppDeviceAPIResearch {
     // Planner queries can request the whole catalog or a focused capability section.
     // These are documentation lookups during generation, not permission requests.
     private static let sections: [(name: String, ids: [String])] = [
+        ("carplay", ["display.environment", "tabs.configure", "speech"]),
         ("bluetooth", ["bluetooth.scan", "bluetooth.battery"]),
         ("widgets", ["widgets", "live.activities", "background.fetch"]),
         ("tabs", ["tabs.configure"]),
@@ -872,3 +881,4 @@ enum HTMLAppDeviceAPIResearch {
         }
     }
 }
+

@@ -862,7 +862,7 @@ struct AIGenerationView: View {
 
     private var styleSelectionView: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Button {
@@ -919,42 +919,52 @@ struct AIGenerationView: View {
                                     }
                                 }
                                 .allowsHitTesting(!exploringStyles)
-                            VStack(spacing: 10) {
-                                ForEach(0..<max(3, (styleOptions.map(\.id).max() ?? -1) + 1), id: \.self) { slot in
-                                    let available = styleOptions.firstIndex(where: { $0.id == slot })
-                                    Button {
-                                        if let available { selectedStyleIndex = available }
-                                    } label: {
-                                        HStack(spacing: 3) {
-                                            Text("Look \(slot + 1)")
-                                            if available == nil {
-                                                Image(systemName: "hourglass").font(.caption2)
+                            GeometryReader { choicesGeometry in
+                                ScrollView(.vertical, showsIndicators: true) {
+                                    VStack(spacing: 10) {
+                                        ForEach(0..<max(3, (styleOptions.map(\.id).max() ?? -1) + 1), id: \.self) { slot in
+                                            let available = styleOptions.firstIndex(where: { $0.id == slot })
+                                            Button {
+                                                if let available { selectedStyleIndex = available }
+                                            } label: {
+                                                HStack(spacing: 3) {
+                                                    Text("Look \(slot + 1)")
+                                                    if available == nil {
+                                                        Image(systemName: "hourglass").font(.caption2)
+                                                    }
+                                                }
+                                                .font(.caption.bold())
+                                                .frame(width: 76, height: 44)
+                                                .foregroundStyle(available == nil ? .secondary : .primary)
+                                                .background(
+                                                    available == selectedStyleIndex ? Color.accentColor.opacity(0.24) : Color(.secondarySystemBackground),
+                                                    in: RoundedRectangle(cornerRadius: 12)
+                                                )
                                             }
+                                            .buttonStyle(.plain)
+                                            .disabled(available == nil || exploringStyles)
+                                            .accessibilityLabel("View mockup \(slot + 1)")
                                         }
-                                        .font(.caption.bold())
-                                        .frame(width: 76, height: 44)
-                                        .foregroundStyle(available == nil ? .secondary : .primary)
-                                        .background(
-                                            available == selectedStyleIndex ? Color.accentColor.opacity(0.24) : Color(.secondarySystemBackground),
-                                            in: RoundedRectangle(cornerRadius: 12)
-                                        )
+                                        Button {
+                                            generateAdditionalStyles()
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.title2)
+                                                .frame(width: 76, height: 44)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(exploringStyles || styleOptions.isEmpty)
+                                        .accessibilityLabel("Generate three more AI-designed looks")
                                     }
-                                    .buttonStyle(.plain)
-                                    .disabled(available == nil || exploringStyles)
-                                    .accessibilityLabel("View mockup \(slot + 1)")
+                                    .padding(.horizontal, 4)
                                 }
-                                Button {
-                                    generateAdditionalStyles()
-                                } label: {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.title2)
-                                        .frame(width: 76, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(exploringStyles || styleOptions.isEmpty)
-                                .accessibilityLabel("Generate three more AI-designed looks")
+                                // 5 full rows and half the sixth hint that more choices exist.
+                                // Short displays use the available height, without covering the footer.
+                                .frame(height: min(292, max(0, choicesGeometry.size.height)))
+                                .clipped()
                             }
-                            .frame(width: 84)
+                            .frame(width: 88)
+                            .frame(maxHeight: 292)
                             .zIndex(2)
                         }
                     } else if exploringStyles {
@@ -2315,3 +2325,4 @@ private enum HTMLAppForgeBackgroundNotice {
         UNUserNotificationCenter.current().add(request)
     }
 }
+

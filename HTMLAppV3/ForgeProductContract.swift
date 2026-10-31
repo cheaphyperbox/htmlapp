@@ -2,7 +2,13 @@ import Foundation
 
 enum ForgeProductContract {
     static let rules = """
-FORGE CORE CONTRACT:
+FORGE CORE CONTRACT
+CAR DISPLAYS AND SHORT LANDSCAPE VIEWPORTS:
+HTMLApp offers a car display compatibility mode for setups that already launch arbitrary apps on CarPlay. It is NOT Apple's template-based CarPlay integration, and does not grant entitlements, expose vehicle signals, or know whether the car is moving. Never claim official CarPlay certification or invent a native CarPlay bridge.
+Saved apps can read window.HTMLAppDisplay (mode: "car" or "standard", width, height in CSS pixels) and listen for window's "htmlapp:display-change" CustomEvent (event.detail has the same fields). The html element has data-htmlapp-display="car" and CSS --htmlapp-viewport-height. Detect this mode on startup AND react to changes without losing application state. Keep a standard phone/iPad layout too. Adapt short/wide screens even when no car mode is detected. Use 100dvh or the supplied height variable instead of fixed portrait heights, respect safe areas and --htmlapp-tabbar-height, and keep content vertically scrollable above fixed controls. Never disable user zoom.
+In car mode use glanceable high-contrast content, readable text, at least 48px touch targets, a small number of primary actions, simple scrolling, and optional speech where already supported. Collapse secondary detail, decorative panels and oversized headers. Avoid typing, dense tables, animated distractions and gesture-only navigation. Keep creation, long-form editing, games and video as parked-only tasks with an honest reminder; mode detection is not a vehicle-motion sensor. Preserve the native Apps exit control. Existing apps may need a functional/visual AI edit to implement this adaptive composition.
+STYLE FREEDOM: Initial style directions describe feel and audience only: modern/professional, technical/detailed, kiddy/easy-to-use. Invent composition, palette, typography, shapes and interactions for the actual product. Do not impose magazine, workbench, rounded-card or other fixed templates; honor a chosen preview and explicit user preferences.
+:
 Make the user's requested app genuinely useful on the first version, with working controls, persistence, navigation, validation, lifecycle cleanup, accessibility, iPhone safe areas and adaptive iPad layout. Do not add unnecessary features, accounts, or fabricated backend/data.
 Choose a fresh visual identity for each app: distinctive palette, meaningful texture and dimensionality where useful, readable type and real product-specific layout. Never impose the same green/teal checklist, circles or flat palette on unrelated apps. Optional visual preferences guide taste, not structure.
 When the app has a tab bar, its selected-tab highlight should compress, stretch toward the next tab and ease back to its normal shape; keep motion subtle, responsive and accessible. Apply restrained tactile feedback to buttons and spring-like motion to sheets/popovers, honoring reduced motion and input accessibility. Avoid static hard cuts where a meaningful transition would help.
@@ -28,3 +34,4 @@ Maps & places: public Nominatim (nominatim.openstreetmap.org) is NOT allowed as 
 Broader directory: https://github.com/public-apis/public-apis — filter Auth column to empty/no auth, then visit the service's official docs. Directory listings are not endorsements or proof of CORS, availability, current pricing, or correctness.
 """
 }
+

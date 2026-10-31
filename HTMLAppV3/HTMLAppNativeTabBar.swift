@@ -4,6 +4,14 @@ import WebKit
 /// Native bottom navigation shown only when an installed HTML app opts in.
 @MainActor
 final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
+    private final class LayoutTabBar: UITabBar {
+        var onLayout: (() -> Void)?
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            onLayout?()
+        }
+    }
+
     struct Tab {
         let id: String
         let title: String
@@ -16,6 +24,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
     private var tabs: [Tab] = []
     private var mountAttempts = 0
     private var hidden = false
+    private var reportedHeight = -1
 
     init(webView: WKWebView) { self.webView = webView }
 
@@ -37,7 +46,8 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
             mountAttempts = 0
             // Keep tabs inside their own WebView container. Never attach to the
             // app's root controller, which would leak tabs into editing screens.
-            let created = UITabBar()
+            let created = LayoutTabBar()
+            created.onLayout = { [weak self] in self?.reportInset() }
             created.delegate = self
             created.translatesAutoresizingMaskIntoConstraints = false
             // Fill the available width instead of allowing a tiny centered compact bar.
@@ -75,6 +85,7 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
         let index = selected.flatMap { id in tabs.firstIndex(where: { $0.id == id }) } ?? 0
         tabBar.selectedItem = items.indices.contains(index) ? items[index] : nil
         if tabs.indices.contains(index) { signal(tabs[index].id) }
+        reportedHeight = -1 // A reloaded document needs its inset even at the same size.
         reportInset()
     }
 
@@ -147,8 +158,17 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
     private func reportInset() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            let height = self.hidden ? 0 : Int((self.bar?.intrinsicContentSize.height ?? 0)
-                + (self.bar?.superview?.safeAreaInsets.bottom ?? 0))
+            // The constrained bar is at least 64pt; intrinsicContentSize can be
+            // 49pt in landscape. Report the actual occupied space after layout.
+            let height: Int
+            if let bar = self.bar, !self.hidden {
+                height = Int(ceil(max(64, bar.bounds.height)
+                    + (bar.superview?.safeAreaInsets.bottom ?? 0)))
+            } else {
+                height = 0
+            }
+            guard height != self.reportedHeight else { return }
+            self.reportedHeight = height
             self.webView?.evaluateJavaScript("""
             document.documentElement.style.setProperty('--htmlapp-tabbar-height','\(height)px');
             window.dispatchEvent(new CustomEvent('htmlapp:tabbar-resize',{detail:{height:\(height)}}));
@@ -162,3 +182,4 @@ final class HTMLAppNativeTabBar: NSObject, UITabBarDelegate {
         webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('htmlapp:native-tab-select',{detail:\(json)}));")
     }
 }
+

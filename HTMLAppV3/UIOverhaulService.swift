@@ -20,6 +20,7 @@ NON-NEGOTIABLE RULES:
 - Do not rewrite or modify any <script> block.
 - Prefer CSS-only changes. Markup changes are allowed only when required for presentation and must preserve IDs, classes used by JavaScript, data attributes, form semantics, and DOM relationships.
 - Keep safe-area handling, viewport-fit=cover, dark mode, reduced motion, accessibility, 44px touch targets, and iPhone/iPad responsiveness intact or improve them.
+- Preserve car display adaptation: html[data-htmlapp-display="car"], window.HTMLAppDisplay, htmlapp:display-change, short-landscape scrolling and --htmlapp-tabbar-height. Use at least 48px targets in car mode, avoid dense detail and oversized headers, and keep primary controls visible above native chrome.
 - Do not add frameworks, remote dependencies, fake data, unsupported capabilities, analytics, tracking, or new features.
 - Give this app a distinct visual identity rather than automatically using teal/green. Textures, depth, editorial typography or gradients are appropriate when the product supports them. Keep animations tactile and functional, with reduced-motion support.
 - If the UI is already strong, return an empty patch rather than rewriting it.
@@ -98,3 +99,4 @@ Finished functioning HTML app:
         }
     }
 }
+

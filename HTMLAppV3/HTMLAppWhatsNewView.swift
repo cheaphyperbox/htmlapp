@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.46"
-    static let compiledBuild = "54"
+    static let compiledVersion = "1.6.47"
+    static let compiledBuild = "55"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.47" { return [
+            Entry(id: "car-display", title: "Car display mode", description: "A compact app launcher, visible Apps exit, safe display bounds and adaptive HTML runtime for setups that already launch HTMLApp on a car screen. Enable Car display in the Library menu when your mirroring tool reports an iPhone screen. This is compatibility mode, not Apple's native CarPlay templates.", symbol: "car.fill", tint: .blue),
+            Entry(id: "free-styles", title: "More creative looks", description: "Modern/professional, technical/detailed and kiddy/easy-to-use are broad directions. AI chooses the composition freely. Look choices scroll vertically above the selection controls.", symbol: "paintpalette", tint: .orange)
+        ] }
         if version == "1.6.46" { return [
             Entry(id: "whisper-retry", title: "Reliable Whisper microphone", description: "Transient microphone startup failures retry automatically while the user keeps holding, without another manual attempt.", symbol: "mic", tint: .blue),
             Entry(id: "mic-recording-status", title: "Clear recording indicator", description: "The microphone turns red only after recording begins, and enlarges while held to make its state more visible.", symbol: "waveform", tint: .orange)
@@ -410,3 +414,4 @@ struct HTMLAppWhatsNewView: View {
         .accessibilityElement(children: .combine)
     }
 }
+

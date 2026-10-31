@@ -93,6 +93,8 @@ struct WebRunner: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("closeOnFlipShake") private var closeOnFlipShake = false
     @State private var flipShakeCloser = FlipShakeClose()
+    @AppStorage("htmlapp.carDisplay") private var carDisplay = false
+    @State private var carWindow = false
 
     static func shouldHideStatusBar(in html: String) -> Bool {
         // The tag may use single/double quotes and either attribute order.
@@ -108,8 +110,28 @@ struct WebRunner: View {
         return false
     }
     var body: some View {
-        HTMLWebView(html: app.html, appID: app.id)
-            .statusBarHidden(Self.shouldHideStatusBar(in: app.html))
+        Group {
+            if carDisplay || carWindow {
+                HTMLWebView(html: app.html, appID: app.id)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        HStack {
+                            Button { store.runningApp = nil } label: {
+                                Label("Apps", systemImage: "square.grid.2x2")
+                                    .frame(minHeight: 48)
+                            }
+                            .buttonStyle(.bordered)
+                            Text(app.name).font(.headline).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .background(.bar)
+                    }
+            } else {
+                HTMLWebView(html: app.html, appID: app.id).ignoresSafeArea()
+            }
+        }
+            .background(HTMLAppCarWindowProbe(isCarWindow: $carWindow))
+            .statusBarHidden(carDisplay || carWindow || Self.shouldHideStatusBar(in: app.html))
             .htmlAppFirstUseToasts()
             .onAppear { HTMLAppFirstUseTips.show("open") }
 
@@ -157,6 +179,14 @@ struct HTMLWebView: UIViewRepresentable {
 
         let sensorPolicy = appID == "PREVIEW" ? "deny" : HTMLSensorPermissionPolicy.choice(appID: appID).rawValue
         let controller = configuration.userContentController
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppCarDisplay.script,
+            injectionTime: .atDocumentStart, forMainFrameOnly: true
+        ))
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppCarDisplay.updateScript(enabled: UserDefaults.standard.bool(forKey: "htmlapp.carDisplay")),
+            injectionTime: .atDocumentEnd, forMainFrameOnly: true
+        ))
         controller.addUserScript(WKUserScript(
             source: PermissionBridgeScript.source(sensorPolicy: sensorPolicy),
             injectionTime: .atDocumentStart,
@@ -226,7 +256,7 @@ struct HTMLWebView: UIViewRepresentable {
                 injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = HTMLAppDisplayWebView(frame: .zero, configuration: configuration)
         HTMLAppWebWarmup.release()
         context.coordinator.attach(webView, initialHTML: html)
         webView.uiDelegate = context.coordinator
@@ -297,6 +327,10 @@ struct HTMLWebView: UIViewRepresentable {
             locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
             nativeBridge = HTMLNativeAPIBridge(webView: webView, appID: appID, permissionCoordinator: nativePermissions)
             localNetworkBridge = HTMLLocalNetworkBridge(webView: webView, permissionCoordinator: nativePermissions)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            (webView as? HTMLAppDisplayWebView)?.updateDisplay(force: true)
         }
 
         func shutdown() {
@@ -1193,3 +1227,4 @@ private final class HTMLAppFaceDownShakeExit {
         darkness = nil
     }
 }
+

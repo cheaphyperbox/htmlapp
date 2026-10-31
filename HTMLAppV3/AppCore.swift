@@ -39,12 +39,11 @@ struct HTMLAppMain: App {
 
     var body: some Scene {
         WindowGroup {
-            LibraryView()
+            HTMLAppDisplayRoot()
                 .environmentObject(store)
                 .fullScreenCover(item: $store.runningApp) { app in
                     WebRunner(app: app)
                         .environmentObject(store)
-                        .ignoresSafeArea()
                         .interactiveDismissDisabled(true)
                         .onChange(of: store.pendingSwitchApp?.id) { id in
                             if id != nil { HTMLAppFirstUseTips.show("switch") }
@@ -1462,3 +1461,4 @@ final class AppStore: ObservableObject {
         }
     }
 }
+

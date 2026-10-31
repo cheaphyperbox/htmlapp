@@ -441,6 +441,9 @@ struct LibraryView: View {
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Menu {
+                    Button { UserDefaults.standard.set(true, forKey: "htmlapp.carDisplay") } label: {
+                        Label("Car display", systemImage: "car.fill")
+                    }
                     Button { showAllApps = true } label: {
                         Label("See All Apps", systemImage: "square.stack.3d.up")
                     }
@@ -1104,3 +1107,4 @@ struct ContentUnavailableViewCompat: View {
         .padding(30)
     }
 }
+

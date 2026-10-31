@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: targeted
-    MARKETING_VERSION: "1.6.46"
-    CURRENT_PROJECT_VERSION: "54"
+    MARKETING_VERSION: "1.6.47"
+    CURRENT_PROJECT_VERSION: "55"
     TARGETED_DEVICE_FAMILY: "1,2"
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
@@ -195,3 +195,4 @@ schemes:
     test:
       targets:
         - HTMLAppWidgetTests
+

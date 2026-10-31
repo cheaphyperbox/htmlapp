@@ -10,6 +10,8 @@ HTMLApp is an iOS 16+ app for creating, saving, running, editing, and privately 
 - Nearby sharing without transferring stored personal data
 - Home Screen installation guidance, native widget snapshots, and Live Activities
 - Siri/Shortcuts entry points, debug history, and an onboarding walkthrough
+- Car display compatibility for setups that already launch arbitrary iOS apps: compact launcher, Apps exit, adaptive runtime and AI guidance
+- Flexible style directions and a vertically scrolling look picker with reserved footer space
 - Manual-only device IPA builds; app and widget version metadata is validated before packaging
 
 ## Building
@@ -22,6 +24,8 @@ The workflow packages an unsigned app and then produces a TrollStore-oriented IP
 
 ## Safety and testing
 
+Car display compatibility does not grant native CarPlay installation or entitlements. Enable **Car display** from the Library's More menu when a mirroring tool reports an iPhone screen. See [car display behavior, limitations and device checks](docs/car-display-and-styles.md).
+
 A Library load failure preserves the damaged file and blocks empty-library overwrites; a rolling backup supports recovery. Native clipboard reads require per-app permission; WebView native bridge messages from subframes are rejected. External source caching limits file sizes and budgets.
 
 Forge performs local WebKit smoke tests. Advisory findings (for example, preview-only network failures) do not automatically launch expensive model repairs. Blocking defects can receive one targeted AI patch. Real iPhone/iPad testing remains necessary.
@@ -31,3 +35,4 @@ The repository includes widget tests and a packaged IPA verification script. The
 ## Security note
 
 Store Discord webhook URLs as GitHub Actions secrets. The current build and delivery scripts contact Discord directly, not a proxy. Rotate any webhook URL previously sent to an untrusted intermediary.
+

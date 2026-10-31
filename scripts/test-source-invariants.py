@@ -137,7 +137,7 @@ assert 'ForgeDraftCheckpointStore.clear()' in source("HTMLAppV3/AIGenerationView
 assert "case \"FILL\":" in source("HTMLAppV3/AIIconRenderer.swift")
 assert "currentPaint" in source("HTMLAppV3/AIIconRenderer.swift")
 tab_bar = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
-assert "UITabBar()" in tab_bar, "Native tabs must use a standalone UITabBar"
+assert "class LayoutTabBar: UITabBar" in tab_bar and "LayoutTabBar()" in tab_bar, "Native tabs must use a standalone UITabBar"
 assert "UITabBarDelegate" in tab_bar
 assert "tabBar.setItems(items, animated: true)" in tab_bar
 assert "func setHidden(" in tab_bar
@@ -167,7 +167,7 @@ assert 'if demoMode {' in source("HTMLAppV3/AIGenerationView.swift")
 assert 'Advanced model names' not in source("HTMLAppV3/AISettingsView.swift")
 assert 'AISettingsStore.usesSpecialistProvider' in source("HTMLAppV3/AISettingsView.swift")
 assert 'static func shouldHideStatusBar(in html: String)' in source("HTMLAppV3/EditorWeb.swift")
-assert 'statusBarHidden(Self.shouldHideStatusBar(in: app.html))' in source("HTMLAppV3/EditorWeb.swift")
+assert 'statusBarHidden(carDisplay || carWindow || Self.shouldHideStatusBar(in: app.html))' in source("HTMLAppV3/EditorWeb.swift")
 assert 'DisclosureGroup("Built-in Forge system prompt")' not in source("HTMLAppV3/AISettingsView.swift")
 assert 'get { defaultSystemPrompt }' in source("HTMLAppV3/AIConfiguration.swift")
 assert 'systemSmall, systemMedium, and systemLarge' in ai
@@ -182,7 +182,7 @@ settings_source = source("HTMLAppV3/AISettingsView.swift")
 assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 styles = source("HTMLAppV3/ForgeStylePreview.swift")
-assert '"Editorial"' in styles and '"Workbench"' in styles and '"Playful"' in styles
+assert all(direction in styles for direction in ("Modern / professional", "Technical / detailed", "Kiddy / easy-to-use"))
 assert 'No fake iPhone frame' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
@@ -268,7 +268,7 @@ assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
 # Regression coverage for divergent AI looks and in-preview JavaScript errors.
 assert 'styleRegenerationRound += 1' in forge
 assert 'regeneration: regenerationRound' in forge
-assert 'archetypes' in styles and 'Mandatory composition:' in styles, "Initial looks must retain distinct layout compositions"
+assert 'Mandatory composition:' not in styles and 'no prescribed layout' in styles, "Initial looks guide feel without forcing a composition"
 assert 'freeform = index >= 3' in styles and 'no style presets' in styles, "Additional AI looks must be unrestricted"
 assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
 assert 'Button("Ask AI to Fix")' in forge
@@ -386,7 +386,7 @@ assert '12 characters' in ai
 # Native tab configuration, background audio, permission protection, and sensor support.
 tab_view = source("HTMLAppV3/HTMLAppNativeTabBar.swift")
 gate = source("HTMLAppV3/PermissionRequestGate.swift")
-assert "UITabBar()" in tab_view and "UITabBarController()" not in tab_view
+assert "LayoutTabBar()" in tab_view and "UITabBarController()" not in tab_view
 assert "func update(id:" in tab_view and "func setHidden(" in tab_view and "func pulse()" in tab_view
 assert "(1...7).contains(entries.count)" in native
 for method in ("tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse"):
@@ -756,3 +756,4 @@ assert 'BackgroundKeepAlive.shared.start()' in forge_source
 assert 'BackgroundKeepAlive.shared.stop()' in forge_source
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
+
