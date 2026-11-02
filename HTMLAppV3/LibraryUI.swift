@@ -150,6 +150,10 @@ struct LibraryView: View {
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $storageManagementApp) { HTMLAppStorageManagementView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppExternalHTMLFileOpened"))) { notification in
+            guard let url = notification.object as? URL else { return }
+            importFile(.success([url]))
+        }
         .onChange(of: importingFile) { showing in
             if !showing { presentQueuedFileImport() }
         }
