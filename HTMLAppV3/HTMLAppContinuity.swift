@@ -91,7 +91,7 @@ enum HTMLAppRuntimeStateStore {
               let json = String(data: data, encoding: .utf8) else { return "" }
         return """
         (() => {
-          const state = (json);
+          const state = \(json);
           const restoreStorage = (storage, values) => {
             try {
               for (const [key, value] of Object.entries(values || {})) storage.setItem(key, value);
@@ -191,7 +191,7 @@ enum HTMLAppRuntimeStateScript {
         } catch (_) {}
       };
 
-      setInterval(capture, 5000);
+      setInterval(capture, 2000);
       addEventListener('pagehide', capture, {capture:true});
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') capture();
@@ -271,7 +271,6 @@ final class HTMLAppOfflineCache {
     }
 
     func runtimeOfflineScript(appID: String) -> String {
-        guard isOffline else { return "" }
         let pairs = manifest(appID: appID).entries.reduce(into: [String: String]()) {
             $0[$1.key] = $1.value.relativePath
         }
@@ -280,12 +279,13 @@ final class HTMLAppOfflineCache {
               let json = String(data: data, encoding: .utf8) else { return "" }
         return """
         (() => {
-          const cache = (json);
+          const cache = \(json);
           const absolute = (value) => {
             try { return new URL(String(value), document.baseURI).href; }
             catch (_) { return String(value); }
           };
-          const cached = (value) => cache[absolute(value)] || null;
+          const offline = () => !navigator.onLine;
+          const cached = (value) => offline() ? (cache[absolute(value)] || null) : null;
           window.__htmlappOfflineExperimental = true;
           const originalFetch = window.fetch?.bind(window);
           if (originalFetch) {
@@ -315,7 +315,11 @@ final class HTMLAppOfflineCache {
               }
             }
           };
-          document.addEventListener('DOMContentLoaded', () => rewrite(document), {once:true});
+          document.addEventListener('DOMContentLoaded', () => { if (offline()) rewrite(document); }, {once:true});
+          addEventListener('offline', () => {
+            try { window.webkit.messageHandlers.htmlappOfflineCache.postMessage({offlineActivated:true}); } catch (_) {}
+            rewrite(document);
+          });
           new MutationObserver(records => {
             for (const record of records) for (const node of record.addedNodes) {
               if (node?.nodeType === 1) {
