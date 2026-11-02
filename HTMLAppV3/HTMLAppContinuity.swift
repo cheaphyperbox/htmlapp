@@ -12,6 +12,9 @@ struct HTMLAppRuntimeSnapshot: Codable {
     var fields: [[String: String]]
     var localStorage: [String: String]
     var sessionStorage: [String: String]
+    var scrollRegions: [[String: String]]?
+    var canvases: [[String: String]]?
+    var media: [[String: String]]?
     var focusedSelector: String?
 }
 
@@ -67,6 +70,16 @@ enum HTMLAppRuntimeStateStore {
             return ["selector": selector, "kind": kind, "value": value]
         }
 
+        func stringRows(_ value: Any?, limit: Int) -> [[String: String]] {
+            guard let rows = value as? [[String: Any]] else { return [] }
+            return rows.prefix(limit).map { row in
+                row.reduce(into: [String: String]()) { result, pair in
+                    if let string = pair.value as? String { result[pair.key] = string }
+                    else if let number = pair.value as? NSNumber { result[pair.key] = number.stringValue }
+                }
+            }
+        }
+
         let snapshot = HTMLAppRuntimeSnapshot(
             appID: appID,
             processSessionID: HTMLAppProcessSession.id,
@@ -77,6 +90,9 @@ enum HTMLAppRuntimeStateStore {
             fields: fields,
             localStorage: strings(body["localStorage"]),
             sessionStorage: strings(body["sessionStorage"]),
+            scrollRegions: stringRows(body["scrollRegions"], limit: 200),
+            canvases: stringRows(body["canvases"], limit: 8),
+            media: stringRows(body["media"], limit: 20),
             focusedSelector: body["focusedSelector"] as? String
         )
         memoryLock.lock()
@@ -138,6 +154,40 @@ enum HTMLAppRuntimeStateStore {
               el.dispatchEvent(new Event('change', { bubbles: true }));
             } catch (_) {}
           }
+          for (const item of state.scrollRegions || []) {
+            try {
+              const el = document.querySelector(item.selector);
+              if (el) {
+                el.scrollLeft = Number(item.left || 0);
+                el.scrollTop = Number(item.top || 0);
+              }
+            } catch (_) {}
+          }
+          for (const item of state.media || []) {
+            try {
+              const el = document.querySelector(item.selector);
+              if (!el) continue;
+              if (Number.isFinite(Number(item.currentTime))) el.currentTime = Number(item.currentTime);
+              el.volume = Math.max(0, Math.min(1, Number(item.volume ?? 1)));
+              el.muted = item.muted === 'true';
+              el.playbackRate = Number(item.playbackRate || 1);
+            } catch (_) {}
+          }
+          for (const item of state.canvases || []) {
+            try {
+              const canvas = document.querySelector(item.selector);
+              if (!canvas || !item.dataURL) continue;
+              const image = new Image();
+              image.onload = () => {
+                try {
+                  const context = canvas.getContext('2d');
+                  context?.clearRect(0, 0, canvas.width, canvas.height);
+                  context?.drawImage(image, 0, 0, canvas.width, canvas.height);
+                } catch (_) {}
+              };
+              image.src = item.dataURL;
+            } catch (_) {}
+          }
           requestAnimationFrame(() => {
             scrollTo(Number(state.scrollX || 0), Number(state.scrollY || 0));
             if (state.focusedSelector) {
@@ -178,10 +228,15 @@ enum HTMLAppRuntimeStateScript {
 
       const storageObject = (storage) => {
         const out = {};
+        let total = 0;
         try {
           for (let i = 0; i < storage.length && i < 500; i++) {
             const key = storage.key(i);
-            if (key != null) out[String(key).slice(0,300)] = String(storage.getItem(key) ?? '').slice(0,200000);
+            if (key == null) continue;
+            const value = String(storage.getItem(key) ?? '').slice(0,100000);
+            total += value.length;
+            if (total > 1500000) break;
+            out[String(key).slice(0,300)] = value;
           }
         } catch (_) {}
         return out;
@@ -205,6 +260,45 @@ enum HTMLAppRuntimeStateScript {
             }
             fields.push({selector, kind, value});
           });
+          const scrollRegions = [];
+          document.querySelectorAll('*').forEach((el) => {
+            if (scrollRegions.length >= 200) return;
+            if (!el.scrollTop && !el.scrollLeft) return;
+            const selector = selectorFor(el);
+            if (selector) scrollRegions.push({
+              selector, top: String(el.scrollTop || 0), left: String(el.scrollLeft || 0)
+            });
+          });
+
+          const canvases = [];
+          let canvasBytes = 0;
+          document.querySelectorAll('canvas').forEach((canvas) => {
+            if (canvases.length >= 8 || canvasBytes >= 1200000) return;
+            const selector = selectorFor(canvas);
+            if (!selector) return;
+            try {
+              const dataURL = canvas.toDataURL('image/png');
+              if (dataURL.length <= 500000 && canvasBytes + dataURL.length <= 1200000) {
+                canvasBytes += dataURL.length;
+                canvases.push({selector, dataURL});
+              }
+            } catch (_) {}
+          });
+
+          const media = [];
+          document.querySelectorAll('audio,video').forEach((el) => {
+            if (media.length >= 20) return;
+            const selector = selectorFor(el);
+            if (!selector) return;
+            media.push({
+              selector,
+              currentTime: String(Number(el.currentTime || 0)),
+              volume: String(Number(el.volume ?? 1)),
+              muted: String(!!el.muted),
+              playbackRate: String(Number(el.playbackRate || 1))
+            });
+          });
+
           const html = document.documentElement?.outerHTML || '';
           if (new TextEncoder().encode(html).length > 3500000) return;
           window.webkit.messageHandlers.htmlappState.postMessage({
@@ -214,6 +308,9 @@ enum HTMLAppRuntimeStateScript {
             fields,
             localStorage: storageObject(localStorage),
             sessionStorage: storageObject(sessionStorage),
+            scrollRegions,
+            canvases,
+            media,
             focusedSelector: selectorFor(document.activeElement)
           });
         } catch (_) {}
