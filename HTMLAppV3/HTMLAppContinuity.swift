@@ -207,6 +207,36 @@ enum HTMLAppRuntimeStateScript {
       if (window.__htmlappStateCaptureInstalled) return;
       window.__htmlappStateCaptureInstalled = true;
       window.__htmlappStateCaptureEnabled = false;
+      let dirty = true;
+      const markDirty = () => { dirty = true; };
+      addEventListener('input', markDirty, true);
+      addEventListener('change', markDirty, true);
+      addEventListener('scroll', markDirty, true);
+      addEventListener('pointerup', markDirty, true);
+      addEventListener('timeupdate', markDirty, true);
+
+      try {
+        for (const method of ['setItem','removeItem','clear']) {
+          const original = Storage.prototype[method];
+          Storage.prototype[method] = function(...args) {
+            const result = original.apply(this, args);
+            markDirty();
+            return result;
+          };
+        }
+      } catch (_) {}
+
+      const stateObserver = new MutationObserver(markDirty);
+      const observeState = () => {
+        if (document.documentElement) {
+          stateObserver.observe(document.documentElement, {
+            subtree:true, childList:true, attributes:true, characterData:true
+          });
+        } else {
+          setTimeout(observeState, 0);
+        }
+      };
+      observeState();
 
       const selectorFor = (el) => {
         if (!el || el === document.body || el === document.documentElement) return null;
@@ -242,8 +272,8 @@ enum HTMLAppRuntimeStateScript {
         return out;
       };
 
-      const capture = () => {
-        if (!window.__htmlappStateCaptureEnabled) return;
+      const capture = (force = false) => {
+        if (!window.__htmlappStateCaptureEnabled || (!force && !dirty)) return;
         try {
           const fields = [];
           document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach((el) => {
@@ -313,15 +343,16 @@ enum HTMLAppRuntimeStateScript {
             media,
             focusedSelector: selectorFor(document.activeElement)
           });
+          dirty = false;
         } catch (_) {}
       };
 
-      setInterval(capture, 2000);
-      addEventListener('pagehide', capture, {capture:true});
+      setInterval(() => capture(false), 2000);
+      addEventListener('pagehide', () => capture(true), {capture:true});
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') capture();
+        if (document.visibilityState === 'hidden') capture(true);
       });
-      window.__htmlappCaptureStateNow = capture;
+      window.__htmlappCaptureStateNow = () => capture(true);
     })();
     """#
 }
