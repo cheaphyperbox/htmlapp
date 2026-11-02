@@ -795,7 +795,8 @@ assert 'stateObserver.observe' in continuity
 assert 'Storage.prototype[method]' in continuity
 assert 'data-htmlapp-original-' in continuity
 assert "addEventListener('online', () => restoreOnline(document))" in continuity
-assert 'textDependencies(in: text' in continuity
+assert 'let dependencies = Self.textDependencies(' in continuity
+assert 'in: text, baseURL: url, contentType: contentType)' in continuity
 assert 'await cacheOne(appID: appID, url: dependency.absoluteURL, depth: depth + 1)' in continuity
 assert "const cached = (value) => offline()" in continuity
 assert 'Cache-Control' in continuity and 'no-store' in continuity
