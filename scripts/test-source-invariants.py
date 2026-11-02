@@ -213,7 +213,10 @@ assert 'forceRegenerate: !ForgeRunOptions.quick &&' in ai
 # iOS 26 continuous processing and file-backed background coding handoff.
 background = source("HTMLAppV3/ForgeBackgroundUpload.swift")
 continued = source("HTMLAppV3/HTMLAppForgeContinuedProcessing.swift")
-assert 'runs-on: macos-26' in workflow, "Build runner must support the iOS 26 SDK"
+assert "runs-on: ${{ inputs.macos_runner || 'macos-26-intel' }}" in workflow, "Runner selector is not wired into the job"
+assert 'default: macos-26-intel' in workflow, "Intel runner should be the default"
+assert '          - macos-26-intel' in workflow and '          - macos-26' in workflow, "The workflow must provide both supported macOS 26 runner pools"
+assert 'XCODE_MAJOR' in workflow and '"$XCODE_MAJOR" -lt 26' in workflow, "Every runner must validate an Xcode 26+ installation"
 assert 'UIApplicationDelegateAdaptor(HTMLAppBackgroundURLSessionDelegate.self)' in core
 assert 'URLSessionConfiguration.background' in background
 assert 'uploadTask(with: request, fromFile: file)' in background
