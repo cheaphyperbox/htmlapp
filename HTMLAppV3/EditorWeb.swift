@@ -202,6 +202,26 @@ struct HTMLWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        if appID != "PREVIEW" {
+            controller.addUserScript(WKUserScript(
+                source: HTMLAppRuntimeStateScript.source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+            controller.addUserScript(WKUserScript(
+                source: HTMLAppOfflineDiscoveryScript.source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+            let offlineRuntime = HTMLAppOfflineCache.shared.runtimeOfflineScript(appID: appID)
+            if !offlineRuntime.isEmpty {
+                controller.addUserScript(WKUserScript(
+                    source: offlineRuntime,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                ))
+            }
+        }
         if appID == "PREVIEW" {
             controller.addUserScript(WKUserScript(
                 source: HTMLAppPreviewTabs.script,
@@ -235,6 +255,10 @@ struct HTMLWebView: UIViewRepresentable {
         controller.add(context.coordinator, name: "htmlappDownload")
         controller.add(context.coordinator, name: "htmlappNative")
         controller.add(context.coordinator, name: "htmlappNetwork")
+        if appID != "PREVIEW" {
+            controller.add(context.coordinator, name: "htmlappState")
+            controller.add(context.coordinator, name: "htmlappOfflineCache")
+        }
         if onJavaScriptError != nil {
             controller.add(context.coordinator, name: "htmlappRuntimeError")
             controller.addUserScript(WKUserScript(source: """
@@ -258,19 +282,21 @@ struct HTMLWebView: UIViewRepresentable {
 
         let webView = HTMLAppDisplayWebView(frame: .zero, configuration: configuration)
         HTMLAppWebWarmup.release()
+        let initialDocument = context.coordinator.initialDocument(originalHTML: html)
         context.coordinator.attach(webView, initialHTML: html)
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsBackForwardNavigationGestures = false
-        webView.loadHTMLString(html, baseURL: SourceCache.shared.baseURL(appID: appID))
+        webView.loadHTMLString(initialDocument, baseURL: SourceCache.shared.baseURL(appID: appID))
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         guard context.coordinator.lastHTML != html else { return }
         context.coordinator.lastHTML = html
-        uiView.loadHTMLString(html, baseURL: SourceCache.shared.baseURL(appID: appID))
+        let document = context.coordinator.documentForReload(originalHTML: html)
+        uiView.loadHTMLString(document, baseURL: SourceCache.shared.baseURL(appID: appID))
     }
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
@@ -283,6 +309,8 @@ struct HTMLWebView: UIViewRepresentable {
         controller.removeScriptMessageHandler(forName: "htmlappDownload")
         controller.removeScriptMessageHandler(forName: "htmlappNative")
         controller.removeScriptMessageHandler(forName: "htmlappNetwork")
+        controller.removeScriptMessageHandler(forName: "htmlappState")
+        controller.removeScriptMessageHandler(forName: "htmlappOfflineCache")
         controller.removeScriptMessageHandler(forName: "htmlappRuntimeError")
         coordinator.shutdown()
         uiView.stopLoading()
