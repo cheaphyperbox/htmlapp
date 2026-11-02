@@ -291,9 +291,25 @@ final class HTMLAppOfflineCache {
         var output = html
         var count = 0
         for entry in entries.sorted(by: { $0.originalURL.count > $1.originalURL.count }) {
-            guard output.contains(entry.originalURL) else { continue }
-            output = output.replacingOccurrences(of: entry.originalURL, with: entry.relativePath)
-            count += 1
+            let original = entry.originalURL
+            let local = entry.relativePath
+            let forms = [
+                ("src=\"" + original + "\"", "src=\"" + local + "\""),
+                ("src='" + original + "'", "src='" + local + "'"),
+                ("href=\"" + original + "\"", "href=\"" + local + "\""),
+                ("href='" + original + "'", "href='" + local + "'"),
+                ("poster=\"" + original + "\"", "poster=\"" + local + "\""),
+                ("poster='" + original + "'", "poster='" + local + "'"),
+                ("url(\"" + original + "\")", "url(\"" + local + "\")"),
+                ("url('" + original + "')", "url('" + local + "')"),
+                ("url(" + original + ")", "url(" + local + ")")
+            ]
+            var replaced = false
+            for (from, to) in forms where output.contains(from) {
+                output = output.replacingOccurrences(of: from, with: to)
+                replaced = true
+            }
+            if replaced { count += 1 }
         }
         return (output, count)
     }
