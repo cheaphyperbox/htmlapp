@@ -31,6 +31,8 @@ enum HTMLAppProcessSession {
 enum HTMLAppRuntimeStateStore {
     private static let maxHTMLBytes = 3_500_000
     private static let queue = DispatchQueue(label: "com.mekabrine.htmlapp.runtime-state")
+    private static let memoryLock = NSLock()
+    private static var memory: [String: HTMLAppRuntimeSnapshot] = [:]
 
     private static func safeID(_ appID: String) -> String {
         let value = appID.filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
@@ -77,6 +79,9 @@ enum HTMLAppRuntimeStateStore {
             sessionStorage: strings(body["sessionStorage"]),
             focusedSelector: body["focusedSelector"] as? String
         )
+        memoryLock.lock()
+        memory[appID] = snapshot
+        memoryLock.unlock()
         queue.async {
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
             try? data.write(to: url(appID: appID), options: .atomic)
@@ -84,15 +89,28 @@ enum HTMLAppRuntimeStateStore {
     }
 
     static func load(appID: String) -> HTMLAppRuntimeSnapshot? {
-        queue.sync {
+        memoryLock.lock()
+        let cached = memory[appID]
+        memoryLock.unlock()
+        if let cached { return cached }
+        let disk: HTMLAppRuntimeSnapshot? = queue.sync {
             guard let data = try? Data(contentsOf: url(appID: appID)),
                   let snapshot = try? JSONDecoder().decode(HTMLAppRuntimeSnapshot.self, from: data),
                   snapshot.appID == appID else { return nil }
             return snapshot
         }
+        if let disk {
+            memoryLock.lock()
+            memory[appID] = disk
+            memoryLock.unlock()
+        }
+        return disk
     }
 
     static func remove(appID: String) {
+        memoryLock.lock()
+        memory.removeValue(forKey: appID)
+        memoryLock.unlock()
         queue.async { try? FileManager.default.removeItem(at: url(appID: appID)) }
     }
 
