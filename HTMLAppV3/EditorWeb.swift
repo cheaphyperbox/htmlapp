@@ -338,10 +338,40 @@ struct HTMLWebView: UIViewRepresentable {
         private var downloadDestinations: [ObjectIdentifier: URL] = [:]
         private var blobTransfers: [String: BlobTransfer] = [:]
         private var launchObserver: NSObjectProtocol?
+        private var pendingStateRestore: HTMLAppRuntimeSnapshot?
+        private var coldRestoreSnapshot: HTMLAppRuntimeSnapshot?
+        private var offlineNoticePending = false
+        private var offlineNoticeShown = false
 
         init(appID: String, onJavaScriptError: ((String) -> Void)?) {
             self.appID = appID
             self.onJavaScriptError = onJavaScriptError
+        }
+
+        func initialDocument(originalHTML: String) -> String {
+            guard appID != "PREVIEW" else { return originalHTML }
+            var document = originalHTML
+            if let snapshot = HTMLAppRuntimeStateStore.load(appID: appID) {
+                if snapshot.processSessionID == HTMLAppProcessSession.id {
+                    pendingStateRestore = snapshot
+                    document = snapshot.html
+                } else if !HTMLAppProcessSession.hasDecidedColdRestore(appID: appID) {
+                    coldRestoreSnapshot = snapshot
+                }
+            }
+            if HTMLAppOfflineCache.shared.isOffline {
+                let rewritten = HTMLAppOfflineCache.shared.rewriteHTMLForOffline(appID: appID, html: document)
+                document = rewritten.0
+                offlineNoticePending = rewritten.1 > 0
+            }
+            return document
+        }
+
+        func documentForReload(originalHTML: String) -> String {
+            guard appID != "PREVIEW", HTMLAppOfflineCache.shared.isOffline else { return originalHTML }
+            let rewritten = HTMLAppOfflineCache.shared.rewriteHTMLForOffline(appID: appID, html: originalHTML)
+            offlineNoticePending = offlineNoticePending || rewritten.1 > 0
+            return rewritten.0
         }
 
         func attach(_ webView: WKWebView, initialHTML: String) {
@@ -359,6 +389,79 @@ struct HTMLWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? HTMLAppDisplayWebView)?.updateDisplay(force: true)
+
+            if let snapshot = pendingStateRestore {
+                pendingStateRestore = nil
+                webView.evaluateJavaScript(HTMLAppRuntimeStateStore.restorationScript(snapshot))
+                showOfflineNoticeIfNeeded()
+                return
+            }
+
+            if let snapshot = coldRestoreSnapshot,
+               !HTMLAppProcessSession.hasDecidedColdRestore(appID: appID) {
+                offerColdRestore(snapshot, in: webView)
+                return
+            }
+
+            webView.evaluateJavaScript("window.__htmlappStateCaptureEnabled = true;")
+            showOfflineNoticeIfNeeded()
+        }
+
+        private func offerColdRestore(_ snapshot: HTMLAppRuntimeSnapshot, in webView: WKWebView) {
+            guard let presenter = topViewController(from: webView.window?.rootViewController) else {
+                HTMLAppProcessSession.markColdRestoreDecision(appID: appID)
+                coldRestoreSnapshot = nil
+                webView.evaluateJavaScript("window.__htmlappStateCaptureEnabled = true;")
+                showOfflineNoticeIfNeeded()
+                return
+            }
+            let alert = UIAlertController(
+                title: "Restore previous app session?",
+                message: "HTMLApp was closed since this app state was captured. Restore the last screen, scroll position, typed values and saved web state?",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Start Fresh", style: .cancel) { [weak self, weak webView] _ in
+                guard let self, let webView else { return }
+                HTMLAppProcessSession.markColdRestoreDecision(appID: self.appID)
+                self.coldRestoreSnapshot = nil
+                webView.evaluateJavaScript("window.__htmlappStateCaptureEnabled = true;")
+                self.showOfflineNoticeIfNeeded()
+            })
+            alert.addAction(UIAlertAction(title: "Restore", style: .default) { [weak self, weak webView] _ in
+                guard let self, let webView else { return }
+                HTMLAppProcessSession.markColdRestoreDecision(appID: self.appID)
+                self.coldRestoreSnapshot = nil
+                self.pendingStateRestore = snapshot
+                var document = snapshot.html
+                if HTMLAppOfflineCache.shared.isOffline {
+                    let rewritten = HTMLAppOfflineCache.shared.rewriteHTMLForOffline(
+                        appID: self.appID, html: document)
+                    document = rewritten.0
+                    self.offlineNoticePending = self.offlineNoticePending || rewritten.1 > 0
+                }
+                webView.loadHTMLString(document, baseURL: SourceCache.shared.baseURL(appID: self.appID))
+            })
+            presenter.present(alert, animated: true)
+        }
+
+        private func showOfflineNoticeIfNeeded() {
+            guard offlineNoticePending, !offlineNoticeShown,
+                  let webView,
+                  let presenter = topViewController(from: webView.window?.rootViewController) else { return }
+            offlineNoticeShown = true
+            let alert = UIAlertController(
+                title: "Experimental Offline Copy",
+                message: "Your device is offline. HTMLApp is using saved copies of resources from earlier app sessions where available. Live APIs, logins, uploads and uncached resources may still be unavailable.",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Continue Offline", style: .default))
+            presenter.present(alert, animated: true)
+        }
+
+        private func topViewController(from root: UIViewController?) -> UIViewController? {
+            var current = root
+            while let presented = current?.presentedViewController { current = presented }
+            if let navigation = current as? UINavigationController { return navigation.visibleViewController ?? navigation }
+            if let tabs = current as? UITabBarController { return tabs.selectedViewController ?? tabs }
+            return current
         }
 
         func shutdown() {
