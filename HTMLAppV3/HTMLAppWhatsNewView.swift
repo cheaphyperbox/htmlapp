@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.53"
-    static let compiledBuild = "61"
+    static let compiledVersion = "1.6.54"
+    static let compiledBuild = "62"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.54" { return [
+            Entry(id: "experimental-offline-snapshots", title: "Experimental offline resource snapshots", description: "Saved apps refresh external GET resources every third opening and collect loaded resources during use. Cached copies activate only while offline and show a warning when used.", symbol: "arrow.down.circle", tint: .blue),
+            Entry(id: "live-app-continuity", title: "Live app state continuity", description: "HTMLApp preserves scroll position, typed controls, web storage and the current rendered HTML while switching apps, with a restore choice after a later cold launch.", symbol: "rectangle.stack.badge.play", tint: .purple),
+            Entry(id: "instant-url-switch", title: "Instant URL-scheme switching", description: "htmlapp://open links now checkpoint the current app and switch directly to the requested saved app.", symbol: "arrow.left.arrow.right", tint: .green)
+        ] }
         if version == "1.6.53" { return [
             Entry(id: "style-reliability", title: "Reliable first three Forge looks", description: "Restored the structured first-three style system for more consistent app quality, while keeping additional looks freeform.", symbol: "paintpalette.fill", tint: .purple),
             Entry(id: "auto-first-three", title: "Three previews automatically", description: "New app generation now always starts by creating the first three style previews automatically.", symbol: "sparkles.rectangle.stack", tint: .blue)
