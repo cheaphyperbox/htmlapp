@@ -182,7 +182,9 @@ settings_source = source("HTMLAppV3/AISettingsView.swift")
 assert "} // Developer Mode" in settings_source
 assert settings_source.index("} // Developer Mode") < settings_source.index('Label(saved ? "Saved"')
 styles = source("HTMLAppV3/ForgeStylePreview.swift")
-assert all(direction in styles for direction in ("Modern / professional", "Technical / detailed", "Kiddy / easy-to-use"))
+assert all(direction in styles for direction in ("Editorial", "Workbench", "Playful"))
+assert "Mandatory composition:" in styles
+assert "Keep the interface specific to this product rather than chasing novelty." in styles
 assert 'No fake iPhone frame' in styles
 assert 'FUNCTIONALITY FIRST:' in source("HTMLAppV3/ForgeProductContract.swift")
 assert 'LOADING UX:' in source("HTMLAppV3/ForgeProductContract.swift")
@@ -771,6 +773,12 @@ assert 'CFBundleDocumentTypes:' in project and 'public.html' in project
 # Version/build consistency is already validated dynamically at the top of this script.
 assert f'MARKETING_VERSION: "{version}"' in project
 assert f'CURRENT_PROJECT_VERSION: "{build}"' in project
+
+# Every normal new-app generation starts with three previews; the old setting
+# may remain for preference migration but no longer bypasses the first three.
+assert 'if existingApp == nil && !demoMode {' in forge
+assert '(existingApp == nil && !demoMode ? "Start Generating" : "Make My App")' in forge
+assert 'for index in 0..<3 {' in forge
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
