@@ -50,18 +50,28 @@ enum HTMLAppRuntimeStateStore {
               html.utf8.count <= maxHTMLBytes else { return }
 
         func strings(_ value: Any?) -> [String: String] {
-            value as? [String: String] ?? [:]
+            guard let dictionary = value as? [String: Any] else {
+                return value as? [String: String] ?? [:]
+            }
+            return dictionary.reduce(into: [:]) { result, pair in
+                if let string = pair.value as? String { result[pair.key] = string }
+            }
         }
-        let fields = body["fields"] as? [[String: String]] ?? []
-        guard fields.count <= 1000 else { return }
+        let rawFields = body["fields"] as? [[String: Any]] ?? []
+        let fields: [[String: String]] = rawFields.prefix(1000).compactMap { item in
+            guard let selector = item["selector"] as? String,
+                  let kind = item["kind"] as? String,
+                  let value = item["value"] as? String else { return nil }
+            return ["selector": selector, "kind": kind, "value": value]
+        }
 
         let snapshot = HTMLAppRuntimeSnapshot(
             appID: appID,
             processSessionID: HTMLAppProcessSession.id,
             capturedAt: Date(),
             html: html,
-            scrollX: body["scrollX"] as? Double ?? 0,
-            scrollY: body["scrollY"] as? Double ?? 0,
+            scrollX: (body["scrollX"] as? NSNumber)?.doubleValue ?? 0,
+            scrollY: (body["scrollY"] as? NSNumber)?.doubleValue ?? 0,
             fields: fields,
             localStorage: strings(body["localStorage"]),
             sessionStorage: strings(body["sessionStorage"]),
