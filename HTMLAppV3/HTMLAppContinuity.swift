@@ -336,7 +336,7 @@ final class HTMLAppOfflineCache {
     }
 
     private static func discoverURLs(in html: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"https?://[^\s'"<>\\)]+ "#.trimmingCharacters(in: .whitespaces)) else {
+        guard let regex = try? NSRegularExpression(pattern: "https?://[^\\\\s'\\\"<>\\\\\\\\)]+") else {
             return []
         }
         let source = html as NSString
