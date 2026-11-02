@@ -589,6 +589,14 @@ final class AppStore: ObservableObject {
         }
 
         apps[index].lastOpenedAt = Date()
+        let launchedApp = apps[index]
+        if HTMLAppOfflineCache.shared.shouldRefreshOnOpen(appID: launchedApp.id),
+           !HTMLAppOfflineCache.shared.isOffline {
+            Task(priority: .utility) {
+                await HTMLAppOfflineCache.shared.refreshFromHTML(
+                    appID: launchedApp.id, html: launchedApp.html)
+            }
+        }
         // Loading an app must not synchronously re-encode, validate and
         // backup the entire library before its WebView can appear.
         runningApp = apps[index]
@@ -862,6 +870,7 @@ final class AppStore: ObservableObject {
         apps.removeAll { $0.id == app.id }
         save()
         SourceCache.shared.remove(appID: app.id)
+        HTMLAppRuntimeStateStore.remove(appID: app.id)
         WebsiteArchiveManager.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
         HTMLSensorPermissionPolicy.reset(appID: app.id)
@@ -1080,11 +1089,10 @@ final class AppStore: ObservableObject {
             return
         }
 
-        if UserDefaults.standard.object(forKey: "askBeforeSwitch") as? Bool ?? true {
-            pendingSwitchApp = app
-        } else {
-            replaceRunningApp(with: app)
-        }
+        // URL-scheme launches are explicit navigation requests. Preserve the
+        // outgoing app's continuously captured state and switch immediately.
+        pendingSwitchApp = nil
+        replaceRunningApp(with: app)
     }
 
     func takeRemoteHTMLImportRequest() -> URL? {
