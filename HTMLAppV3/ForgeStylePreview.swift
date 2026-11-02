@@ -114,19 +114,43 @@ enum ForgeStylePreviewService {
         // no locally drawn replacement is ever returned.
         let recoveryConfig = AISettingsStore.configuration(for: .coder)
         // Broad audience directions leave composition and visual identity to the AI.
-        let directions: [(String, String, String)] = [
-            ("Modern", "Modern / professional", "Modern and professional. Choose the visual identity, layout, palette, typography and interactions freely to suit this product."),
-            ("Technical", "Technical / detailed", "Technical and detailed. Choose how to organize depth, precision and useful information freely to suit this product."),
-            ("Kiddy", "Kiddy / easy-to-use", "Kiddy and easy to use. Choose an approachable, friendly experience with clear language and simple interactions freely to suit this product.")
+        // Restore the earlier structured style system for the first three
+        // previews. These fixed compositions produced more reliable, usable
+        // mockups while still giving the user visibly different directions.
+        // Additional styles remain freeform.
+        let archetypes: [(String, String, String)] = [
+            ("Editorial", "Immersive magazine-like layout",
+             "Large asymmetric hero typography, full-bleed visuals, editorial gutters. No card grid or tab bar."),
+            ("Workbench", "Precise professional workspace",
+             "Dense information architecture, split utility zones, tool rail and inline data. No hero banner or decorative tiles."),
+            ("Playful", "Expressive illustrated experience",
+             "Oversized rounded objects, bouncy layered shapes, staggered interactive story blocks. No table or traditional app header."),
+            ("Retro Terminal", "High-contrast console aesthetic",
+             "Monospace display, sharp frames, terminal-inspired labels and command strips. No floating pastel cards."),
+            ("Tactile", "Realistic depth and materials",
+             "Layered paper or enamel surfaces, tactile knobs and controls, restrained shadows. No generic dark glass dashboard."),
+            ("Type-First", "Minimal content-led design",
+             "Large disciplined type, whitespace, thin dividers and one accent. No hero illustration, gradients or card grid."),
+            ("Neo Brutalist", "Bold graphic poster UI",
+             "Hard outlines, offset shadows, loud accent blocks, irregular hierarchy and strong button geometry."),
+            ("Organic", "Soft calm fluid interface",
+             "Organic silhouettes, tonal surfaces, flowing spacing and understated controls, no square metric grid."),
+            ("Command Center", "Focused task-oriented utility",
+             "One powerful command area, compact supporting detail rail and keyboard-like action row. No banner or bottom tabs.")
         ]
+        let round = max(0, regeneration)
         let slot = max(0, index % 3)
-        let variant = directions[slot]
+        let selectedIndex = (round * 3 + slot) % archetypes.count
+        let variant = archetypes[selectedIndex]
+        let competing = (0..<3).filter { $0 != slot }.map {
+            archetypes[(round * 3 + $0) % archetypes.count].0
+        }.joined(separator: ", ")
         let freeform = index >= 3
         let user = """
         App idea: \(String(request.prefix(2300)))
         Requested changes: \(String(feedback.prefix(650)))
-        \(freeform ? "Choose your own entirely original visual style, layout, interaction pattern and design language. Do not follow any predefined aesthetic or archetype." : "General direction: \(variant.1). \(variant.2) No mandatory composition, palette or aesthetic.")
-        Style regeneration round: \(regeneration). Invent a completely new visual identity, section organization and interaction pattern on each round.
+        \(freeform ? "Choose your own entirely original visual style, layout, interaction pattern and design language. Do not follow any predefined aesthetic or archetype." : "Design: \(variant.0) — \(variant.1). Mandatory composition: \(variant.2). Avoid the other two looks: \(competing).")
+        Style regeneration round: \(regeneration). Keep the interface specific to this product rather than chasing novelty.
         System appearance: \(appearance). Design in this light/dark mode unless the user explicitly requested another mode.
         Every visible element MUST be relevant to the described app.
         Invent a concrete brand name, realistic starter records, and a meaningful
@@ -138,7 +162,7 @@ enum ForgeStylePreviewService {
         "Overview", "Make progress your way", "Recent activity" or fake tabs.
         Style \(slot + 1) must differ in layout, section order, hierarchy,
         map prominence, button placement and navigation — not merely colors.
-        \(freeform ? "The AI must invent the design freely; no style presets." : "The direction guides the audience and feel only; invent the design freely.")
+        \(freeform ? "The AI must invent the design freely; no style presets." : "The selected layout archetype is mandatory.")
         """
         let system = """
         Return ONLY a complete standalone HTML document starting with <!DOCTYPE html>.
