@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.54"
-    static let compiledBuild = "62"
+    static let compiledVersion = "1.6.55"
+    static let compiledBuild = "63"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.55" { return [
+            Entry(id: "build-style-tests", title: "Build test compatibility fix", description: "Updated stale style-preview source assertions to recognize the restored first three layouts and made release tests dynamic.", symbol: "checkmark.seal", tint: .green)
+        ] }
         if version == "1.6.54" { return [
             Entry(id: "experimental-offline-snapshots", title: "Experimental offline resource snapshots", description: "Saved apps refresh external GET resources every third opening and collect loaded resources during use. Cached copies activate only while offline and show a warning when used.", symbol: "arrow.down.circle", tint: .blue),
             Entry(id: "live-app-continuity", title: "Live app state continuity", description: "HTMLApp preserves scroll position, typed controls, web storage and the current rendered HTML while switching apps, with a restore choice after a later cold launch.", symbol: "rectangle.stack.badge.play", tint: .purple),
