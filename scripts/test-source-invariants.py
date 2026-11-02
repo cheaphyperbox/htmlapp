@@ -273,8 +273,8 @@ assert 'import MediaPlayer' in music and 'MPNowPlayingInfoCenter' in music
 # Regression coverage for divergent AI looks and in-preview JavaScript errors.
 assert 'styleRegenerationRound += 1' in forge
 assert 'regeneration: regenerationRound' in forge
-assert 'Mandatory composition:' not in styles and 'no prescribed layout' in styles, "Initial looks guide feel without forcing a composition"
-assert 'freeform = index >= 3' in styles and 'no style presets' in styles, "Additional AI looks must be unrestricted"
+assert 'Mandatory composition:' in styles and 'let archetypes:' in styles, "Initial looks must retain the restored structured composition"
+assert 'freeform = index >= 3' in styles and 'no style presets' in styles.lower(), "Additional AI looks must remain freeform"
 assert 'onJavaScriptError:' in forge and 'JavaScript errors detected' in forge
 assert 'Button("Ask AI to Fix")' in forge
 web_source = source("HTMLAppV3/EditorWeb.swift")
@@ -809,8 +809,8 @@ assert 'HTMLAppOfflineCache.shared.shouldRefreshOnOpen' in app_core
 assert 'HTMLAppRuntimeStateStore.remove(appID: app.id)' in app_core
 assert 'pendingSwitchApp = nil' in app_core
 assert 'replaceRunningApp(with: app)' in app_core
-assert 'MARKETING_VERSION: "1.6.54"' in project
-assert 'CURRENT_PROJECT_VERSION: "62"' in project
+assert f'MARKETING_VERSION: "{version}"' in project
+assert f'CURRENT_PROJECT_VERSION: "{build}"' in project
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
