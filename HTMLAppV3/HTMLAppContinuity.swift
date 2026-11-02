@@ -348,7 +348,7 @@ final class HTMLAppOfflineCache {
             try { window.webkit.messageHandlers.htmlappOfflineCache.postMessage({offlineActivated:true}); } catch (_) {}
             rewrite(document);
           });
-          new MutationObserver(records => {
+          const observer = new MutationObserver(records => {
             for (const record of records) for (const node of record.addedNodes) {
               if (node?.nodeType === 1) {
                 rewrite(node);
@@ -359,7 +359,15 @@ final class HTMLAppOfflineCache {
                 }
               }
             }
-          }).observe(document.documentElement, {subtree:true, childList:true});
+          });
+          const observe = () => {
+            if (document.documentElement) {
+              observer.observe(document.documentElement, {subtree:true, childList:true});
+            } else {
+              setTimeout(observe, 0);
+            }
+          };
+          observe();
         })();
         """
     }
