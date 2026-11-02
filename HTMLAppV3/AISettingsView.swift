@@ -79,6 +79,22 @@ struct AIConfigurationSettingsView: View {
                 Text("Compact generation is not yet active; standard generation remains in use.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Use a subscription AI to create apps") {
+                Text("Give this skill file to a subscription AI assistant so it can create standalone HTMLApp apps without configuring an API key in HTMLApp. The assistant returns an HTML file that you import into your library.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let skillURL = Bundle.main.url(forResource: "HTMLApp-AI-App-Builder-SKILL", withExtension: "md") {
+                    ShareLink(item: skillURL, preview: SharePreview("HTMLApp AI App Builder Skill")) {
+                        Label("Share or Save AI Builder Skill", systemImage: "square.and.arrow.up")
+                    }
+                } else {
+                    Text("The AI builder skill is not included in this installation.")
+                        .foregroundStyle(.secondary)
+                }
+                Text("The skill documents available native capabilities and warns that an HTML file alone cannot provide a remote API or backend. External AI subscriptions are not linked to HTMLApp automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Visual taste memory") {
                 Toggle("Learn my visual preferences", isOn: $forgeTasteEnabled)
                 Text("Optional. HTMLApp keeps a small local summary of selected design tokens and recurring visual edit requests. It does not store whole prompts, app source or names. The summary is included in future cloud AI instructions while enabled.")
