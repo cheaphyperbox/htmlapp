@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.56"
-    static let compiledBuild = "64"
+    static let compiledVersion = "1.6.57"
+    static let compiledBuild = "65"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.57" { return [
+            Entry(id: "checkpoint-compile-fix", title: "Runtime checkpoint build fix", description: "Fixed the explicit Swift closure capture required for app-state checkpoint notifications in Xcode 26.", symbol: "checkmark.seal", tint: .green)
+        ] }
         if version == "1.6.56" { return [
             Entry(id: "offline-build-invariants", title: "Offline build checks corrected", description: "The source regression suite now checks multiline Swift offline-cache dependencies without mistaking code formatting for missing functionality.", symbol: "checkmark.seal", tint: .green)
         ] }
