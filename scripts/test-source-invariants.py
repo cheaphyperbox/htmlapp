@@ -785,11 +785,18 @@ continuity = source("HTMLAppV3/HTMLAppContinuity.swift")
 editor_web = source("HTMLAppV3/EditorWeb.swift")
 app_core = source("HTMLAppV3/AppCore.swift")
 assert 'return count % 3 == 0' in continuity
-assert 'setInterval(capture, 2000)' in continuity
+assert 'setInterval(() => capture(false), 2000)' in continuity
 assert 'document.documentElement?.outerHTML' in continuity
 assert 'localStorage: storageObject(localStorage)' in continuity
 assert 'sessionStorage: storageObject(sessionStorage)' in continuity
 assert 'window.__htmlappOfflineExperimental = true' in continuity
+assert 'scrollRegions' in continuity and 'canvases' in continuity and 'media' in continuity
+assert 'stateObserver.observe' in continuity
+assert 'Storage.prototype[method]' in continuity
+assert 'data-htmlapp-original-' in continuity
+assert "addEventListener('online', () => restoreOnline(document))" in continuity
+assert 'textDependencies(in: text' in continuity
+assert 'await cacheOne(appID: appID, url: dependency.absoluteURL, depth: depth + 1)' in continuity
 assert "const cached = (value) => offline()" in continuity
 assert 'Cache-Control' in continuity and 'no-store' in continuity
 assert 'data.count <= 15_000_000' in continuity
