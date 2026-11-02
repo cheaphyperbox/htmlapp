@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.51"
-    static let compiledBuild = "59"
+    static let compiledVersion = "1.6.52"
+    static let compiledBuild = "60"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.52" { return [
+            Entry(id: "dynamic-version-invariant", title: "Release test fix", description: "Source invariants now validate the current compiled version dynamically instead of failing after every version bump.", symbol: "checkmark.seal", tint: .green)
+        ] }
         if version == "1.6.51" { return [
             Entry(id: "runner-invariants", title: "Build workflow compatibility fix", description: "Updated build source checks for selectable Intel and Apple Silicon macOS runners while retaining the Xcode 26 compatibility requirement.", symbol: "checkmark.shield", tint: .green)
         ] }
