@@ -397,7 +397,7 @@ struct HTMLWebView: UIViewRepresentable {
                     queue: .main
                 ) { [weak webView] notification in
                     guard let requested = notification.object as? String,
-                          requested == appID else { return }
+                          requested == self.appID else { return }
                     webView?.evaluateJavaScript("window.__htmlappCaptureStateNow?.();")
                 }
             }
