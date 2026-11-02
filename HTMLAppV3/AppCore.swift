@@ -88,6 +88,11 @@ struct HTMLAppMain: App {
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLApp.FaceDownShakeExit"))) { _ in
                     // The runner is a SwiftUI full-screen cover, not a UIKit
                     // controller that can reliably be dismissed via responders.
+                    if let current = store.runningApp {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("HTMLAppCaptureRuntimeState"),
+                            object: current.id)
+                    }
                     store.runningApp = nil
                 }
                 .task { await store.syncICloud() }
