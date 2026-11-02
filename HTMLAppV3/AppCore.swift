@@ -122,6 +122,11 @@ struct HTMLAppMain: App {
                     Text("HTMLApp couldn't read your saved apps. It preserved the damaged file rather than deleting it. Starting empty will not restore those apps. Use Keep Library Protected until you've recovered your data.")
                 }
                 .onOpenURL { url in
+                    if url.isFileURL, ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("HTMLAppExternalHTMLFileOpened"), object: url)
+                        return
+                    }
                     // A cold Lock Screen launch can race the What's New cover.
                     // Route once that cover is fully dismissed on older iOS.
                     if presentingWhatsNew && url.scheme?.lowercased() == "htmlapp" &&
