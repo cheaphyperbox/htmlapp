@@ -115,7 +115,12 @@ struct WebRunner: View {
                 HTMLWebView(html: app.html, appID: app.id)
                     .safeAreaInset(edge: .top, spacing: 0) {
                         HStack {
-                            Button { store.runningApp = nil } label: {
+                            Button {
+                                NotificationCenter.default.post(
+                                    name: Notification.Name("HTMLAppCaptureRuntimeState"),
+                                    object: app.id)
+                                store.runningApp = nil
+                            } label: {
                                 Label("Apps", systemImage: "square.grid.2x2")
                                     .frame(minHeight: 48)
                             }
@@ -537,6 +542,10 @@ struct HTMLWebView: UIViewRepresentable {
                 if body["offlineActivated"] as? Bool == true,
                    !HTMLAppOfflineCache.shared.manifest(appID: appID).entries.isEmpty {
                     offlineNoticePending = true
+                    if let script = Optional(HTMLAppOfflineCache.shared.runtimeOfflineScript(appID: appID)),
+                       !script.isEmpty {
+                        webView?.evaluateJavaScript(script)
+                    }
                     showOfflineNoticeIfNeeded()
                     return
                 }
