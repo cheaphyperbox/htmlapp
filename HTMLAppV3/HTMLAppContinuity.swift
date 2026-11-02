@@ -270,6 +270,68 @@ final class HTMLAppOfflineCache {
         return (output, count)
     }
 
+    func runtimeOfflineScript(appID: String) -> String {
+        guard isOffline else { return "" }
+        let pairs = manifest(appID: appID).entries.reduce(into: [String: String]()) {
+            $0[$1.key] = $1.value.relativePath
+        }
+        guard !pairs.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: pairs),
+              let json = String(data: data, encoding: .utf8) else { return "" }
+        return """
+        (() => {
+          const cache = (json);
+          const absolute = (value) => {
+            try { return new URL(String(value), document.baseURI).href; }
+            catch (_) { return String(value); }
+          };
+          const cached = (value) => cache[absolute(value)] || null;
+          window.__htmlappOfflineExperimental = true;
+          const originalFetch = window.fetch?.bind(window);
+          if (originalFetch) {
+            window.fetch = (input, init = {}) => {
+              const method = String(init?.method || (input && input.method) || 'GET').toUpperCase();
+              if (method === 'GET') {
+                const value = typeof input === 'string' ? input : input?.url;
+                const local = cached(value);
+                if (local) return originalFetch(local, init);
+              }
+              return originalFetch(input, init);
+            };
+          }
+          if (window.XMLHttpRequest) {
+            const open = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+              const local = String(method || 'GET').toUpperCase() === 'GET' ? cached(url) : null;
+              return open.call(this, method, local || url, ...rest);
+            };
+          }
+          const rewrite = (root = document) => {
+            for (const el of root.querySelectorAll?.('[src],[href],[poster]') || []) {
+              for (const attr of ['src','href','poster']) {
+                const value = el.getAttribute?.(attr);
+                const local = value && cached(value);
+                if (local) el.setAttribute(attr, local);
+              }
+            }
+          };
+          document.addEventListener('DOMContentLoaded', () => rewrite(document), {once:true});
+          new MutationObserver(records => {
+            for (const record of records) for (const node of record.addedNodes) {
+              if (node?.nodeType === 1) {
+                rewrite(node);
+                for (const attr of ['src','href','poster']) {
+                  const value = node.getAttribute?.(attr);
+                  const local = value && cached(value);
+                  if (local) node.setAttribute(attr, local);
+                }
+              }
+            }
+          }).observe(document.documentElement, {subtree:true, childList:true});
+        })();
+        """
+    }
+
     func shouldRefreshOnOpen(appID: String) -> Bool {
         let key = "htmlapp.offline.openCount." + appID
         let count = UserDefaults.standard.integer(forKey: key) + 1
