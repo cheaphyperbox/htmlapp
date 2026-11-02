@@ -714,7 +714,7 @@ struct AIGenerationView: View {
                     submitPromptGeneration()
                 } label: {
                     Label(generateAfterVoiceTranscription ? "Finishing transcription…" :
-                          (existingApp == nil && stylePickerEnabled ? "Start Generating" : "Make My App"),
+                          (existingApp == nil && !demoMode ? "Start Generating" : "Make My App"),
                           systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
@@ -830,7 +830,7 @@ struct AIGenerationView: View {
         }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if requestOfflineForgeIfNeeded(edit: false) { return }
-        if existingApp == nil && stylePickerEnabled && !demoMode {
+        if existingApp == nil && !demoMode {
             exploreStyleOptions()
         } else {
             selectedStyle = nil
