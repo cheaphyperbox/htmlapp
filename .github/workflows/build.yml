@@ -4,6 +4,15 @@ name: Build HTMLApp IPA
 on:
   workflow_dispatch:
     inputs:
+      macos_runner:
+        description: "Mac runner (Intel can help when Apple Silicon runners are queued)"
+        required: true
+        type: choice
+        default: macos-26-intel
+        options:
+          - macos-26-intel
+          - macos-26
+          - macos-15-intel
       run_widget_simulator_tests:
         description: "Also run slower simulator-based widget tests"
         required: false
@@ -17,7 +26,7 @@ concurrency:
 jobs:
   build:
     name: Build HTMLApp IPA
-    runs-on: macos-26
+    runs-on: ${{ inputs.macos_runner || 'macos-26-intel' }}
 
     steps:
       - name: Checkout
