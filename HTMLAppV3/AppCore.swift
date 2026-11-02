@@ -540,6 +540,7 @@ final class AppStore: ObservableObject {
         apps[index].name = name
         apps[index].summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
         apps[index].html = html
+        HTMLAppRuntimeStateStore.remove(appID: app.id)
         apps[index].favicon = await HTMLAppIconTools.savedIcon(html: html, name: name)
         apps[index].updatedAt = Date()
         save()
@@ -555,6 +556,7 @@ final class AppStore: ObservableObject {
         let name = HTMLTools.title(in: snapshot.html) ?? url.host ?? app.name
         apps[index].name = name
         apps[index].html = snapshot.html
+        HTMLAppRuntimeStateStore.remove(appID: app.id)
         apps[index].websiteSourceURL = url.absoluteString
         apps[index].websiteFingerprint = snapshot.fingerprint
         apps[index].favicon = await HTMLAppIconTools.savedIcon(html: snapshot.html, name: name)
