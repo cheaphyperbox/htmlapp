@@ -768,8 +768,9 @@ assert 'serverDependentImport = payload' in library
 assert 'Import Hosted Website' in library
 assert 'Import Local Copy' in library
 assert 'CFBundleDocumentTypes:' in project and 'public.html' in project
-assert 'MARKETING_VERSION: "1.6.49"' in project
-assert 'CURRENT_PROJECT_VERSION: "57"' in project
+# Version/build consistency is already validated dynamically at the top of this script.
+assert f'MARKETING_VERSION: "{version}"' in project
+assert f'CURRENT_PROJECT_VERSION: "{build}"' in project
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
