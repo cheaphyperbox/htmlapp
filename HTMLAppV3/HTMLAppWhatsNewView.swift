@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.55"
-    static let compiledBuild = "63"
+    static let compiledVersion = "1.6.56"
+    static let compiledBuild = "64"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.56" { return [
+            Entry(id: "offline-build-invariants", title: "Offline build checks corrected", description: "The source regression suite now checks multiline Swift offline-cache dependencies without mistaking code formatting for missing functionality.", symbol: "checkmark.seal", tint: .green)
+        ] }
         if version == "1.6.55" { return [
             Entry(id: "build-style-tests", title: "Build test compatibility fix", description: "Updated stale style-preview source assertions to recognize the restored first three layouts and made release tests dynamic.", symbol: "checkmark.seal", tint: .green)
         ] }
