@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.52"
-    static let compiledBuild = "60"
+    static let compiledVersion = "1.6.53"
+    static let compiledBuild = "61"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,10 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.53" { return [
+            Entry(id: "style-reliability", title: "Reliable first three Forge looks", description: "Restored the structured first-three style system for more consistent app quality, while keeping additional looks freeform.", symbol: "paintpalette.fill", tint: .purple),
+            Entry(id: "auto-first-three", title: "Three previews automatically", description: "New app generation now always starts by creating the first three style previews automatically.", symbol: "sparkles.rectangle.stack", tint: .blue)
+        ] }
         if version == "1.6.52" { return [
             Entry(id: "dynamic-version-invariant", title: "Release test fix", description: "Source invariants now validate the current compiled version dynamically instead of failing after every version bump.", symbol: "checkmark.seal", tint: .green)
         ] }
