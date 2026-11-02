@@ -362,7 +362,7 @@ struct HTMLWebView: UIViewRepresentable {
             if HTMLAppOfflineCache.shared.isOffline {
                 let rewritten = HTMLAppOfflineCache.shared.rewriteHTMLForOffline(appID: appID, html: document)
                 document = rewritten.0
-                offlineNoticePending = rewritten.1 > 0
+                offlineNoticePending = !HTMLAppOfflineCache.shared.manifest(appID: appID).entries.isEmpty
             }
             return document
         }
@@ -523,6 +523,12 @@ struct HTMLWebView: UIViewRepresentable {
                 HTMLAppRuntimeStateStore.save(appID: appID, body: body)
 
             case "htmlappOfflineCache":
+                if body["offlineActivated"] as? Bool == true,
+                   !HTMLAppOfflineCache.shared.manifest(appID: appID).entries.isEmpty {
+                    offlineNoticePending = true
+                    showOfflineNoticeIfNeeded()
+                    return
+                }
                 guard let urls = body["urls"] as? [String], !urls.isEmpty else { return }
                 let appID = self.appID
                 Task.detached(priority: .utility) {
