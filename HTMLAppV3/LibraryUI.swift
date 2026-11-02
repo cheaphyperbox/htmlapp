@@ -53,6 +53,7 @@ struct LibraryView: View {
     @State private var nearbyTransferRoute: NearbyTransferRoute?
     @State private var pendingImport: HTMLFileImportPayload?
     @State private var queuedFileImport: HTMLFileImportPayload?
+    @State private var serverDependentImport: HTMLFileImportPayload?
     @State private var pendingDelete: SavedHTMLApp?
     @State private var permissionsApp: SavedHTMLApp?
     @State private var storageManagementApp: SavedHTMLApp?
@@ -150,6 +151,23 @@ struct LibraryView: View {
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $storageManagementApp) { HTMLAppStorageManagementView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
+        .alert("This HTML needs its original server", isPresented: Binding(
+            get: { serverDependentImport != nil },
+            set: { if !$0 { serverDependentImport = nil } }
+        )) {
+            Button("Import Local Copy") {
+                queuedFileImport = serverDependentImport
+                serverDependentImport = nil
+                presentQueuedFileImport()
+            }
+            Button("Import Hosted Website") {
+                serverDependentImport = nil
+                showWebsiteImporter = true
+            }
+            Button("Cancel", role: .cancel) { serverDependentImport = nil }
+        } message: {
+            Text("This file calls a root-relative server API such as /api/build. Saving it offline cannot include the server. To keep the build or login functions working, enter the real hosted website URL in Website Import. If you import a local copy, those API calls will be unavailable until configured.")
+        }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppExternalHTMLFileOpened"))) { notification in
             guard let url = notification.object as? URL else { return }
             importFile(.success([url]))
@@ -698,8 +716,15 @@ struct LibraryView: View {
             // iOS 16 can silently drop a second sheet while the system Files
             // picker is dismissing. Stage the result, then present after
             // the fileImporter state has returned to false.
-            queuedFileImport = payload
-            presentQueuedFileImport()
+            // Root-relative /api routes belong to the website's server.
+            // Do not attempt to precache them as static app assets.
+            if html.range(of: #"(?i)(?:fetch\s*\(\s*['\x22\x60]|const\s+API\s*=\s*['\x22])/api/"#,
+                          options: .regularExpression) != nil {
+                serverDependentImport = payload
+            } else {
+                queuedFileImport = payload
+                presentQueuedFileImport()
+            }
         } catch {
             store.errorMessage = "Couldn't open the selected file: \(error.localizedDescription)"
         }
