@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.47"
-    static let compiledBuild = "55"
+    static let compiledVersion = "1.6.49"
+    static let compiledBuild = "57"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,11 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.49" { return [
+            Entry(id: "subscription-ai-skill", title: "Shareable AI app-building skill", description: "AI & Creation now includes a downloadable skill explaining how a subscription AI assistant can build HTMLApp-compatible apps without an API key.", symbol: "doc.text", tint: .blue),
+            Entry(id: "server-html-import", title: "Safer hosted HTML importing", description: "When an HTML file depends on server-side API routes, HTMLApp explains why offline imports cannot run the server and offers Website Import.", symbol: "network", tint: .orange),
+            Entry(id: "html-open", title: "Open HTML files in HTMLApp", description: "HTMLApp remains registered as an HTML document handler for iOS Open In and Files.", symbol: "doc.badge.arrow.up", tint: .green)
+        ] }
         if version == "1.6.47" { return [
             Entry(id: "car-display", title: "Car display mode", description: "A compact app launcher, visible Apps exit, safe display bounds and adaptive HTML runtime for setups that already launch HTMLApp on a car screen. Enable Car display in the Library menu when your mirroring tool reports an iPhone screen. This is compatibility mode, not Apple's native CarPlay templates.", symbol: "car.fill", tint: .blue),
             Entry(id: "free-styles", title: "More creative looks", description: "Modern/professional, technical/detailed and kiddy/easy-to-use are broad directions. AI chooses the composition freely. Look choices scroll vertically above the selection controls.", symbol: "paintpalette", tint: .orange)
