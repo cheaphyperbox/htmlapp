@@ -755,5 +755,18 @@ assert 'Experimental silent audio is optional' not in release_notes
 assert 'BackgroundKeepAlive.shared.start()' in forge_source
 assert 'BackgroundKeepAlive.shared.stop()' in forge_source
 
+# Subscription AI skill must ship with the app and be shareable in Settings.
+project = source("project.yml")
+settings = source("HTMLAppV3/AISettingsView.swift")
+library = source("HTMLAppV3/LibraryUI.swift")
+assert "HTMLApp-AI-App-Builder-SKILL.md" in project
+assert 'ShareLink(item: skillURL' in settings
+assert 'serverDependentImport = payload' in library
+assert 'Import Hosted Website' in library
+assert 'Import Local Copy' in library
+assert 'CFBundleDocumentTypes:' in project and 'public.html' in project
+assert 'MARKETING_VERSION: "1.6.49"' in project
+assert 'CURRENT_PROJECT_VERSION: "57"' in project
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
