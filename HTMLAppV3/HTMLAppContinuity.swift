@@ -407,11 +407,11 @@ final class HTMLAppOfflineCache {
         for raw in unique {
             guard let url = URL(string: raw),
                   ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
-            await cacheOne(appID: appID, url: url)
+            await cacheOne(appID: appID, url: url, depth: 0)
         }
     }
 
-    private func cacheOne(appID: String, url: URL) async {
+    private func cacheOne(appID: String, url: URL, depth: Int) async {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 15
@@ -430,8 +430,30 @@ final class HTMLAppOfflineCache {
             let digest = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
             let relative = "offline-cache/" + digest + (ext.isEmpty ? "" : "." + ext)
             let destination = SourceCache.shared.baseURL(appID: appID).appendingPathComponent(relative)
+
+            var payload = data
+            if depth < 2,
+               (contentType == "text/css" || contentType.contains("javascript")),
+               let text = String(data: data, encoding: .utf8) {
+                let dependencies = Self.textDependencies(
+                    in: text, baseURL: url, contentType: contentType)
+                for dependency in dependencies.prefix(48) {
+                    await cacheOne(appID: appID, url: dependency.absoluteURL, depth: depth + 1)
+                }
+                var rewritten = text
+                let current = manifest(appID: appID)
+                for dependency in dependencies.sorted(by: { $0.raw.count > $1.raw.count }) {
+                    guard let cached = current.entries[dependency.absoluteURL.absoluteString] else { continue }
+                    let localName = URL(fileURLWithPath: cached.relativePath).lastPathComponent
+                    rewritten = rewritten.replacingOccurrences(of: dependency.raw, with: localName)
+                }
+                if let rewrittenData = rewritten.data(using: .utf8) {
+                    payload = rewrittenData
+                }
+            }
+
             try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: destination, options: .atomic)
+            try payload.write(to: destination, options: .atomic)
 
             ioQueue.sync {
                 var current = manifest(appID: appID)
@@ -441,7 +463,7 @@ final class HTMLAppOfflineCache {
                     relativePath: relative,
                     contentType: contentType,
                     savedAt: Date(),
-                    byteCount: data.count
+                    byteCount: payload.count
                 )
                 if let encoded = try? JSONEncoder().encode(current) {
                     try? FileManager.default.createDirectory(at: root(appID: appID), withIntermediateDirectories: true)
@@ -462,6 +484,38 @@ final class HTMLAppOfflineCache {
             let value = source.substring(with: $0.range)
             return value.count <= 2048 ? value : nil
         }
+    }
+
+    private struct TextDependency {
+        var raw: String
+        var absoluteURL: URL
+    }
+
+    private static func textDependencies(in text: String, baseURL: URL, contentType: String) -> [TextDependency] {
+        let patterns: [String]
+        if contentType == "text/css" {
+            patterns = [#"url\(\s*['"]?([^'")\s]+)"#]
+        } else {
+            patterns = [
+                #"(?:from\s*|import\s*\(\s*|import\s*)['"]([^'"]+)['"]"#
+            ]
+        }
+        let source = text as NSString
+        var seen = Set<String>()
+        var result: [TextDependency] = []
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in regex.matches(in: text, range: NSRange(location: 0, length: source.length)) {
+                guard match.numberOfRanges > 1 else { continue }
+                let raw = source.substring(with: match.range(at: 1))
+                guard !raw.hasPrefix("data:"), !raw.hasPrefix("blob:"), !raw.hasPrefix("#"),
+                      let resolved = URL(string: raw, relativeTo: baseURL)?.absoluteURL,
+                      ["http", "https"].contains(resolved.scheme?.lowercased() ?? ""),
+                      seen.insert(resolved.absoluteString).inserted else { continue }
+                result.append(TextDependency(raw: raw, absoluteURL: resolved))
+            }
+        }
+        return result
     }
 
     private static func fileExtension(url: URL, contentType: String) -> String {
