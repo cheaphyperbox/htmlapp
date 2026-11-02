@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.49"
-    static let compiledBuild = "57"
+    static let compiledVersion = "1.6.50"
+    static let compiledBuild = "58"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,9 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.50" { return [
+            Entry(id: "runner-selector", title: "Selectable IPA build runner", description: "The manual GitHub Actions IPA workflow offers Intel macOS 26 by default, Apple Silicon macOS 26, and Intel macOS 15 to work around runner queue delays.", symbol: "desktopcomputer", tint: .blue)
+        ] }
         if version == "1.6.49" { return [
             Entry(id: "subscription-ai-skill", title: "Shareable AI app-building skill", description: "AI & Creation now includes a downloadable skill explaining how a subscription AI assistant can build HTMLApp-compatible apps without an API key.", symbol: "doc.text", tint: .blue),
             Entry(id: "server-html-import", title: "Safer hosted HTML importing", description: "When an HTML file depends on server-side API routes, HTMLApp explains why offline imports cannot run the server and offers Website Import.", symbol: "network", tint: .orange),
