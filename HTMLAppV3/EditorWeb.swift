@@ -519,6 +519,16 @@ struct HTMLWebView: UIViewRepresentable {
                 return
             }
             switch message.name {
+            case "htmlappState":
+                HTMLAppRuntimeStateStore.save(appID: appID, body: body)
+
+            case "htmlappOfflineCache":
+                guard let urls = body["urls"] as? [String], !urls.isEmpty else { return }
+                let appID = self.appID
+                Task.detached(priority: .utility) {
+                    await HTMLAppOfflineCache.shared.cache(appID: appID, urls: Array(urls.prefix(40)))
+                }
+
             case "htmlappLocation":
                 guard let callbackID = body["id"] as? String else { return }
                 let highAccuracy = body["highAccuracy"] as? Bool ?? false
