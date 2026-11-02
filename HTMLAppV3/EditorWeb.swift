@@ -385,6 +385,17 @@ struct HTMLWebView: UIViewRepresentable {
             locationPermissions = HTMLLocationBridge(webView: webView, appID: appID)
             nativeBridge = HTMLNativeAPIBridge(webView: webView, appID: appID, permissionCoordinator: nativePermissions)
             localNetworkBridge = HTMLLocalNetworkBridge(webView: webView, permissionCoordinator: nativePermissions)
+            if appID != "PREVIEW" {
+                launchObserver = NotificationCenter.default.addObserver(
+                    forName: Notification.Name("HTMLAppCaptureRuntimeState"),
+                    object: nil,
+                    queue: .main
+                ) { [weak webView] notification in
+                    guard let requested = notification.object as? String,
+                          requested == appID else { return }
+                    webView?.evaluateJavaScript("window.__htmlappCaptureStateNow?.();")
+                }
+            }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
