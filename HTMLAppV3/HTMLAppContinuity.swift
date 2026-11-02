@@ -458,6 +458,11 @@ final class HTMLAppOfflineCache {
           };
           const offline = () => !navigator.onLine;
           const cached = (value) => offline() ? (cache[absolute(value)] || null) : null;
+          const reverse = {};
+          for (const [original, local] of Object.entries(cache)) {
+            reverse[local] = original;
+            reverse[absolute(local)] = original;
+          }
           window.__htmlappOfflineExperimental = true;
           const originalFetch = window.fetch?.bind(window);
           if (originalFetch) {
@@ -483,7 +488,23 @@ final class HTMLAppOfflineCache {
               for (const attr of ['src','href','poster']) {
                 const value = el.getAttribute?.(attr);
                 const local = value && cached(value);
-                if (local) el.setAttribute(attr, local);
+                if (local && value !== local) {
+                  try { el.setAttribute('data-htmlapp-original-' + attr, value); } catch (_) {}
+                  el.setAttribute(attr, local);
+                }
+              }
+            }
+          };
+          const restoreOnline = (root = document) => {
+            for (const el of root.querySelectorAll?.('[src],[href],[poster]') || []) {
+              for (const attr of ['src','href','poster']) {
+                const saved = el.getAttribute?.('data-htmlapp-original-' + attr);
+                const current = el.getAttribute?.(attr);
+                const original = saved || reverse[current] || reverse[absolute(current || '')];
+                if (original) {
+                  el.setAttribute(attr, original);
+                  try { el.removeAttribute('data-htmlapp-original-' + attr); } catch (_) {}
+                }
               }
             }
           };
@@ -492,6 +513,7 @@ final class HTMLAppOfflineCache {
             try { window.webkit.messageHandlers.htmlappOfflineCache.postMessage({offlineActivated:true}); } catch (_) {}
             rewrite(document);
           });
+          addEventListener('online', () => restoreOnline(document));
           const observer = new MutationObserver(records => {
             for (const record of records) for (const node of record.addedNodes) {
               if (node?.nodeType === 1) {
