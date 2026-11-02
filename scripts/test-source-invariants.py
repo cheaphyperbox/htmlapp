@@ -780,5 +780,30 @@ assert 'if existingApp == nil && !demoMode {' in forge
 assert '(existingApp == nil && !demoMode ? "Start Generating" : "Make My App")' in forge
 assert 'for index in 0..<3 {' in forge
 
+# Experimental offline cache and runtime continuity.
+continuity = source("HTMLAppV3/HTMLAppContinuity.swift")
+editor_web = source("HTMLAppV3/EditorWeb.swift")
+app_core = source("HTMLAppV3/AppCore.swift")
+assert 'return count % 3 == 0' in continuity
+assert 'setInterval(capture, 2000)' in continuity
+assert 'document.documentElement?.outerHTML' in continuity
+assert 'localStorage: storageObject(localStorage)' in continuity
+assert 'sessionStorage: storageObject(sessionStorage)' in continuity
+assert 'window.__htmlappOfflineExperimental = true' in continuity
+assert "const cached = (value) => offline()" in continuity
+assert 'Cache-Control' in continuity and 'no-store' in continuity
+assert 'data.count <= 15_000_000' in continuity
+assert 'case "htmlappState":' in editor_web
+assert 'case "htmlappOfflineCache":' in editor_web
+assert 'title: "Experimental Offline Copy"' in editor_web
+assert 'title: "Restore previous app session?"' in editor_web
+assert 'HTMLAppCaptureRuntimeState' in editor_web
+assert 'HTMLAppOfflineCache.shared.shouldRefreshOnOpen' in app_core
+assert 'HTMLAppRuntimeStateStore.remove(appID: app.id)' in app_core
+assert 'pendingSwitchApp = nil' in app_core
+assert 'replaceRunningApp(with: app)' in app_core
+assert 'MARKETING_VERSION: "1.6.54"' in project
+assert 'CURRENT_PROJECT_VERSION: "62"' in project
+
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
