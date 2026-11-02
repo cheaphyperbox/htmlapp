@@ -1189,15 +1189,17 @@ final class AppStore: ObservableObject {
 
     private func replaceRunningApp(with app: SavedHTMLApp) {
         // Ask the current WebView to checkpoint its live state before its
-        // full-screen runner is replaced.
+        // full-screen runner is replaced, then give the script message a brief
+        // main-run-loop window to reach the native state store.
         if let current = runningApp {
             NotificationCenter.default.post(
                 name: Notification.Name("HTMLAppCaptureRuntimeState"),
                 object: current.id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                self?.launch(app)
+            }
+            return
         }
-        // Keep the existing full-screen presentation alive until the new
-        // app has been selected. Replacing the identifiable item in place
-        // prevents a transient dismiss from canceling the switch dialog.
         launch(app)
     }
 
