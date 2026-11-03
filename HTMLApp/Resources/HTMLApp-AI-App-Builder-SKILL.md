@@ -56,3 +56,7 @@ Return the full HTML file with a clear filename, brief instructions for saving i
 ## Native bridge discovery and safe cancellation
 
 Recent HTMLApp runtimes expose `HTMLAppNative.protocolVersion`, `await HTMLAppNative.capabilities.has(method)`, `await HTMLAppNative.capabilities.describe(method)`, and `HTMLAppNative.permissions.status(name)` / `.request(name)`. Do not equate host permission with iOS system authorization. `HTMLAppNative.call(method, args, {signal})` can abandon a pending promise on AbortSignal; only currently cancellable native operations such as supported AI requests stop their underlying native task. Do not claim arbitrary operations are cancellable. Continue feature-detecting older runtimes.
+
+## Native UI controls
+
+Supported recent runtimes can use `HTMLAppNative.ui.alert({title,message,actions})`, `.menu(...)`, and `.datePicker({title,mode,value})` for real UIKit dialogs/pickers. Show them only in response to user intent; excessive modal requests are rate-limited. `HTMLAppNative.events.on(name, handler)` subscribes to existing `htmlapp:*` native events (and returns an unsubscribe function). Do not invent unimplemented native UI primitives.

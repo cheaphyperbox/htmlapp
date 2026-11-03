@@ -34,6 +34,35 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "ui.alert",
+            title: "Native iOS alert and action menu",
+            keywords: ["native UI", "dialog", "sheet", "alert", "menu", "action sheet", "confirmation"],
+            purpose: "Present an actual UIKit alert or action menu and resolve with the chosen action id/index.",
+            api: "HTMLAppNative.ui.alert({title?,message?,actions?}); ui.menu({title?,message?,actions?})",
+            example: """
+            const result = await HTMLAppNative.ui.alert({
+              title: "Delete record?",
+              message: "This cannot be undone.",
+              actions: [{id:"cancel",title:"Cancel",style:"cancel"},{id:"delete",title:"Delete",style:"destructive"}]
+            });
+            if (result.id === "delete") deleteRecord();
+            """,
+            constraints: "Only show after a deliberate tap; iOS dialog presentations are rate-limited. Use 1–6 actions with unique ids, short titles and optional cancel/destructive style. Never initiate system UI in a loop."
+        ),
+        .init(
+            id: "ui.datePicker",
+            title: "Native date and time picker",
+            keywords: ["native UI", "date picker", "time picker", "calendar input", "date and time"],
+            purpose: "Display a real UIKit date/time picker sheet for a user-triggered selection.",
+            api: "await HTMLAppNative.ui.datePicker({title?,mode?:'date'|'time'|'dateTime',value?:ISO8601,timestampMS?})",
+            example: """
+            const result = await HTMLAppNative.ui.datePicker({title:"Due date",mode:"dateTime"});
+            if (!result.cancelled) console.log(result.value);
+            """,
+            constraints: "User-triggered only; dismissal must use Cancel/Done. Returns {cancelled,value?,timestampMS?}. Don't substitute for passive text inputs when native UI isn't necessary."
+        ),
+
+        .init(
             id: "network.request",
             title: "Consent-gated public HTTPS API requests",
             keywords: ["native network", "HTTP", "HTTPS", "CORS", "REST", "JSON", "API", "URLSession"],

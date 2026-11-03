@@ -644,6 +644,16 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 "settingsRequired": policy == .deny,
                 "note": "Host permission does not prove iOS authorization; use the native operation to request applicable system consent."
             ] as [String: Any])
+        case "permissions.openSettings":
+            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                reject(id, code: "settings_unavailable", message: "Could not open iOS settings.")
+                return
+            }
+            UIApplication.shared.open(url) { [weak self] success in
+                Task { @MainActor in
+                    self?.resolve(id, value: ["opened": success])
+                }
+            }
         case "permissions.request":
             guard let name = args["permission"] as? String,
                   let permission = HTMLPermission(rawValue: name) else {
@@ -655,6 +665,21 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     "permission": name, "hostAllowed": true,
                     "systemAuthorization": "unknown"
                 ])
+            }
+        case "ui.alert", "ui.menu":
+            let shown = HTMLAppNativeUIService.alert(args: args, appID: appID,
+                                                     menu: method == "ui.menu") { [weak self] selection in
+                self?.resolve(id, value: selection ?? ["cancelled": true])
+            }
+            if !shown {
+                reject(id, code: "ui_unavailable", message: "Cannot present this native dialog now. Use a user tap and try again.")
+            }
+        case "ui.datePicker":
+            let shown = HTMLAppNativeUIService.datePicker(args: args, appID: appID) { [weak self] selection in
+                self?.resolve(id, value: selection)
+            }
+            if !shown {
+                reject(id, code: "ui_unavailable", message: "Cannot present the native date picker now. Use a user tap and try again.")
             }
         case "bridge.cancel":
             guard let target = args["targetID"] as? String, !target.isEmpty,
@@ -2882,7 +2907,22 @@ enum HTMLNativeAPIScript {
         capabilities: () => call('capabilities.list'),
         permissions: {
           status: (permission) => call('permissions.status', { permission }),
-          request: (permission) => call('permissions.request', { permission })
+          request: (permission) => call('permissions.request', { permission }),
+          openSettings: () => call('permissions.openSettings')
+        },
+        ui: {
+          alert: (options = {}) => call('ui.alert', options),
+          menu: (options = {}) => call('ui.menu', options),
+          datePicker: (options = {}) => call('ui.datePicker', options)
+        },
+        events: {
+          on: (name, handler) => {
+            if (typeof handler !== 'function' || !/^[a-z0-9:-]{1,60}$/.test(name))
+              throw new TypeError('Provide a supported event name and listener.');
+            const listener = event => handler(event.detail);
+            window.addEventListener('htmlapp:' + name, listener);
+            return () => window.removeEventListener('htmlapp:' + name, listener);
+          }
         },
         network: {
           request: (options = {}) => {

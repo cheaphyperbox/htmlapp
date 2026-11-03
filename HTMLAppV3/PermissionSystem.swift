@@ -451,6 +451,7 @@ struct AppPermissionsView: View {
     let app: SavedHTMLApp
     @Environment(\.dismiss) private var dismiss
     @State private var choices: [HTMLPermission: HTMLPermissionChoice]
+    @State private var networkDomains: [String] = []
 
     init(app: SavedHTMLApp) {
         self.app = app
@@ -492,6 +493,21 @@ struct AppPermissionsView: View {
                     }
                 }
 
+                if !networkDomains.isEmpty {
+                    Section("Approved Native API Domains") {
+                        ForEach(networkDomains, id: \.self) { domain in
+                            HStack {
+                                Text(domain).textSelection(.enabled)
+                                Spacer()
+                                Button("Revoke", role: .destructive) {
+                                    HTMLAppNetworkDomainConsent.revoke(host: domain, appID: app.id)
+                                    networkDomains = HTMLAppNetworkDomainConsent.approved(for: app.id)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Section {
                     Button("Open HTMLApp in iOS Settings") {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -501,6 +517,10 @@ struct AppPermissionsView: View {
                     Button("Reset All to Ask", role: .destructive) {
                         HTMLPermissionStore.reset(appID: app.id)
                         for permission in HTMLPermission.allCases { choices[permission] = .ask }
+                        for domain in networkDomains {
+                            HTMLAppNetworkDomainConsent.revoke(host: domain, appID: app.id)
+                        }
+                        networkDomains = []
                     }
                 } footer: {
                     Text("Allowing an HTML app here does not bypass iOS. Sensitive native capabilities can still require a separate iOS system permission or system picker.")
@@ -508,6 +528,7 @@ struct AppPermissionsView: View {
             }
             .navigationTitle("Permissions")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { networkDomains = HTMLAppNetworkDomainConsent.approved(for: app.id) }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
@@ -525,7 +546,7 @@ struct AppPermissionsView: View {
     }
 }
 
-private extension UIViewController {
+extension UIViewController {
     static var htmlAppTopViewController: UIViewController? {
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })

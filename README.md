@@ -52,3 +52,7 @@ The documented native dispatcher surface is enumerated in `HTMLAppV3/HTMLAppBrid
 ## Native public API requests
 
 `HTMLAppNative.network.request({url, method, headers, body, signal})` is an optional public-HTTPS, text/JSON-only native networking API for servers lacking browser CORS. It requires the saved app's **Internet API Requests** permission and a separate consent prompt per hostname. Direct IPs, LAN/loopback hosts, redirects, cookies, insecure HTTP, credentialed URLs, oversized bodies and binary responses are prohibited. `network.allowedDomains()` lists approved hosts and `network.revokeDomain(host)` revokes one. The feature does not install a backend or circumvent API authentication and it should never be used to ship secret keys embedded in HTML.
+
+## Native UI and domain management
+
+Saved apps can optionally invoke UIKit alerts, action menus and date/time pickers through `HTMLAppNative.ui`, with bounded action counts and throttling. `HTMLAppNative.events.on` provides a JS unsubscribe wrapper for existing native events. The per-app Permissions screen lists approved native-network API domains so each can be revoked independently.
