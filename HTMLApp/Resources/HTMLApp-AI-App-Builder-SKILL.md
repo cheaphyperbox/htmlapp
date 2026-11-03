@@ -39,7 +39,8 @@ For remote integrations show a setup screen and a clear online/offline status. D
 
 ## Quality requirements
 
-- Semantic, accessible HTML. Responsive on compact iPhone and iPad, respecting safe areas.
+- Semantic, accessible HTML. Responsive on compact iPhone and iPad, respecting safe areas. Fixed page scale (no pinch/double-tap zoom): 16px minimum input text, accessible scalable typography, and actual responsive reflow.
+- No document-level horizontal scrolling at ANY supported viewport or orientation. Only deliberately horizontal components (carousels, chip strips, graph timelines, wide table wrappers) may scroll sideways; mark them data-htmlapp-horizontal-scroll="true". Fix oversized elements rather than simply clipping them; use min-width:0, fluid media and wrap long strings.
 - Actual working interactions: no dead buttons, fabricated server results, or fake completion.
 - Persistent data only when needed; use localStorage/IndexedDB or real documented HTMLApp storage.
 - Input validation, error recovery, cancellation, bounded requests and reasonable upload sizes.

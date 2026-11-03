@@ -143,26 +143,35 @@ struct WebRunner: View {
     }
 }
 
-/// Applies a consistent CSS viewport on both iPhone and iPad while leaving
-/// app-specific flex/grid layouts, fonts and breakpoints under the app's control.
+/// Saved HTMLApps are app surfaces rather than zoomable websites.
+/// Explicit opt-in horizontal scrollers remain usable; document-level horizontal
+/// overflow and pinch/double-tap page scaling are never intended.
 enum HTMLAppResponsiveViewport {
     static let source = #"""
     (() => {
       const root = document.documentElement;
-      if (!root) return;
+      if (!root || !document.head) return;
       let viewport = document.querySelector('meta[name="viewport"]');
       if (!viewport) {
         viewport = document.createElement('meta');
         viewport.name = 'viewport';
-        viewport.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
-        document.head?.appendChild(viewport);
-      } else if (!/width\s*=/.test(viewport.content || '')) {
-        viewport.content += ', width=device-width';
+        document.head.appendChild(viewport);
       }
-      // Preserve author-defined sizes, avoid WebKit's automatic text inflation.
-      // Do not override user zoom, max-scale, or fixed-size layout rules.
+      viewport.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
       root.style.setProperty('-webkit-text-size-adjust', '100%');
       root.style.setProperty('text-size-adjust', '100%');
+      if (!document.getElementById('__htmlappViewportGuard')) {
+        const style = document.createElement('style');
+        style.id = '__htmlappViewportGuard';
+        style.textContent = [
+          'html,body{max-width:100%!important;overflow-x:clip!important}',
+          '*,*::before,*::after{box-sizing:border-box}',
+          'img,video,canvas,svg{max-width:100%}',
+          'input,select,textarea{font-size:max(16px,1rem)}',
+          '[data-htmlapp-horizontal-scroll="true"]{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}'
+        ].join('\\n');
+        document.head.appendChild(style);
+      }
     })();
     """#
 }
@@ -292,6 +301,9 @@ struct HTMLWebView: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = false
+        webView.scrollView.minimumZoomScale = 1
+        webView.scrollView.maximumZoomScale = 1
         webView.allowsBackForwardNavigationGestures = false
         webView.loadHTMLString(initialDocument, baseURL: SourceCache.shared.baseURL(appID: appID))
         return webView

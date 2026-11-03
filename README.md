@@ -36,3 +36,7 @@ The repository includes widget tests and a packaged IPA verification script. The
 
 Store Discord webhook URLs as GitHub Actions secrets. The current build and delivery scripts contact Discord directly, not a proxy. Rotate any webhook URL previously sent to an untrusted intermediary.
 
+
+## Generated app viewport contract
+
+Saved/generated HTMLApps use a fixed page scale to avoid pinch, double-tap and input-focus zoom. The host also prevents document-level horizontal scrolling; explicitly designed horizontal carousels, chip strips, graphs and table wrappers opt in via `data-htmlapp-horizontal-scroll="true"`. Forge validates multiple phone/iPad/landscape widths and treats measured horizontal overflow as a blocking defect. An overflow-clipping safety net is not a substitute for responsive layouts. Generated typography must remain legible at accessibility text sizes; these restrictions are for app surfaces, not ordinary website browsing.

@@ -76,6 +76,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         ))
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppResponsiveViewport.source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
 
         for name in Self.messageHandlerNames {
             controller.add(self, name: name)
@@ -87,6 +92,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         )
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = false
         webView.isHidden = true
         self.webView = webView
         // QA must not wait on external CDNs or send traffic when exercising
@@ -207,7 +213,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
                 appendIssue("Runtime: document body rendered empty at 390pt width.")
             }
             if phone.horizontalOverflow {
-                appendIssue("Runtime: page has horizontal overflow at 390pt width.")
+                appendIssue("Runtime: horizontal page overflow at 390pt; " + (phone.overflowOffender ?? "inspect fixed-width content."))
             }
         } else {
             appendIssue("Runtime: could not inspect the generated DOM at 390pt width.")
@@ -215,11 +221,14 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
 
         // A quick cross-device resize catches phone/tablet breakpoint issues
         // without a second WebView launch or additional remote AI calls.
-        for (width, height) in [(CGFloat(320), CGFloat(700)), (CGFloat(820), CGFloat(900))] {
-            if let layout = await snapshot(webView, width: width, height: height) {
-                if layout.horizontalOverflow {
-                    appendIssue("Runtime: page overflows horizontally at \(Int(width))pt. Make card widths, buttons, and font sizes responsive.")
-                }
+        for (width, height) in [
+            (CGFloat(320), CGFloat(700)), (CGFloat(375), CGFloat(812)),
+            (CGFloat(430), CGFloat(932)), (CGFloat(844), CGFloat(390)),
+            (CGFloat(768), CGFloat(1024)), (CGFloat(1024), CGFloat(768))
+        ] {
+            if let layout = await snapshot(webView, width: width, height: height),
+               layout.horizontalOverflow {
+                appendIssue("Runtime: horizontal page overflow at \(Int(width))pt; " + (layout.overflowOffender ?? "inspect fixed-width content."))
             }
         }
 
@@ -255,6 +264,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
     private struct Snapshot {
         let domNonEmpty: Bool
         let horizontalOverflow: Bool
+        let overflowOffender: String?
     }
 
     private func snapshot(_ webView: WKWebView, width: CGFloat, height: CGFloat) async -> Snapshot? {
@@ -270,10 +280,31 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
                 document.body.children.length > 0 ||
                 (document.body.textContent || '').trim().length > 0
               ),
-              horizontalOverflow: Math.max(
-                document.documentElement?.scrollWidth || 0,
-                document.body?.scrollWidth || 0
-              ) > ((document.documentElement?.clientWidth || window.innerWidth || 0) + 2)
+              horizontalOverflow: (() => {
+                const width = document.documentElement.clientWidth || window.innerWidth;
+                const scrollOverflow = Math.max(
+                  document.documentElement.scrollWidth, document.body?.scrollWidth || 0
+                ) > width + 2;
+                const offenders = Array.from(document.body?.querySelectorAll('*') || [])
+                  .filter(el => !el.closest('[data-htmlapp-horizontal-scroll="true"]'))
+                  .filter(el => {
+                    const cs = getComputedStyle(el);
+                    if (cs.display === 'none' || cs.visibility === 'hidden' ||
+                        Number(cs.opacity) === 0 || cs.position === 'fixed') return false;
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 1 && rect.height > 1 &&
+                      (rect.right > width + 3 || rect.left < -3);
+                  });
+                window.__htmlappLayoutOffender = offenders.length
+                  ? offenders.slice(0, 3).map(el => {
+                      const r = el.getBoundingClientRect();
+                      return (el.id ? '#' + el.id : el.tagName.toLowerCase()) +
+                        ' [' + Math.round(r.left) + ',' + Math.round(r.right) + ']';
+                    }).join(', ')
+                  : null;
+                return scrollOverflow || offenders.length > 0;
+              })(),
+              overflowOffender: window.__htmlappLayoutOffender
             }))()
             """,
             in: webView
@@ -282,7 +313,8 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
 
         return Snapshot(
             domNonEmpty: object["domNonEmpty"] as? Bool ?? false,
-            horizontalOverflow: object["horizontalOverflow"] as? Bool ?? false
+            horizontalOverflow: object["horizontalOverflow"] as? Bool ?? false,
+            overflowOffender: object["overflowOffender"] as? String
         )
     }
 
