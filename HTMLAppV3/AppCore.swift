@@ -92,9 +92,9 @@ struct HTMLAppMain: App {
                     )
                 }
                 .onChange(of: presentingWhatsNew) { showing in
-                    store.setExternalHTMLImportReady(
-                        onboardingComplete && !showing
-                    )
+                    // Opening the gate before fullScreenCover.onDismiss
+                    // finishes may cause SwiftUI to discard the import sheet.
+                    if showing { store.setExternalHTMLImportReady(false) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLApp.FaceDownShakeExit"))) { _ in
                     // The runner is a SwiftUI full-screen cover, not a UIKit
@@ -114,10 +114,13 @@ struct HTMLAppMain: App {
                     if phase == .active { store.requestICloudSync() }
                 }
                 .onChange(of: onboardingComplete) { finished in
-                    store.setExternalHTMLImportReady(finished && !presentingWhatsNew)
-                    guard finished else { return }
+                    guard finished else {
+                        store.setExternalHTMLImportReady(false)
+                        return
+                    }
                     checkedVersionThisLaunch = false
                     checkVersionOnLaunch()
+                    store.setExternalHTMLImportReady(!presentingWhatsNew)
                 }
                 .sheet(item: $store.pendingWebClipGuideApp) { app in
                     HTMLAppHomeScreenGuide(
