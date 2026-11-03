@@ -714,7 +714,7 @@ assert 'ProcessInfo.processInfo.thermalState != .critical' in local_ai
 # Large patch edits use safe literal selector anchors; no arbitrary model source replacement.
 focused = source("HTMLAppV3/ForgeFocusedEditContext.swift")
 assert 'ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange,' in ai
-assert 'occurrences > 4 { return nil }' in focused
+assert 'occurrences > 6 { return nil }' in focused
 assert 'snippets.utf8.count <= 11_000' in focused
 
 # Optional taste summaries are locally bounded and removable.
