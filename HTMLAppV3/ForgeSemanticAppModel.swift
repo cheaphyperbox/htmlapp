@@ -114,6 +114,10 @@ enum ForgeSemanticAppModelStore {
             .appendingPathComponent(safe + ".json")
     }
 
+    static func remove(for appID: String) {
+        if let path = url(for: appID) { try? FileManager.default.removeItem(at: path) }
+    }
+
     static func load(for appID: String) -> ForgeSemanticAppModel? {
         guard let path = url(for: appID),
               let data = try? Data(contentsOf: path) else { return nil }
@@ -131,6 +135,8 @@ enum ForgeSemanticAppModelStore {
             try FileManager.default.createDirectory(at: path.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try JSONEncoder().encode(model).write(to: path, options: .atomic)
+            ForgeAppManifestStore.save(for: appID, html: html,
+                                       model: model, note: editNote)
         } catch {
             // The model is advisory metadata; never block a user data save.
         }
@@ -232,6 +238,13 @@ struct ForgeEditContract {
         if has(["redo entire app", "rebuild from scratch", "change architecture"]) {
             scope = .architecture
         }
+        let capabilityPlan = ForgeCapabilityPlan.infer(request)
+        capabilities = Array(Set(capabilities + capabilityPlan.nativeMethods)).sorted()
+        if scope == .component && !capabilityPlan.nativeMethods.isEmpty &&
+           has(["add ", "create ", "enable ", "support ", "implement "]) {
+            scope = .nativeCapability
+            goals += ["Implement documented host functionality, not an ornamental mock"]
+        }
         if goals.isEmpty { goals = ["Make the requested behavior work end-to-end", "Keep loading, empty, error, offline and permission states honest"] }
         let words = lower.components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { $0.count >= 4 }
@@ -273,6 +286,7 @@ struct ForgeEditContract {
         \(model.summary)
         DOCUMENTED CAPABILITY CANDIDATES (verify catalog and runtime):
         \(recommendedCapabilities.joined(separator: ", "))
+        \(ForgeCapabilityPlan.infer(literalRequest).implementationBrief)
         RETAINED ACCEPTANCE:
         \(acceptance.map { "- " + $0 }.joined(separator: "\n"))
         PROJECT STYLE PREFERENCES (only when opted in):

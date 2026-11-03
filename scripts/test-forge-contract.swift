@@ -19,6 +19,32 @@ struct ForgeContractTests {
         </body></html>
         """
         let model = ForgeSemanticAppModel.build(html: html, purpose: "Workout tracker")
+        let manifest = ForgeAppManifest.build(html: html, model: model)
+        precondition(manifest.manifestVersion == 1)
+        precondition(manifest.screens.contains("stats"))
+        precondition(manifest.storageKeys.contains("settings-v1"))
+        precondition(manifest.nativeCapabilities.contains("notifications.schedule"))
+        precondition(manifest.permissions.contains("notifications"))
+        precondition(manifest.planningSummary.contains("Protected storage keys"))
+        let roundTrip = try! JSONDecoder().decode(ForgeAppManifest.self,
+            from: JSONEncoder().encode(manifest))
+        precondition(roundTrip.routes.contains("history"))
+        let audioPlan = ForgeCapabilityPlan.infer("record a voice memo")
+        precondition(audioPlan.nativeMethods.contains("audio.record"))
+        precondition(audioPlan.permissions.contains("microphone"))
+        let moviePlan = ForgeCapabilityPlan.infer("record video")
+        precondition(moviePlan.nativeMethods.contains("video.capture"))
+        precondition(moviePlan.permissions.contains("camera"))
+        precondition(moviePlan.permissions.contains("microphone"))
+        let receiptPlan = ForgeCapabilityPlan.infer("scan a receipt")
+        precondition(receiptPlan.nativeMethods.contains("documents.scan"))
+        precondition(receiptPlan.nativeMethods.contains("vision.recognizeText"))
+        let aestheticPlan = ForgeCapabilityPlan.infer("make it cleaner")
+        precondition(aestheticPlan.nativeMethods.isEmpty)
+        let hosted = ForgeAppManifest.build(
+            html: "<script>HTMLAppNative.network.request({url:'https://api.example.org/v1'});</script>",
+            model: model)
+        precondition(hosted.networkDomains.contains("api.example.org"))
         precondition(model.screenIDs?.contains("stats") == true)
         precondition(model.routeIDs?.contains("progress") == true)
         precondition(model.routeIDs?.contains("history") == true)

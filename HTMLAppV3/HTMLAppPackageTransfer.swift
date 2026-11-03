@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 struct HTMLAppPortableBundle: Codable {
-    static let currentVersion = 5
+    static let currentVersion = 6
 
     var formatVersion: Int
     var exportedAt: Date
@@ -15,6 +15,9 @@ struct HTMLAppPortableBundle: Codable {
     var websiteStates: [String: WebsiteArchivePortableState]?
     var widgetDefinitions: [HTMLAppWidgetDefinition]?
     var backgroundJobs: [HTMLAppBackgroundFetchJob]?
+    // Optional in older backups; never includes source data, permission grants
+    // or user records. Imported metadata must be revalidated against HTML.
+    var appManifests: [String: ForgeAppManifest]?
 }
 
 enum HTMLAppPackageError: LocalizedError {
@@ -64,7 +67,16 @@ enum HTMLAppPackageTransfer {
                 return (app.id, WebsiteArchiveManager.shared.portableState(appID: app.id))
             }) : nil,
             widgetDefinitions: includePersonalData ? HTMLAppWidgetStore.all().filter { appIDs.contains($0.appID) } : nil,
-            backgroundJobs: includePersonalData ? HTMLAppBackgroundJobStore.all().filter { appIDs.contains($0.appID) } : nil
+            backgroundJobs: includePersonalData ? HTMLAppBackgroundJobStore.all().filter { appIDs.contains($0.appID) } : nil,
+            appManifests: Dictionary(uniqueKeysWithValues: apps.map { app in
+                let manifest = ForgeAppManifestStore.load(for: app.id) ??
+                    ForgeAppManifest.build(html: app.html,
+                        model: ForgeSemanticAppModel.build(html: app.html, purpose: app.summary))
+                var transport = manifest
+                // Nearby sharing must not leak previous personal edit notes.
+                if !includePersonalData { transport.editHistory = [] }
+                return (app.id, transport)
+            })
         )
 
         let encoder = JSONEncoder()

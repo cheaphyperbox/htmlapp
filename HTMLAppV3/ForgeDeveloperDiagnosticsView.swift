@@ -8,6 +8,16 @@ struct ForgeDeveloperDiagnosticsView: View {
     @State private var selectedID = ""
     @State private var copied = false
 
+    private var selectedManifest: ForgeAppManifest? {
+        guard !selectedID.isEmpty else { return nil }
+        if let saved = ForgeAppManifestStore.load(for: selectedID) { return saved }
+        guard let app = store.apps.first(where: { $0.id == selectedID }) else { return nil }
+        return ForgeAppManifest.build(
+            html: app.html,
+            model: ForgeSemanticAppModel.build(html: app.html, purpose: app.summary)
+        )
+    }
+
     private var diagnosticText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
@@ -65,6 +75,46 @@ struct ForgeDeveloperDiagnosticsView: View {
                     ForgeWorkRing(runs: tracker.recentRuns, active: false)
                         .frame(maxWidth: .infinity)
                     ForgeRunBreakdown(runs: tracker.recentRuns)
+                }
+            }
+
+            Section("Native bridge") {
+                LabeledContent("Protocol version", value: "\(HTMLAppBridgeRegistry.protocolVersion)")
+                LabeledContent("Descriptor version", value: "\(HTMLAppBridgeRegistry.descriptorVersion)")
+                LabeledContent("Registered host methods", value: "\(HTMLAppBridgeRegistry.methods.count)")
+                Text("A registered method is not proof of entitlement, hardware support or user permission. Installed saved apps must feature-detect and request access.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Selected app manifest") {
+                if let manifest = selectedManifest {
+                    LabeledContent("Manifest version", value: "\(manifest.manifestVersion)")
+                    LabeledContent("Screens", value: "\(manifest.screens.count)")
+                    LabeledContent("Native methods", value: "\(manifest.nativeCapabilities.count)")
+                    LabeledContent("Stored data collections", value: "\(manifest.databaseCollections.count)")
+                    if !manifest.permissions.isEmpty {
+                        Text("Permission requirements: " + manifest.permissions.joined(separator: ", "))
+                            .font(.subheadline)
+                    }
+                    if !manifest.networkDomains.isEmpty {
+                        Text("Referenced HTTPS domains: " + manifest.networkDomains.joined(separator: ", "))
+                            .font(.subheadline)
+                    }
+                    Text("Preserved regression checks: \(manifest.acceptanceCriteria.count)")
+                        .font(.subheadline)
+                    Button {
+                        UIPasteboard.general.string = manifest.planningSummary
+                        copied = true
+                    } label: {
+                        Label(copied ? "Copied manifest" : "Copy app manifest summary",
+                              systemImage: "doc.on.doc")
+                    }
+                    Text("Manifest is derived metadata; it contains no saved user records, cannot grant native permissions and does not prove QA success.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Select a saved app to inspect its generated-app architecture.")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 }
             }
 

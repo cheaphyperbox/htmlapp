@@ -242,7 +242,8 @@ final class AIGenerationSession: ObservableObject {
         renderedIconData = app.favicon
         let semantic = ForgeSemanticAppModelStore.load(for: app.id)
             ?? ForgeSemanticAppModel.build(html: app.html, purpose: app.summary)
-        refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches.\n" + semantic.summary
+        refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches.\n" + semantic.summary +
+            (ForgeAppManifestStore.load(for: app.id).map { "\n" + $0.planningSummary } ?? "")
         verificationReport = ""
         phase = "Ready for AI edits"
     }
@@ -297,7 +298,11 @@ final class AIGenerationSession: ObservableObject {
             if !fromVoice && (ForgeRunOptions.quick || AIHTMLAgent.canSkipPreflight(for: originalUserPrompt ?? prompt)) {
                 improved = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
                 refinedBrief = improved
-                let localCapabilities = AIHTMLAgent.fastPathCapabilityQueries(for: originalPrompt)
+                let semanticCapabilities = ForgeCapabilityPlan.infer(originalPrompt)
+                let localCapabilities = Array(Set(
+                    AIHTMLAgent.fastPathCapabilityQueries(for: originalPrompt) +
+                    semanticCapabilities.researchQueries
+                )).sorted()
                 let knownAPIs = HTMLAppDeviceAPIResearch.research(queries: localCapabilities)
                 lastResearch = [suppliedResearch, knownAPIs].filter { !$0.isEmpty }.joined(separator: "\n\n")
                 phase = "Generating live preview"
@@ -329,7 +334,9 @@ final class AIGenerationSession: ObservableObject {
                 refinedBrief = improved
                 let plan = planning.research
 
-                let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+                let capabilityPlan = ForgeCapabilityPlan.infer(originalPrompt)
+                let resolvedQueries = Array(Set(plan.deviceQueries + capabilityPlan.researchQueries)).sorted()
+                let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: resolvedQueries)
                 AIDebugTraceStore.shared.append(
                     "DEVICE API RESEARCH",
                     deviceResearch.isEmpty ? "No internal device capability research was needed." : deviceResearch
@@ -527,6 +534,10 @@ final class AIGenerationSession: ObservableObject {
             if let appID = checkpointExistingAppID,
                let retained = ForgeSemanticAppModelStore.load(for: appID) {
                 semanticModel.recentEdits = retained.recentEdits
+                if let manifest = ForgeAppManifestStore.load(for: appID) {
+                    semanticModel.acceptance = Array(Set(semanticModel.acceptance +
+                                                         manifest.acceptanceCriteria)).sorted()
+                }
             }
             let editContract = ForgeEditContract.make(
                 request: cleanChange, model: semanticModel, taste: ForgeTasteMemory.summary
@@ -543,7 +554,10 @@ final class AIGenerationSession: ObservableObject {
                 case .behavior, .dataModel, .nativeCapability, .architecture: return false
                 }
             }()
+            let safeVisualChange = editContract.scope == .appearance &&
+                cleanChange.count <= 60
             let canApplyDirectly = cleanChange.count <= 280 && simpleScope &&
+                (editContract.interpretationConfidence >= 0.70 || safeVisualChange) &&
                 !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
             let improvedChange: String
             if canApplyDirectly {
@@ -574,7 +588,9 @@ final class AIGenerationSession: ObservableObject {
             }
             // The structured edit interpreter can identify bridge methods
             // even when the optional research planner misses a terse prompt.
-            let candidateQueries = Array(Set(plan.deviceQueries + editContract.recommendedCapabilities)).sorted()
+            let candidateQueries = Array(Set(plan.deviceQueries +
+                editContract.recommendedCapabilities +
+                ForgeCapabilityPlan.infer(cleanChange).researchQueries)).sorted()
             let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: candidateQueries)
             AIDebugTraceStore.shared.append(
                 "DEVICE API RESEARCH",
@@ -605,6 +621,7 @@ Current app:
 
 Semantic app model and preserved invariants:
 \(semanticModel.summary)
+\(checkpointExistingAppID.flatMap { ForgeAppManifestStore.load(for: $0)?.planningSummary } ?? "")
 
 Requested change:
 \(improvedChange)

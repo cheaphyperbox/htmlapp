@@ -40,6 +40,8 @@ jobs:
           if command -v swiftc >/dev/null 2>&1; then
             swiftc HTMLAppV3/ForgeSemanticAppModel.swift \
               HTMLAppV3/ForgeEditSafetyGate.swift \
+              HTMLAppV3/ForgeAppManifest.swift \
+              HTMLAppV3/ForgeCapabilityResolver.swift \
               scripts/test-forge-contract.swift \
               -o "${RUNNER_TEMP:-/tmp}/htmlapp-forge-contract-tests"
             "${RUNNER_TEMP:-/tmp}/htmlapp-forge-contract-tests"

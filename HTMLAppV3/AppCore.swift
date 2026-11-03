@@ -878,6 +878,8 @@ final class AppStore: ObservableObject {
         save()
         SourceCache.shared.remove(appID: app.id)
         HTMLAppRuntimeStateStore.remove(appID: app.id)
+        ForgeSemanticAppModelStore.remove(for: app.id)
+        ForgeAppManifestStore.remove(for: app.id)
         WebsiteArchiveManager.shared.remove(appID: app.id)
         HTMLPermissionStore.reset(appID: app.id)
         HTMLSensorPermissionPolicy.reset(appID: app.id)
@@ -948,6 +950,8 @@ final class AppStore: ObservableObject {
         if replaceExisting {
             for app in apps {
                 SourceCache.shared.remove(appID: app.id)
+                ForgeSemanticAppModelStore.remove(for: app.id)
+                ForgeAppManifestStore.remove(for: app.id)
                 WebsiteArchiveManager.shared.remove(appID: app.id)
                 HTMLPermissionStore.reset(appID: app.id)
                 HTMLSensorPermissionPolicy.reset(appID: app.id)
@@ -970,6 +974,7 @@ final class AppStore: ObservableObject {
             restorePortableAppData(bundle: imported, appIDMap: identityMap)
             restorePortableWebsiteState(bundle: imported, appIDMap: identityMap)
             restoreGeneratedIntegrations(bundle: imported, appIDMap: identityMap)
+            restoreForgeMetadata(bundle: imported, appIDMap: identityMap)
 
             save()
             persistFolders()
@@ -1049,6 +1054,7 @@ final class AppStore: ObservableObject {
             restoreGeneratedIntegrations(bundle: imported, appIDMap: appIDMap)
         }
 
+        restoreForgeMetadata(bundle: imported, appIDMap: appIDMap)
         save()
         persistFolders()
         FolderAppLinkStore.shared.prune(
@@ -1216,6 +1222,17 @@ final class AppStore: ObservableObject {
         }
 
         return folders.filter { needed.contains($0.id) }
+    }
+
+    private func restoreForgeMetadata(bundle: HTMLAppPortableBundle,
+                                      appIDMap: [String: String]) {
+        // Never trust unverified imported AI instructions in a package
+        // manifest. Rebuild structural metadata from each imported HTML.
+        for app in bundle.apps {
+            guard let newID = appIDMap[app.id] else { continue }
+            ForgeSemanticAppModelStore.save(for: newID, html: app.html,
+                                            purpose: app.summary)
+        }
     }
 
     private func restorePortablePermissions(bundle: HTMLAppPortableBundle, appIDMap: [String: String]) {
