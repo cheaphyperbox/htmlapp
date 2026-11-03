@@ -91,7 +91,7 @@ private final class HTMLAppDatePickerSheet: UIViewController {
         }
     }
 
-    required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { return nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()

@@ -1,0 +1,64 @@
+name: Verify HTMLApp iOS Compilation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'HTMLAppV3/**'
+      - 'HTMLAppShared/**'
+      - 'HTMLAppWidgets/**'
+      - 'HTMLApp/**'
+      - 'project.yml'
+      - '.github/workflows/verify-ios.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: htmlapp-verify-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Unsigned iOS device build
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest available Xcode 26
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHOICE="$(printf '%s\n' /Applications/Xcode_26*.app | sort -Vr | head -n 1)"
+          test -d "$CHOICE"
+          sudo xcode-select -s "$CHOICE/Contents/Developer"
+          xcodebuild -version
+      - name: Ensure iOS device SDK
+        run: |
+          xcrun --sdk iphoneos --show-sdk-path || xcodebuild -downloadPlatform iOS
+      - name: Install XcodeGen and generate project
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          xcodegen generate
+      - name: Compile app and embedded widgets (no signing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project HTMLApp.xcodeproj \
+            -scheme HTMLApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
+            -derivedDataPath "$PWD/DerivedDataVerify" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee ios-build.log
+          test -d DerivedDataVerify/Build/Products/Debug-iphoneos/HTMLApp.app
+      - name: Upload build log if compilation fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-compile-log
+          path: ios-build.log
+          if-no-files-found: warn
