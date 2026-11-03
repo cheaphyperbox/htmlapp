@@ -14,8 +14,8 @@ enum HTMLAppReleaseNotes {
 
     // Compile-time release identity. This is not computed from a possibly
     // stale IPA Info.plist or the GitHub runner's commit count.
-    static let compiledVersion = "1.6.56"
-    static let compiledBuild = "64"
+    static let compiledVersion = "1.6.57"
+    static let compiledBuild = "65"
 
     static var installedVersion: String { compiledVersion }
     static var installedBuild: String { compiledBuild }
@@ -30,6 +30,14 @@ enum HTMLAppReleaseNotes {
     }
 
     static func entries(for version: String) -> [Entry] {
+        if version == "1.6.57" { return [
+            Entry(id: "reliable-external-html-import", title: "HTML files now open into Import reliably", description: "Opening an HTML file from Files or sharing one to HTMLApp now stages the document safely and keeps the import request until the Library is ready, including cold launches and the What's New screen.", symbol: "doc.badge.arrow.up", tint: .green),
+            Entry(id: "simpler-settings", title: "Simpler Settings", description: "Everyday settings are grouped around AI & Voice, Library, iCloud, Manage, and Help, while developer and rarely used controls are tucked into Advanced Settings.", symbol: "gearshape.2", tint: .blue),
+            Entry(id: "live-apple-speech-captions", title: "Watch Apple Speech appear live", description: "During Forge edits, dragging the floating microphone on-screen now shows the words you are speaking in large live captions while Apple Speech recognizes them.", symbol: "waveform", tint: .purple),
+            Entry(id: "native-audio-video-color", title: "More native media and UI capabilities", description: "Saved apps can use permission-scoped native audio recording and playback, foreground camera video capture, and the native iOS color picker through the documented bridge.", symbol: "camera.metering.center.weighted", tint: .orange),
+            Entry(id: "forge-manifest-planning", title: "Smarter Forge editing contracts", description: "Forge now keeps versioned app architecture metadata and uses semantic capability planning to preserve storage, screens, routes, native features, and regression requirements across edits.", symbol: "point.3.connected.trianglepath.dotted", tint: .indigo),
+            Entry(id: "generated-native-bridge-contract", title: "One native bridge contract", description: "The native RPC surface now comes from one generated schema that drives Swift registration, argument checks, API documentation, TypeScript definitions, and consistency tests.", symbol: "arrow.triangle.branch", tint: .teal)
+        ] }
         if version == "1.6.56" { return [
             Entry(id: "experimental-offline-snapshots", title: "Experimental offline app snapshots", description: "Saved HTML apps now collect eligible external GET resources while you use them and refresh their offline snapshot every third opening. When your device is offline, HTMLApp can use those saved resources and clearly tells you that an experimental offline copy is active.", symbol: "arrow.down.circle", tint: .blue),
             Entry(id: "state-continuity", title: "Pick up where you left off", description: "HTMLApp now checkpoints the live state of saved apps, including the rendered page, scroll positions, typed form values, editable content, local and session storage, canvas pixels, focused controls, and media position. Switching back during the same HTMLApp session restores automatically; after a later cold launch, HTMLApp asks before restoring.", symbol: "rectangle.stack.badge.play", tint: .purple),

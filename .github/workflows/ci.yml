@@ -14,12 +14,16 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Require a release bump for product changes
+        run: python3 scripts/check-version-bump.py
       - name: Existing source invariants
         run: python3 scripts/test-source-invariants.py
       - name: Bridge registry and generated runtime consistency
