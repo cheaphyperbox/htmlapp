@@ -2055,9 +2055,11 @@ Requested edit:
             }
             if let existingApp {
                 await store.updateFromAI(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description, note: session.lastEditSummary.isEmpty ? "AI changed this app." : session.lastEditSummary)
-                ForgeSemanticAppModelStore.save(for: existingApp.id, html: html,
-                    purpose: session.description.isEmpty ? existingApp.summary : session.description,
-                    editNote: session.lastEditSummary)
+                if store.apps.first(where: { $0.id == existingApp.id })?.html == html {
+                    ForgeSemanticAppModelStore.save(for: existingApp.id, html: html,
+                        purpose: session.description.isEmpty ? existingApp.summary : session.description,
+                        editNote: session.lastEditSummary)
+                }
                 if let icon = session.renderedIconData {
                     store.setGeneratedIcon(icon, for: existingApp)
                 }

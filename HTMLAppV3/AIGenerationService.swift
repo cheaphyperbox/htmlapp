@@ -523,7 +523,11 @@ final class AIGenerationSession: ObservableObject {
         wantsUIPolish = false
         do {
             let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
-            let semanticModel = ForgeSemanticAppModel.build(html: streamedHTML, purpose: description)
+            var semanticModel = ForgeSemanticAppModel.build(html: streamedHTML, purpose: description)
+            if let appID = checkpointExistingAppID,
+               let retained = ForgeSemanticAppModelStore.load(for: appID) {
+                semanticModel.recentEdits = retained.recentEdits
+            }
             let editContract = ForgeEditContract.make(
                 request: cleanChange, model: semanticModel, taste: ForgeTasteMemory.summary
             )
@@ -621,6 +625,14 @@ Requested change:
                 requestedChange: improvedChange,
                 config: config
             )
+            let dataSafety = ForgeEditSafetyGate.violations(
+                before: beforeEditHTML, after: streamedHTML, request: cleanChange
+            )
+            if !dataSafety.isEmpty {
+                AIDebugTraceStore.shared.append("EDIT DATA PRESERVATION",
+                    dataSafety.map(\.description).joined(separator: "\n"))
+                throw AIGenerationError.invalidPatch
+            }
             if !output.description.isEmpty { description = output.description }
             if iconRefreshAllowed, !output.iconScript.isEmpty { iconScript = output.iconScript }
             if !output.refinedBrief.isEmpty { refinedBrief = output.refinedBrief }

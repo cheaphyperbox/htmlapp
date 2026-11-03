@@ -56,6 +56,8 @@ for width in ("320", "375", "390", "430", "768", "1024"):
 assert "Never disable user zoom" not in product
 assert "no document-level" in product.lower() or "no document-level" in forge.lower()
 assert "ForgeEditContract.make" in forge
+assert "ForgeEditSafetyGate.violations" in forge
+assert "ForgeSemanticAppModelStore.load" in forge
 assert "ForgeSemanticAppModelStore.save" in read("HTMLAppV3/AIGenerationView.swift")
 assert "data loss" not in model.lower()  # Model contains no stored user values.
 assert "512 * 1024" in read("HTMLAppV3/HTMLAppNetworkBridge.swift")
