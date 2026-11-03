@@ -34,6 +34,23 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "network.request",
+            title: "Consent-gated public HTTPS API requests",
+            keywords: ["native network", "HTTP", "HTTPS", "CORS", "REST", "JSON", "API", "URLSession"],
+            purpose: "Send text/JSON requests to a public HTTPS API through iOS URLSession when browser CORS prevents legitimate access.",
+            api: "await HTMLAppNative.network.request({url,method?,headers?,body?,signal?})",
+            example: """
+            const result = await HTMLAppNative.network.request({
+              url: "https://api.example.org/data",
+              method: "GET"
+            });
+            if (!result.ok) throw new Error("HTTP " + result.status);
+            const payload = JSON.parse(result.body);
+            """,
+            constraints: "Requires per-app Internet API permission and separate approval for every public DNS hostname. No redirects, local/LAN hosts, IP literals, cookies, insecure HTTP, embedded URL credentials, binary responses, or secret keys in shared app source. Max 512KB request body, 1MB UTF-8 response; use a server for proprietary credentials or complex OAuth. AbortSignal cancels this operation when supported."
+        ),
+
+        .init(
             id: "display.environment", title: "Car display and viewport adaptation",
             keywords: ["CarPlay", "car", "landscape", "display", "viewport", "dashboard"],
             purpose: "Adapt saved HTML apps to a car compatibility display and short landscape viewports.",

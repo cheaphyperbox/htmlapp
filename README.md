@@ -48,3 +48,7 @@ Forge now creates a conservative value-free semantic model of saved apps (DOM/co
 ## Bridge protocol and introspection
 
 The documented native dispatcher surface is enumerated in `HTMLAppV3/HTMLAppBridgeRegistry.swift`; the repository's consistency check compares it to Swift dispatch cases. The JS bridge now supports `AbortSignal` on `HTMLAppNative.call` (stopping the underlying native job only for explicitly supported methods), adds `capabilities.has/describe`, protocol metadata, and per-app host permission status/request. Permission status deliberately reports system authorization as unknown unless the underlying iOS framework checks it.
+
+## Native public API requests
+
+`HTMLAppNative.network.request({url, method, headers, body, signal})` is an optional public-HTTPS, text/JSON-only native networking API for servers lacking browser CORS. It requires the saved app's **Internet API Requests** permission and a separate consent prompt per hostname. Direct IPs, LAN/loopback hosts, redirects, cookies, insecure HTTP, credentialed URLs, oversized bodies and binary responses are prohibited. `network.allowedDomains()` lists approved hosts and `network.revokeDomain(host)` revokes one. The feature does not install a backend or circumvent API authentication and it should never be used to ship secret keys embedded in HTML.

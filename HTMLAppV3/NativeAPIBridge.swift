@@ -37,6 +37,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private var documentScanner: HTMLAppDocumentScanner?
     private var drawingPresenter: HTMLAppDrawingPresenter?
     private var aiTasks: [String: Task<Void, Never>] = [:]
+    private var networkTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
     private let altimeter = CMAltimeter()
     private var nativeTabBar: HTMLAppNativeTabBar?
@@ -61,6 +62,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         bluetoothDiscovery.cancel()
         aiTasks.values.forEach { $0.cancel() }
         aiTasks.removeAll()
+        networkTasks.values.forEach { $0.cancel() }
+        networkTasks.removeAll()
         if let previousBrightness {
             UIScreen.main.brightness = previousBrightness
             self.previousBrightness = nil
@@ -659,9 +662,47 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 reject(id, code: "invalid_arguments", message: "Provide a valid target request ID.")
                 return
             }
-            let task = aiTasks.removeValue(forKey: target)
+            let task = aiTasks.removeValue(forKey: target) ?? networkTasks.removeValue(forKey: target)
             task?.cancel()
             resolve(id, value: ["cancelled": task != nil])
+        case "network.allowedDomains":
+            resolve(id, value: ["domains": HTMLAppNetworkDomainConsent.approved(for: appID)])
+        case "network.revokeDomain":
+            guard let host = args["host"] as? String, !host.isEmpty else {
+                reject(id, code: "invalid_arguments", message: "Provide a domain to revoke.")
+                return
+            }
+            HTMLAppNetworkDomainConsent.revoke(host: host.lowercased(), appID: appID)
+            resolve(id, value: ["revoked": true])
+        case "network.request":
+            guard let host = HTMLAppNetworkBridge.validatedHost(args) else {
+                reject(id, code: "invalid_url", message: "Only public HTTPS domain URLs without IP literals, LAN or embedded credentials are allowed.")
+                return
+            }
+            withPermission(.network, id: id) { [weak self] in
+                guard let self else { return }
+                HTMLAppNetworkDomainConsent.request(host: host, appID: self.appID) { [weak self] approved in
+                    guard let self else { return }
+                    guard approved else {
+                        self.reject(id, code: "domain_denied", message: "Network access to this domain was not approved.")
+                        return
+                    }
+                    self.networkTasks[id] = Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        defer { self.networkTasks.removeValue(forKey: id) }
+                        do {
+                            let result = try await HTMLAppNetworkBridge.perform(args)
+                            guard !Task.isCancelled else { return }
+                            self.resolve(id, value: result)
+                        } catch is CancellationError {
+                            self.reject(id, code: "cancelled", message: "Native network request was cancelled.")
+                        } catch {
+                            guard !Task.isCancelled else { return }
+                            self.reject(id, code: "network_error", message: error.localizedDescription)
+                        }
+                    }
+                }
+            }
         case "device.battery":
             UIDevice.current.isBatteryMonitoringEnabled = true
             let device = UIDevice.current
@@ -2842,6 +2883,14 @@ enum HTMLNativeAPIScript {
         permissions: {
           status: (permission) => call('permissions.status', { permission }),
           request: (permission) => call('permissions.request', { permission })
+        },
+        network: {
+          request: (options = {}) => {
+            const { signal, ...args } = options;
+            return call('network.request', args, { signal });
+          },
+          allowedDomains: () => call('network.allowedDomains'),
+          revokeDomain: (host) => call('network.revokeDomain', { host })
         },
         nfc: {
           available: () => call('nfc.available'),

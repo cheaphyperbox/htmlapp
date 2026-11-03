@@ -24,6 +24,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
     case reminders
     case biometrics
     case localNetwork
+    case network
     case clipboard
     case files
     case externalApps
@@ -51,6 +52,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .reminders: return "Reminders"
         case .biometrics: return "Biometrics"
         case .localNetwork: return "Local Network"
+        case .network: return "Internet API Requests"
         case .clipboard: return "Clipboard"
         case .files: return "Choose Files"
         case .externalApps: return "Open Other Apps"
@@ -78,6 +80,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .reminders: return "Allows this HTML app to read and create reminders through EventKit."
         case .biometrics: return "Allows this HTML app to request Face ID, Touch ID, or device authentication."
         case .localNetwork: return "Allows this HTML app to connect to devices and servers on your private Wi-Fi or LAN."
+        case .network: return "Allows this saved app to send explicit HTTPS requests to separately approved public API domains through native networking."
         case .clipboard: return "Allows this HTML app to read and write text on your device clipboard."
         case .files: return "Allows this HTML app to open the iOS file picker for files you explicitly select."
         case .externalApps: return "Allows this HTML app to open links or other installed apps outside HTMLApp."
@@ -105,6 +108,7 @@ enum HTMLPermission: String, CaseIterable, Identifiable {
         case .reminders: return "checklist"
         case .biometrics: return "faceid"
         case .localNetwork: return "network"
+        case .network: return "globe"
         case .clipboard: return "doc.on.clipboard"
         case .files: return "folder"
         case .externalApps: return "arrow.up.forward.app"
