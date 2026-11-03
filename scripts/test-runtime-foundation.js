@@ -33,7 +33,7 @@ async function main() {
     },
     addEventListener: (event, listener) => events.set(event, listener),
     removeEventListener: event => events.delete(event),
-    dispatchEvent() {}
+    dispatchEvent(event) { const listener = events.get(event.type); if (listener) listener(event); }
   };
   const document = { hidden: false, addEventListener() {} };
   vm.runInNewContext(source, { window, document, console, AbortController, Error, DOMException,
