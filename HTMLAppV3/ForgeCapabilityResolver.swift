@@ -25,7 +25,16 @@ struct ForgeCapabilityPlan {
 
     static func infer(_ request: String) -> ForgeCapabilityPlan {
         let lower = request.lowercased()
-        func mentions(_ words: [String]) -> Bool { words.contains { lower.contains($0) } }
+        // Remove harmless articles so short prompts like "scan a receipt"
+        // and "scan receipt" resolve to the same capability plan.
+        let normalized = lower.replacingOccurrences(
+            of: #"\b(a|an|the|my|some)\s+"#,
+            with: "",
+            options: .regularExpression
+        )
+        func mentions(_ words: [String]) -> Bool {
+            words.contains { lower.contains($0) || normalized.contains($0) }
+        }
         var methods = [String]()
         var browsers = [String]()
         var constraints = [String]()
