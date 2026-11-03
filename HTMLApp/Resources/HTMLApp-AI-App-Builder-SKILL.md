@@ -52,3 +52,7 @@ For remote integrations show a setup screen and a clear online/offline status. D
 ## How to deliver
 
 Return the full HTML file with a clear filename, brief instructions for saving it and importing it into HTMLApp, a note identifying any online services, permissions or external server dependencies, and any hardware-only tests the user must perform. For edits, retain the user's data keys and functionality and explain necessary migrations.
+
+## Native bridge discovery and safe cancellation
+
+Recent HTMLApp runtimes expose `HTMLAppNative.protocolVersion`, `await HTMLAppNative.capabilities.has(method)`, `await HTMLAppNative.capabilities.describe(method)`, and `HTMLAppNative.permissions.status(name)` / `.request(name)`. Do not equate host permission with iOS system authorization. `HTMLAppNative.call(method, args, {signal})` can abandon a pending promise on AbortSignal; only currently cancellable native operations such as supported AI requests stop their underlying native task. Do not claim arbitrary operations are cancellable. Continue feature-detecting older runtimes.

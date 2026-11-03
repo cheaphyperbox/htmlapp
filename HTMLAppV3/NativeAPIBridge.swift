@@ -606,27 +606,9 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
         case "capabilities.list":
             resolve(id, value: [
-                "methods": [
-                    "gamepad.list", "gamepad.start", "gamepad.stop", "haptics.pattern", "nfc.available", "nfc.readNDEF", "nfc.writeText", "health.available", "health.today", "health.range", "map.show", "location.reverseGeocode", "location.roadSpeedLimit", "drawing.open", "documents.scan", "image.filter", "pdf.inspect", "vision.recognizeText", "vision.scanCodes", "vision.classifyImage", "vision.detectFaces",
-                    "db.put", "db.get", "db.delete", "db.query", "db.count", "db.export", "db.import", "db.search",
-                    "shortcuts.consumeAction", "spotlight.enable", "spotlight.index", "spotlight.remove", "spotlight.clear",
-                    "language.detect", "language.tokenize", "language.sentiment", "language.entities", "ai.available", "ai.complete", "ai.classify", "ai.localAvailable", "ai.localComplete", "ai.cancel", "device.info", "device.battery", "device.keepAwake", "device.brightness", "device.torch",
-                    "motion.pedometer", "motion.altitude", "bluetooth.scan", "bluetooth.battery", "bluetooth.gattRead", "bluetooth.gattWrite", "tabs.configure", "tabs.select", "tabs.update", "tabs.setHidden", "tabs.pulse", "tabs.remove",
-                    "symbols.search", "symbols.render", "clipboard.readText", "clipboard.writeText",
-                    "haptics.play", "share.present", "system.open", "externalApps.maps",
-                    "externalApps.shortcuts", "files.pick", "contacts.pick", "contacts.list",
-                    "contacts.create", "photos.pick", "photos.save", "calendar.createEvent",
-                    "calendar.events", "calendar.updateEvent", "calendar.deleteEvent",
-                    "reminders.create", "reminders.list", "reminders.update", "reminders.delete",
-                    "notifications.schedule", "notifications.cancel", "notifications.installSound", "push.register", "biometrics.authenticate",
-                    "secureStorage.set", "secureStorage.get", "secureStorage.remove",
-                    "appStorage.get", "appStorage.set", "appStorage.remove", "appStorage.all",
-                    "appStorage.clear", "liveActivities.start", "liveActivities.update",
-                    "liveActivities.end", "liveActivities.list", "widgets.configure",
-                    "widgets.list", "widgets.remove", "widgets.reload", "background.configure",
-                    "background.list", "background.remove", "background.refreshNow",
-                    "speech.speak", "speech.stop", "speech.listen", "speech.listenStop", "speech.recognize", "speech.stopRecognizing"
-                ],
+                "protocolVersion": HTMLAppBridgeRegistry.protocolVersion,
+                "descriptorVersion": HTMLAppBridgeRegistry.descriptorVersion,
+                "methods": HTMLAppBridgeRegistry.methods,
                 "permissions": HTMLPermission.allCases.map { $0.rawValue },
                 "torchAvailable": AVCaptureDevice.default(for: .video)?.hasTorch ?? false,
                 "liveActivitiesAvailable": {
@@ -636,6 +618,50 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                     return false
                 }()
             ])
+        case "capabilities.describe":
+            guard let name = args["method"] as? String,
+                  let value = HTMLAppBridgeRegistry.describe(name) else {
+                reject(id, code: "unsupported_method", message: "The requested capability is not registered.")
+                return
+            }
+            resolve(id, value: value)
+        case "permissions.status":
+            guard let name = args["permission"] as? String,
+                  let permission = HTMLPermission(rawValue: name) else {
+                reject(id, code: "invalid_arguments", message: "Provide a supported permission name.")
+                return
+            }
+            let policy = HTMLPermissionStore.choice(for: permission, appID: appID)
+            resolve(id, value: [
+                "permission": name,
+                "hostPolicy": policy.rawValue,
+                "systemAuthorization": "unknown",
+                "available": appID != "PREVIEW",
+                "canRequest": appID != "PREVIEW" && policy != .deny,
+                "settingsRequired": policy == .deny,
+                "note": "Host permission does not prove iOS authorization; use the native operation to request applicable system consent."
+            ] as [String: Any])
+        case "permissions.request":
+            guard let name = args["permission"] as? String,
+                  let permission = HTMLPermission(rawValue: name) else {
+                reject(id, code: "invalid_arguments", message: "Provide a supported permission name.")
+                return
+            }
+            withPermission(permission, id: id) { [weak self] in
+                self?.resolve(id, value: [
+                    "permission": name, "hostAllowed": true,
+                    "systemAuthorization": "unknown"
+                ])
+            }
+        case "bridge.cancel":
+            guard let target = args["targetID"] as? String, !target.isEmpty,
+                  target != id else {
+                reject(id, code: "invalid_arguments", message: "Provide a valid target request ID.")
+                return
+            }
+            let task = aiTasks.removeValue(forKey: target)
+            task?.cancel()
+            resolve(id, value: ["cancelled": task != nil])
         case "device.battery":
             UIDevice.current.isBatteryMonitoringEnabled = true
             let device = UIDevice.current
@@ -2693,7 +2719,11 @@ enum HTMLNativeAPIScript {
       let sequence = 0;
       const pending = new Map();
 
-      const call = (method, args = {}) => new Promise((resolve, reject) => {
+      const call = (method, args = {}, options = {}) => new Promise((resolve, reject) => {
+        if (options.signal?.aborted) {
+          reject(Object.assign(new Error('Native request cancelled.'), { code: 'cancelled' }));
+          return;
+        }
         const handler = window.webkit?.messageHandlers?.htmlappNative;
         if (!handler) {
           reject(Object.assign(new Error('HTMLApp native bridge is unavailable.'), { code: 'bridge_unavailable' }));
@@ -2711,12 +2741,23 @@ enum HTMLNativeAPIScript {
           error.code = 'native_timeout';
           reject(error);
         }, deadline);
-        pending.set(id, { resolve, reject, method, timer });
+        const onAbort = () => {
+          const item = pending.get(id);
+          if (!item) return;
+          pending.delete(id);
+          clearTimeout(timer);
+          options.signal?.removeEventListener('abort', onAbort);
+          try { handler.postMessage({ id: 'cancel-' + id, method: 'bridge.cancel', args: { targetID: id } }); } catch (_) {}
+          reject(Object.assign(new Error('Native request cancelled.'), { code: 'cancelled' }));
+        };
+        pending.set(id, { resolve, reject, method, timer, onAbort, signal: options.signal });
+        options.signal?.addEventListener('abort', onAbort, { once: true });
         try {
-          handler.postMessage({ id, method, args });
+          handler.postMessage({ id, method, args, protocolVersion: 2 });
         } catch (error) {
           clearTimeout(timer);
           pending.delete(id);
+          options.signal?.removeEventListener('abort', onAbort);
           reject(error);
         }
       });
@@ -2726,6 +2767,7 @@ enum HTMLNativeAPIScript {
         if (!item) return;
         pending.delete(id);
         clearTimeout(item.timer);
+        item.signal?.removeEventListener('abort', item.onAbort);
         if (ok) {
           if (item.method === 'widgets.configure') document.getElementById('__htmlappWidgetError')?.remove();
           item.resolve(value);
@@ -2797,6 +2839,10 @@ enum HTMLNativeAPIScript {
       const api = {
         call,
         capabilities: () => call('capabilities.list'),
+        permissions: {
+          status: (permission) => call('permissions.status', { permission }),
+          request: (permission) => call('permissions.request', { permission })
+        },
         nfc: {
           available: () => call('nfc.available'),
           readNDEF: () => call('nfc.readNDEF'),
@@ -3042,6 +3088,21 @@ enum HTMLNativeAPIScript {
         }
       };
 
+      api.protocolVersion = 2;
+      api.capabilities.list = api.capabilities;
+      api.capabilities.has = async method => {
+        const snapshot = await api.capabilities();
+        return Array.isArray(snapshot?.methods) && snapshot.methods.includes(method);
+      };
+      api.capabilities.describe = method => call('capabilities.describe', { method });
+      window.addEventListener('pagehide', () => {
+        for (const [id, item] of pending) {
+          clearTimeout(item.timer);
+          item.signal?.removeEventListener('abort', item.onAbort);
+          item.reject(Object.assign(new Error('WebView navigated away.'), { code: 'cancelled' }));
+          pending.delete(id);
+        }
+      });
       window.HTMLApp = window.HTMLApp || {};
       window.HTMLApp.capabilities = () => api.capabilities();
       Object.defineProperty(window, 'HTMLAppNative', {

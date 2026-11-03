@@ -44,3 +44,7 @@ Saved/generated HTMLApps use a fixed page scale to avoid pinch, double-tap and i
 ## Semantic Forge editing
 
 Forge now creates a conservative value-free semantic model of saved apps (DOM/component identifiers, storage keys, database collections, native integrations and acceptance invariants). The local `ForgeSemanticModels` sidecars remember short edit summaries without storing prompts, secret values or full code. Short requests such as 'cleaner', 'more native', 'faster', and 'add reminders' are turned into bounded edit contracts before patching. The literal request remains authoritative. Full-source fallback is preserved when a focused selector is ambiguous; the system does not claim full automated workflow verification.
+
+## Bridge protocol and introspection
+
+The documented native dispatcher surface is enumerated in `HTMLAppV3/HTMLAppBridgeRegistry.swift`; the repository's consistency check compares it to Swift dispatch cases. The JS bridge now supports `AbortSignal` on `HTMLAppNative.call` (stopping the underlying native job only for explicitly supported methods), adds `capabilities.has/describe`, protocol metadata, and per-app host permission status/request. Permission status deliberately reports system authorization as unknown unless the underlying iOS framework checks it.

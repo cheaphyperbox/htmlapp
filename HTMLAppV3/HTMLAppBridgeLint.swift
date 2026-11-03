@@ -4,7 +4,7 @@ import Foundation
 /// Never executes untrusted app JavaScript.
 enum HTMLAppBridgeLint {
     static func warnings(in html: String) -> [String] {
-        let known = Set(HTMLAppDeviceAPIResearch.entries.map(\.id))
+        let known = HTMLAppBridgeRegistry.methodSet
         let pattern = #"\b(?:HTMLAppNative|HTMLApp)\.([A-Za-z][A-Za-z0-9]*)\.([A-Za-z][A-Za-z0-9]*)\s*\("#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let source = html as NSString
