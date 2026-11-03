@@ -172,9 +172,9 @@ assert 'DisclosureGroup("Built-in Forge system prompt")' not in source("HTMLAppV
 assert 'get { defaultSystemPrompt }' in source("HTMLAppV3/AIConfiguration.swift")
 assert 'systemSmall, systemMedium, and systemLarge' in ai
 assert 'accessoryCircular (square/circular compact widget)' in ai
-assert 'Toggle("Sync HTMLApps with iCloud"' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'Toggle("Sync Saved Apps"' in source("HTMLAppV3/OnboardingSettings.swift")
 assert 'if iCloudSyncApps {' in source("HTMLAppV3/OnboardingSettings.swift")
-assert 'Toggle("Sync HTMLApp Data"' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'Toggle("Include Saved App Data"' in source("HTMLAppV3/OnboardingSettings.swift")
 assert 'actor HTMLAppICloudSync' in source("HTMLAppV3/HTMLAppICloudSync.swift")
 assert 'HTMLAppICloudPreferences.includeData' in source("HTMLAppV3/AppCore.swift")
 assert 'com.apple.developer.ubiquity-container-identifiers' in source("HTMLApp/HTMLApp.entitlements")
