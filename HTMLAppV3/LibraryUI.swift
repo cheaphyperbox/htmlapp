@@ -746,7 +746,7 @@ struct LibraryView: View {
               queuedFileImport != nil else { return }
         // UIKit document picker dismissal and launch covers can otherwise
         // race the next SwiftUI sheet on iOS 16.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard !importingFile, pendingImport == nil,
                   serverDependentImport == nil,
                   let payload = queuedFileImport else { return }
