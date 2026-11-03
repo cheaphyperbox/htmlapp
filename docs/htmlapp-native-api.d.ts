@@ -11,6 +11,13 @@ export type HTMLAppNativeMethod =
   | 'appStorage.get'
   | 'appStorage.remove'
   | 'appStorage.set'
+  | 'audio.cancelRecording'
+  | 'audio.levels'
+  | 'audio.pause'
+  | 'audio.play'
+  | 'audio.record'
+  | 'audio.stop'
+  | 'audio.stopRecording'
   | 'background.configure'
   | 'background.list'
   | 'background.refreshNow'
@@ -121,8 +128,10 @@ export type HTMLAppNativeMethod =
   | 'tabs.setHidden'
   | 'tabs.update'
   | 'ui.alert'
+  | 'ui.colorPicker'
   | 'ui.datePicker'
   | 'ui.menu'
+  | 'video.capture'
   | 'vision.classifyImage'
   | 'vision.detectFaces'
   | 'vision.recognizeText'
@@ -179,6 +188,17 @@ export interface HTMLAppNativeAPI {
     alert(args: { title?: string; message?: string; actions?: { id: string; title: string; style?: "cancel" | "default" | "destructive" }[] }): Promise<{ id?: string; index?: number; cancelled: boolean }>;
     menu(args: { title?: string; message?: string; actions: { id: string; title: string; style?: string }[] }): Promise<{ id?: string; index?: number; cancelled: boolean }>;
     datePicker(args: { title?: string; mode?: "date" | "time" | "dateTime"; value?: string; timestampMS?: number }): Promise<{ cancelled: boolean; value?: string; timestampMS?: number }>;
+    colorPicker(args?: { hex?: string; alpha?: boolean }): Promise<{ cancelled: boolean; hex?: string; alpha?: number }>;
+  };
+  video: { capture(options?: { maxDuration?: number }): Promise<{ url: string; name: string; size: number; mimeType: string }> };
+  audio: {
+    record(options?: { maxDuration?: number }): Promise<{ recording: boolean; url: string; mimeType: "audio/mp4"; maxDuration: number }>;
+    stopRecording(): Promise<{ recording: false; url: string; mimeType: "audio/mp4"; size: number; duration: number }>;
+    cancelRecording(): Promise<{ cancelled: boolean }>;
+    levels(): Promise<{ recording: boolean; levelDB: number; peakDB?: number; duration?: number }>;
+    play(url: string): Promise<{ playing: boolean; duration: number }>;
+    pause(): Promise<{ playing: boolean }>;
+    stop(): Promise<{ playing: false }>;
   };
   events: { on(name: string, handler: (detail: unknown) => void): () => void };
 }

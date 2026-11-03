@@ -7,6 +7,7 @@ import Foundation
 @MainActor
 enum HTMLAppNativeUIService {
     private static var lastPresentedAt: [String: Date] = [:]
+    private static var colorSessions: [String: HTMLAppColorPickerSession] = [:]
 
     private static func presenter(for appID: String) -> UIViewController? {
         guard appID != "PREVIEW" else { return nil }
@@ -50,6 +51,19 @@ enum HTMLAppNativeUIService {
             )
         }
         presenter.present(alert, animated: true)
+        return true
+    }
+
+    static func colorPicker(args: [String: Any], appID: String,
+                            completion: @escaping @MainActor ([String: Any]) -> Void) -> Bool {
+        guard colorSessions[appID] == nil,
+              let presenter = presenter(for: appID) else { return false }
+        let session = HTMLAppColorPickerSession()
+        colorSessions[appID] = session
+        session.present(from: presenter, options: args) { result in
+            colorSessions.removeValue(forKey: appID)
+            completion(result)
+        }
         return true
     }
 

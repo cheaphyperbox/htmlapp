@@ -42,6 +42,18 @@ async function testNativeRPC() {
   assert.equal(await api.capabilities.has('nonexistent.method'), false);
   assert.equal((await api.capabilities.describe('permissions.status')).method, 'permissions.status');
   assert.equal((await api.permissions.status('camera')).hostPolicy, 'ask');
+  assert.equal(typeof api.audio.record, 'function');
+  assert.equal(typeof api.video.capture, 'function');
+  assert.equal(typeof api.ui.colorPicker, 'function');
+  await api.audio.record({ maxDuration: 30 });
+  await api.audio.levels();
+  await api.audio.stopRecording();
+  await api.video.capture({ maxDuration: 15 });
+  await api.ui.colorPicker({ hex: '#445566' });
+  assert.ok(sent.some(msg => msg.method === 'audio.record' && msg.args.maxDuration === 30));
+  assert.ok(sent.some(msg => msg.method === 'audio.stopRecording'));
+  assert.ok(sent.some(msg => msg.method === 'video.capture' && msg.args.maxDuration === 15));
+  assert.ok(sent.some(msg => msg.method === 'ui.colorPicker'));
 
   const controller = new AbortController();
   const request = api.network.request({ url: 'https://example.org/data', signal: controller.signal });

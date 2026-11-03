@@ -37,6 +37,8 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private var documentScanner: HTMLAppDocumentScanner?
     private var drawingPresenter: HTMLAppDrawingPresenter?
     private var cameraCapture: HTMLAppCameraCapture?
+    private var audioService: HTMLAppAudioService?
+    private var videoCapture: HTMLAppVideoCapture?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private var networkTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
@@ -62,6 +64,9 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         gamepads.stop()
         bluetoothDiscovery.cancel()
         cameraCapture = nil
+        audioService?.shutdown()
+        audioService = nil
+        videoCapture = nil
         aiTasks.values.forEach { $0.cancel() }
         aiTasks.removeAll()
         networkTasks.values.forEach { $0.cancel() }
@@ -82,6 +87,85 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
+        case "audio.record":
+            withPermission(.microphone, id: id) { [weak self] in
+                guard let self else { return }
+                let maxDuration = (args["maxDuration"] as? NSNumber)?.doubleValue ?? 60
+                Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        let value = try await self.audioServiceForApp().record(maxDuration: maxDuration)
+                        self.resolve(id, value: value)
+                    } catch {
+                        self.reject(id, code: "audio_record_failed", message: error.localizedDescription)
+                    }
+                }
+            }
+        case "audio.stopRecording":
+            do {
+                guard let audioService else {
+                    reject(id, code: "audio_not_recording", message: "No recording is active.")
+                    return
+                }
+                resolve(id, value: try audioService.stopRecording())
+            } catch {
+                reject(id, code: "audio_stop_failed", message: error.localizedDescription)
+            }
+        case "audio.cancelRecording":
+            resolve(id, value: audioService?.cancelRecording() ?? ["cancelled": false])
+        case "audio.levels":
+            resolve(id, value: audioService?.levels() ?? ["recording": false, "levelDB": -160.0])
+        case "audio.play":
+            guard let relative = args["url"] as? String else {
+                reject(id, code: "invalid_arguments", message: "Provide a previously recorded app-scoped audio URL.")
+                return
+            }
+            do {
+                resolve(id, value: try audioServiceForApp().play(relative: relative))
+            } catch {
+                reject(id, code: "audio_play_failed", message: error.localizedDescription)
+            }
+        case "audio.pause":
+            resolve(id, value: audioService?.pause() ?? ["playing": false])
+        case "audio.stop":
+            resolve(id, value: audioService?.stop() ?? ["playing": false])
+        case "video.capture":
+            withPermission(.camera, id: id) { [weak self] in
+                guard let self else { return }
+                self.withPermission(.microphone, id: id) { [weak self] in
+                    guard let self else { return }
+                    guard self.videoCapture == nil else {
+                        self.reject(id, code: "video_busy",
+                                    message: "Finish or cancel the current video recording.")
+                        return
+                    }
+                    guard let presenter = self.topViewController() else {
+                        self.reject(id, code: "presentation_failed",
+                                    message: "No active view controller can present the camera.")
+                        return
+                    }
+                    let capture = HTMLAppVideoCapture(
+                        root: SourceCache.shared.baseURL(appID: self.appID),
+                        options: args
+                    ) { [weak self] result in
+                        guard let self else { return }
+                        self.videoCapture = nil
+                        switch result {
+                        case .success(let payload): self.resolve(id, value: payload)
+                        case .failure(let error):
+                            self.reject(id, code: "video_capture_failed",
+                                        message: error.localizedDescription)
+                        }
+                    }
+                    self.videoCapture = capture
+                    do { try capture.present(from: presenter) }
+                    catch {
+                        self.videoCapture = nil
+                        self.reject(id, code: "video_unavailable",
+                                    message: error.localizedDescription)
+                    }
+                }
+            }
         case "camera.capturePhoto":
             withPermission(.camera, id: id) { [weak self] in
                 guard let self else { return }
@@ -663,7 +747,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 return
             }
             let hardwareAvailable: Bool
-            if name == "camera.capturePhoto" {
+            if name == "camera.capturePhoto" || name == "video.capture" {
                 hardwareAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
             } else if name.hasPrefix("nfc.") {
                 hardwareAvailable = HTMLAppNFCReader.available
@@ -739,6 +823,14 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             }
             if !shown {
                 reject(id, code: "ui_unavailable", message: "Cannot present this native dialog now. Use a user tap and try again.")
+            }
+        case "ui.colorPicker":
+            let shown = HTMLAppNativeUIService.colorPicker(args: args, appID: appID) { [weak self] selected in
+                self?.resolve(id, value: selected)
+            }
+            if !shown {
+                reject(id, code: "ui_unavailable",
+                       message: "Cannot present the native color picker now. Try after a deliberate tap.")
             }
         case "ui.datePicker":
             let shown = HTMLAppNativeUIService.datePicker(args: args, appID: appID) { [weak self] selection in
@@ -1395,7 +1487,17 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         }
         var items: [Any] = []
         if let text = args["text"] as? String, !text.isEmpty { items.append(text) }
-        if let rawURL = args["url"] as? String, let url = URL(string: rawURL) { items.append(url) }
+        if let rawURL = args["url"] as? String {
+            if (rawURL.hasPrefix("native-imports/audio/") ||
+                rawURL.hasPrefix("native-imports/videos/")),
+               let file = localResourceURL(rawURL) {
+                // Explicit user share sheet: export an app-owned recording
+                // without exposing the file to an arbitrary website.
+                items.append(file)
+            } else if let url = URL(string: rawURL), url.scheme != nil {
+                items.append(url)
+            }
+        }
         guard !items.isEmpty else {
             reject(id, code: "invalid_arguments", message: "Share requires text or url.")
             return
@@ -2810,6 +2912,23 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         return current
     }
 
+    private func audioServiceForApp() -> HTMLAppAudioService {
+        if let audioService { return audioService }
+        let service = HTMLAppAudioService(root: SourceCache.shared.baseURL(appID: appID)) {
+            [weak self] detail in self?.emitAudioEvent(detail)
+        }
+        audioService = service
+        return service
+    }
+
+    private func emitAudioEvent(_ detail: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(detail),
+              let data = try? JSONSerialization.data(withJSONObject: detail),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript(
+            "window.dispatchEvent(new CustomEvent('htmlapp:audio', { detail: \(json) }));")
+    }
+
     private func emitGamepadEvent(_ detail: [String: Any]) {
         guard JSONSerialization.isValidJSONObject(detail),
               let data = try? JSONSerialization.data(withJSONObject: detail),
@@ -2864,7 +2983,7 @@ enum HTMLNativeAPIScript {
         const id = `native-${Date.now()}-${++sequence}`;
         // Pickers and system authorization sheets may stay open longer than
         // simple data calls. Every pending request still has a finite deadline.
-        const interactive = /^(files\.pick|photos\.(?:pick|read)|contacts\.pick|calendar\.|nfc\.readNDEF|health\.today|biometrics\.|share\.|speech\.listen|speech\.recognize)/.test(method);
+        const interactive = /^(files\.pick|photos\.(?:pick|read)|contacts\.pick|calendar\.|nfc\.readNDEF|health\.today|biometrics\.|share\.|speech\.listen|speech\.recognize|audio\.record|video\.capture|ui\.(?:alert|menu|datePicker|colorPicker))/.test(method);
         const deadline = interactive ? 180000 : (method.startsWith('ai.') ? 120000 : 30000);
         const timer = setTimeout(() => {
           if (!pending.has(id)) return;
@@ -2979,7 +3098,8 @@ enum HTMLNativeAPIScript {
         ui: {
           alert: (options = {}) => call('ui.alert', options),
           menu: (options = {}) => call('ui.menu', options),
-          datePicker: (options = {}) => call('ui.datePicker', options)
+          datePicker: (options = {}) => call('ui.datePicker', options),
+          colorPicker: (options = {}) => call('ui.colorPicker', options)
         },
         events: {
           on: (name, handler) => {
@@ -2992,6 +3112,18 @@ enum HTMLNativeAPIScript {
         },
         camera: {
           capturePhoto: (options = {}) => call('camera.capturePhoto', options)
+        },
+        video: {
+          capture: (options = {}) => call('video.capture', options)
+        },
+        audio: {
+          record: (options = {}) => call('audio.record', options),
+          stopRecording: () => call('audio.stopRecording'),
+          cancelRecording: () => call('audio.cancelRecording'),
+          levels: () => call('audio.levels'),
+          play: (url) => call('audio.play', { url: String(url || '') }),
+          pause: () => call('audio.pause'),
+          stop: () => call('audio.stop')
         },
         network: {
           request: (options = {}) => {

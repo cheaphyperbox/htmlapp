@@ -13,6 +13,13 @@ enum HTMLAppBridgeRegistry {
         "ai.complete",
         "ai.localAvailable",
         "ai.localComplete",
+        "audio.cancelRecording",
+        "audio.levels",
+        "audio.pause",
+        "audio.play",
+        "audio.record",
+        "audio.stop",
+        "audio.stopRecording",
         "appStorage.all",
         "appStorage.clear",
         "appStorage.get",
@@ -122,6 +129,7 @@ enum HTMLAppBridgeRegistry {
         "symbols.search",
         "system.open",
         "ui.alert",
+        "ui.colorPicker",
         "ui.datePicker",
         "ui.menu",
         "tabs.configure",
@@ -133,6 +141,7 @@ enum HTMLAppBridgeRegistry {
         "vision.classifyImage",
         "vision.detectFaces",
         "vision.recognizeText",
+        "video.capture",
         "vision.scanCodes",
         "widgets.configure",
         "widgets.list",
@@ -146,7 +155,7 @@ enum HTMLAppBridgeRegistry {
         switch namespace {
         case "health": return .health
         case "nfc": return .nfc
-        case "camera": return .camera
+        case "camera", "video": return .camera
         case "contacts": return .contacts
         case "photos": return .photoLibrary
         case "calendar": return .calendar
@@ -156,6 +165,9 @@ enum HTMLAppBridgeRegistry {
         case "notifications", "push": return .notifications
         case "liveActivities": return .liveActivities
         case "ai": return .ai
+        case "audio":
+            return ["audio.record", "audio.stopRecording", "audio.cancelRecording", "audio.levels"]
+                .contains(method) ? .microphone : nil
         case "spotlight": return .spotlight
         case "clipboard": return .clipboard
         case "externalApps", "system": return .externalApps

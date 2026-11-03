@@ -34,6 +34,21 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "audio.record",
+            title: "Foreground native iOS audio recording",
+            keywords: ["audio", "microphone", "voice memo", "record", "m4a", "sound level"],
+            purpose: "Record a bounded, microphone-consented M4A voice note into the saved app sandbox and play it through a native audio session.",
+            api: "await HTMLAppNative.audio.record({maxDuration?:number}); await HTMLAppNative.audio.stopRecording(); HTMLAppNative.audio.levels(); HTMLAppNative.audio.play(url); HTMLAppNative.audio.pause(); HTMLAppNative.audio.stop(); HTMLAppNative.audio.cancelRecording()",
+            example: """
+            const record = await HTMLAppNative.audio.record({maxDuration:60});
+            // On Stop tap:
+            const file = await HTMLAppNative.audio.stopRecording();
+            await HTMLAppNative.audio.play(file.url);
+            // On app close, call cancelRecording and stop.
+            """,
+            constraints: "Foreground only. Requires per-saved-app Microphone consent and iOS recording authorization. Maximum 300 seconds. The recorder outputs an app-scoped native-imports/audio/*.m4a file descriptor; the JavaScript bridge does not return raw audio bytes. Use HTMLAppNative.events.on('audio', listener) to observe natural completion, or poll levels at a modest rate while visible. Never claim the audio is available in shared HTML exports; do not invent background recording."
+        ),
+        .init(
             id: "camera.capturePhoto",
             title: "Native iOS camera photo capture",
             keywords: ["camera", "take photo", "capture", "photo", "front", "back", "camera picker"],
@@ -47,6 +62,31 @@ enum HTMLAppDeviceAPIResearch {
             constraints: "Requires per-app Camera approval and iOS camera authorization. User taps to open the picker. Returns {url,name,mimeType,size,width,height}; url is an app-local native-imports/photos/ reference. No bulk library access or background camera. Handle unavailable camera and cancellation; release object URLs after preview."
         ),
 
+        .init(
+            id: "video.capture",
+            title: "Native foreground camera video recording",
+            keywords: ["camera", "video", "movie", "film", "record video", "clip"],
+            purpose: "Record a real iPhone camera movie after explicit Camera and Microphone consent, returning an app-owned file URL.",
+            api: "await HTMLAppNative.video.capture({maxDuration?:number})",
+            example: """
+            const movie = await HTMLAppNative.video.capture({maxDuration:60});
+            // Movie is stored in the saved app sandbox; export explicitly.
+            await HTMLAppNative.share.present({url:movie.url});
+            """,
+            constraints: "Requires both saved-app Camera and Microphone consent and iOS hardware authorization. 3–300 second duration and 150 MB output limit. Foreground only. The returned native-imports/videos/*.mov URL is app-scoped and not a public web URL. Handle cancellation, unavailable camera and disk errors. No background recording or magic upload."
+        ),
+        .init(
+            id: "ui.colorPicker",
+            title: "Native iOS system color picker",
+            keywords: ["native UI", "color picker", "palette", "color selection"],
+            purpose: "Allow a deliberate, user-triggered color choice in a real UIKit picker.",
+            api: "await HTMLAppNative.ui.colorPicker({hex?:string,alpha?:boolean})",
+            example: """
+            const picked = await HTMLAppNative.ui.colorPicker({hex:"#5588FF",alpha:false});
+            if (!picked.cancelled) document.documentElement.style.setProperty("--accent",picked.hex);
+            """,
+            constraints: "Only present after user intent. Returns normalized #RRGGBB and alpha. The picker is host-owned, not an arbitrary injected native view."
+        ),
         .init(
             id: "ui.alert",
             title: "Native iOS alert and action menu",

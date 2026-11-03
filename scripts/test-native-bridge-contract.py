@@ -42,6 +42,12 @@ assert "capabilities.describe" in declared
 assert "permissions.status" in declared
 assert "network.request" in declared
 assert "bridge.cancel" in declared
+assert {"audio.record", "audio.play", "video.capture", "ui.colorPicker"} <= declared
+assert "HTMLAppAudioService" in native
+assert "HTMLAppVideoCapture" in native
+assert "HTMLAppNativeUIService.colorPicker" in native
+assert "audio.record" in read("HTMLAppV3/DeviceAPICatalog.swift")
+assert "video.capture" in read("HTMLAppV3/DeviceAPICatalog.swift")
 assert "HTMLAppBridgeRegistry.methods" in native
 assert "HTMLAppBridgeRegistry.methodSet" in read("HTMLAppV3/HTMLAppBridgeLint.swift")
 
