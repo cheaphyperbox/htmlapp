@@ -1,0 +1,42 @@
+name: HTMLApp Continuous Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  source-and-runtime:
+    name: Bridge, Forge and JS checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Existing source invariants
+        run: python3 scripts/test-source-invariants.py
+      - name: Bridge registry and generated runtime consistency
+        run: python3 scripts/test-native-bridge-contract.py
+      - name: Native bridge and viewport behavior
+        run: node scripts/test-native-bridge.js
+      - name: Widget and car display JavaScript
+        run: |
+          node scripts/test-widget-bridge.js
+          node scripts/test-car-display.js
+      - name: Swift parser checks (when Swift installed)
+        shell: bash
+        run: |
+          if command -v swiftc >/dev/null 2>&1; then
+            find HTMLAppV3 HTMLAppShared HTMLAppWidgets HTMLApp -name '*.swift' -type f \
+              ! -path 'HTMLApp/GenerateAppIcon.swift' -print0 |
+              xargs -0 swiftc -frontend -parse
+          else
+            echo "::notice::Swift compiler not on this runner; full device compilation remains in the manual IPA workflow."
+          fi

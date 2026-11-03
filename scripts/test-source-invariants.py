@@ -460,7 +460,7 @@ assert 'case "speech.listenStop", "speech.stopRecognizing":' in native
 # Generated apps are checked against the catalog before offscreen WebKit testing.
 bridge_lint = source("HTMLAppV3/HTMLAppBridgeLint.swift")
 runtime_verifier = source("HTMLAppV3/HTMLRuntimeVerifier.swift")
-assert "HTMLAppDeviceAPIResearch.entries" in bridge_lint
+assert "HTMLAppBridgeRegistry.methodSet" in bridge_lint
 assert "navigator.bluetooth.requestDevice(" in bridge_lint
 assert "HTMLAppBridgeLint.warnings(in: html)" in runtime_verifier
 
@@ -713,7 +713,7 @@ assert 'ProcessInfo.processInfo.thermalState != .critical' in local_ai
 
 # Large patch edits use safe literal selector anchors; no arbitrary model source replacement.
 focused = source("HTMLAppV3/ForgeFocusedEditContext.swift")
-assert 'ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange)' in ai
+assert 'ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange,' in ai
 assert 'occurrences > 4 { return nil }' in focused
 assert 'snippets.utf8.count <= 11_000' in focused
 
