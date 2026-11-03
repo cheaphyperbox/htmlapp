@@ -34,6 +34,7 @@ enum HTMLAppBridgeRegistry {
         "calendar.deleteEvent",
         "calendar.events",
         "calendar.updateEvent",
+        "camera.capturePhoto",
         "capabilities.describe",
         "capabilities.list",
         "clipboard.readText",
@@ -145,6 +146,7 @@ enum HTMLAppBridgeRegistry {
         switch namespace {
         case "health": return .health
         case "nfc": return .nfc
+        case "camera": return .camera
         case "contacts": return .contacts
         case "photos": return .photoLibrary
         case "calendar": return .calendar

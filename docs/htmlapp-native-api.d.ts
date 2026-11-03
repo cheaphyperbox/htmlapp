@@ -27,6 +27,7 @@ export type HTMLAppNativeMethod =
   | 'calendar.deleteEvent'
   | 'calendar.events'
   | 'calendar.updateEvent'
+  | 'camera.capturePhoto'
   | 'capabilities.describe'
   | 'capabilities.list'
   | 'clipboard.readText'

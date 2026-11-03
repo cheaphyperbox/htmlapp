@@ -36,6 +36,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
     private let gamepads = HTMLAppGamepadService()
     private var documentScanner: HTMLAppDocumentScanner?
     private var drawingPresenter: HTMLAppDrawingPresenter?
+    private var cameraCapture: HTMLAppCameraCapture?
     private var aiTasks: [String: Task<Void, Never>] = [:]
     private var networkTasks: [String: Task<Void, Never>] = [:]
     private let pedometer = CMPedometer()
@@ -60,6 +61,7 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         coreHaptics.stop()
         gamepads.stop()
         bluetoothDiscovery.cancel()
+        cameraCapture = nil
         aiTasks.values.forEach { $0.cancel() }
         aiTasks.removeAll()
         networkTasks.values.forEach { $0.cancel() }
@@ -80,6 +82,39 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         let args = body["args"] as? [String: Any] ?? [:]
 
         switch method {
+        case "camera.capturePhoto":
+            withPermission(.camera, id: id) { [weak self] in
+                guard let self else { return }
+                guard self.cameraCapture == nil else {
+                    self.reject(id, code: "camera_busy", message: "Finish or cancel the current camera capture first.")
+                    return
+                }
+                guard let presenter = self.topViewController() else {
+                    self.reject(id, code: "presentation_failed", message: "No active view controller can present the camera.")
+                    return
+                }
+                let capture = HTMLAppCameraCapture(
+                    root: SourceCache.shared.baseURL(appID: self.appID), options: args
+                ) { [weak self] result in
+                    guard let self else { return }
+                    self.cameraCapture = nil
+                    switch result {
+                    case .success(let payload):
+                        self.resolve(id, value: payload)
+                    case .failure(let error):
+                        let code = (error as NSError).domain == "HTMLAppCamera" &&
+                            (error as NSError).code == 5 ? "cancelled" : "camera_capture_failed"
+                        self.reject(id, code: code, message: error.localizedDescription)
+                    }
+                }
+                self.cameraCapture = capture
+                do {
+                    try capture.present(from: presenter)
+                } catch {
+                    self.cameraCapture = nil
+                    self.reject(id, code: "camera_unavailable", message: error.localizedDescription)
+                }
+            }
         case "image.filter":
             guard let relative = args["url"] as? String,
                   let effect = args["effect"] as? String,
@@ -2923,6 +2958,9 @@ enum HTMLNativeAPIScript {
             window.addEventListener('htmlapp:' + name, listener);
             return () => window.removeEventListener('htmlapp:' + name, listener);
           }
+        },
+        camera: {
+          capturePhoto: (options = {}) => call('camera.capturePhoto', options)
         },
         network: {
           request: (options = {}) => {

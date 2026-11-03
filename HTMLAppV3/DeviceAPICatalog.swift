@@ -34,6 +34,20 @@ enum HTMLAppDeviceAPIResearch {
 
     static let entries: [HTMLAppDeviceAPICatalogEntry] = [
         .init(
+            id: "camera.capturePhoto",
+            title: "Native iOS camera photo capture",
+            keywords: ["camera", "take photo", "capture", "photo", "front", "back", "camera picker"],
+            purpose: "Present the real iPhone camera after explicit user action and store the captured image in this saved app's file sandbox.",
+            api: "await HTMLAppNative.camera.capturePhoto({camera?:'front'|'back',quality?:number,maxDimension?:number})",
+            example: """
+            const photo = await HTMLAppNative.camera.capturePhoto({camera:"back",quality:0.85});
+            const image = await fetch(photo.url).then(response => response.blob());
+            // Photo data can be put in IndexedDB or exported by user action.
+            """,
+            constraints: "Requires per-app Camera approval and iOS camera authorization. User taps to open the picker. Returns {url,name,mimeType,size,width,height}; url is an app-local native-imports/photos/ reference. No bulk library access or background camera. Handle unavailable camera and cancellation; release object URLs after preview."
+        ),
+
+        .init(
             id: "ui.alert",
             title: "Native iOS alert and action menu",
             keywords: ["native UI", "dialog", "sheet", "alert", "menu", "action sheet", "confirmation"],

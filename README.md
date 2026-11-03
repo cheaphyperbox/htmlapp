@@ -64,3 +64,7 @@ The host now provides optional `HTMLAppData.collection(name)` and `.kv` adapters
 ## Edit-time data safety
 
 Before applying a proposed revision Forge checks persistent storage keys and database collection names extracted from the original and updated HTML. An inadvertent disappearance without an explicit migration blocks the edit and restores the pre-edit draft. This is source-level protection, not a guarantee against every possible runtime data loss; real device migration tests remain important. Previous semantic edit summaries are included when expanding short follow-up prompts.
+
+## Native camera
+
+The optional `HTMLAppNative.camera.capturePhoto()` API presents the system camera with user consent, stores bounded JPEG output in an app-owned import directory, and returns a file descriptor rather than transferring image bytes across JavaScript. It is unavailable when camera hardware/permission is missing; offline previews cannot exercise it.

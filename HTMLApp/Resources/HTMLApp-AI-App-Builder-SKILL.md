@@ -64,3 +64,7 @@ Supported recent runtimes can use `HTMLAppNative.ui.alert({title,message,actions
 ## Runtime helpers for real applications
 
 Current HTMLApp releases may expose `HTMLAppData.collection(name)` (`put/get/remove/query/search/count`), `HTMLAppData.kv` (native portable appStorage), and `HTMLAppData.migrate(name, version, migrations)` for versioned, idempotent schema changes. `HTMLAppRuntime.runOperation(key, async ({signal}) => work, onStatus)` consolidates per-operation loading/error/cancel behavior; `cancelOperation(key)` and `onActive/onInactive/onBackground/onResume` assist cleanup. Use only after feature detection and never claim JavaScript keeps running while iOS suspends the host. Use `--htmlapp-text-scale` from the host for accessibility text scaling.
+
+## Native camera photo capture
+
+On supporting devices, `HTMLAppNative.camera.capturePhoto({camera:'front'|'back',quality:0.85,maxDimension:2400})` opens a real camera UI only from the user's explicit action and returns a scoped `{url,name,mimeType,size,width,height}` file descriptor. `await fetch(photo.url)` is intercepted by the host's existing photo import bridge. Check permission, cancellation, and camera availability; never assume the camera can work in a preview or simulator.
