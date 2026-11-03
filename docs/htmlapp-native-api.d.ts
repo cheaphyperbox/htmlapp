@@ -1,4 +1,4 @@
-// GENERATED from HTMLAppBridgeRegistry.swift — do not edit manually.
+// GENERATED from native-capability-definitions.json — do not edit manually.
 export type HTMLAppNativeMethod =
   | 'ai.available'
   | 'ai.cancel'
@@ -164,6 +164,11 @@ export interface HTMLAppNativeCapabilityDescriptor {
   constraints: string;
   minimumIOS: string;
   cancellable: boolean;
+  userInitiationRecommended: boolean;
+  argumentTypes: Record<string, "string" | "number" | "boolean" | "object" | "array">;
+  requiredArguments: string[];
+  resultType: string;
+  possibleErrors: string[];
 }
 
 export interface HTMLAppNativeAPI {

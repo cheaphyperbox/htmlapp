@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify native dispatch, SDK, registry, viewport and Forge architecture consistency."""
+import json
 import pathlib
 import re
 import shutil
@@ -28,6 +29,12 @@ registry_block = registry.split("static let methods: [String] = [", 1)[1].split(
     "static let methodSet", 1
 )[0]
 declared = extract_methods(registry_block)
+schema = json.loads(read("scripts/native-capability-definitions.json"))
+schema_methods = {item["method"] for item in schema["methods"]}
+assert schema["schemaVersion"] == 2 and schema["protocolVersion"] == 2
+assert schema_methods == declared, "Generated registry methods must exactly match the canonical method schema"
+assert "HTMLAppBridgeRegistry.argumentIssue" in native, "Dispatch must validate generated argument contracts"
+
 assert implemented == declared, (
     "Native bridge registry drift.\nUnregistered Swift methods: "
     + repr(sorted(implemented - declared))

@@ -1,0 +1,1702 @@
+{
+  "schemaVersion": 2,
+  "protocolVersion": 2,
+  "descriptorVersion": 2,
+  "description": "Canonical HTMLApp native RPC method registry. Registered does not mean authorized or available on every device. Unlisted arguments remain permitted for forward compatibility.",
+  "methods": [
+    {
+      "method": "ai.available",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ai.cancel",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ai.classify",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ai.complete",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": true,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ai.localAvailable",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ai.localComplete",
+      "permission": "ai",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": true,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "appStorage.all",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "appStorage.clear",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "appStorage.get",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string"
+      },
+      "required": [
+        "key"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "appStorage.remove",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string"
+      },
+      "required": [
+        "key"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "appStorage.set",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.cancelRecording",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.levels",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.pause",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.play",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.record",
+      "permission": "microphone",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "maxDuration": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.stop",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "audio.stopRecording",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "background.configure",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "background.list",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "background.refreshNow",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "background.remove",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "biometrics.authenticate",
+      "permission": "biometrics",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.battery",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.gattRead",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string",
+        "service": "string",
+        "characteristic": "string",
+        "dataBase64": "string"
+      },
+      "required": [
+        "id",
+        "service",
+        "characteristic"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.gattStop",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.gattSubscribe",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string",
+        "service": "string",
+        "characteristic": "string",
+        "dataBase64": "string"
+      },
+      "required": [
+        "id",
+        "service",
+        "characteristic"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.gattWrite",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string",
+        "service": "string",
+        "characteristic": "string",
+        "dataBase64": "string"
+      },
+      "required": [
+        "id",
+        "service",
+        "characteristic"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "bluetooth.scan",
+      "permission": "bluetooth",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "seconds": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "bridge.cancel",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "targetID": "string"
+      },
+      "required": [
+        "targetID"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "calendar.createEvent",
+      "permission": "calendar",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "calendar.deleteEvent",
+      "permission": "calendar",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "calendar.events",
+      "permission": "calendar",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "calendar.updateEvent",
+      "permission": "calendar",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "camera.capturePhoto",
+      "permission": "camera",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "camera": "string",
+        "quality": "number",
+        "maxDimension": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "capabilities.describe",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "method": "string"
+      },
+      "required": [
+        "method"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "capabilities.list",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "clipboard.readText",
+      "permission": "clipboard",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "clipboard.writeText",
+      "permission": "clipboard",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "contacts.create",
+      "permission": "contacts",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "contacts.list",
+      "permission": "contacts",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "limit": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "contacts.pick",
+      "permission": "contacts",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "db.count",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string"
+      },
+      "required": [
+        "collection"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.delete",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string",
+        "id": "string"
+      },
+      "required": [
+        "collection",
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.export",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "db.get",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string",
+        "id": "string"
+      },
+      "required": [
+        "collection",
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.import",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "payload": "object"
+      },
+      "required": [
+        "payload"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.put",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string",
+        "id": "string",
+        "document": "object"
+      },
+      "required": [
+        "collection",
+        "id",
+        "document"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.query",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string",
+        "limit": "number",
+        "cursor": "string"
+      },
+      "required": [
+        "collection"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "db.search",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "collection": "string",
+        "text": "string",
+        "limit": "number"
+      },
+      "required": [
+        "collection",
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "device.battery",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "device.brightness",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "level": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "device.info",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "device.keepAwake",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "enabled": "boolean"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "device.torch",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "enabled": "boolean"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "documents.scan",
+      "permission": "files",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "drawing.open",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "externalApps.maps",
+      "permission": "externalApps",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "externalApps.shortcuts",
+      "permission": "externalApps",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "name": "string",
+        "input": "string"
+      },
+      "required": [
+        "name"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "files.pick",
+      "permission": "files",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "gamepad.list",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "gamepad.start",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "gamepad.stop",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "haptics.pattern",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "haptics.play",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "health.available",
+      "permission": "health",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "health.range",
+      "permission": "health",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "health.today",
+      "permission": "health",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "image.filter",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string",
+        "effect": "string"
+      },
+      "required": [
+        "url",
+        "effect"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "language.detect",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "text": "string"
+      },
+      "required": [
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "language.entities",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "text": "string"
+      },
+      "required": [
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "language.sentiment",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "text": "string"
+      },
+      "required": [
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "language.tokenize",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "text": "string"
+      },
+      "required": [
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "liveActivities.end",
+      "permission": "liveActivities",
+      "minimumIOS": "16.2",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "liveActivities.list",
+      "permission": "liveActivities",
+      "minimumIOS": "16.2",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "liveActivities.start",
+      "permission": "liveActivities",
+      "minimumIOS": "16.2",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "liveActivities.update",
+      "permission": "liveActivities",
+      "minimumIOS": "16.2",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "location.reverseGeocode",
+      "permission": "location",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "latitude": "number",
+        "longitude": "number"
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "location.roadSpeedLimit",
+      "permission": "roadData",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "latitude": "number",
+        "longitude": "number"
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "map.show",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "motion.altitude",
+      "permission": "motion",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "motion.pedometer",
+      "permission": "motion",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "network.allowedDomains",
+      "permission": "network",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "network.request",
+      "permission": "network",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": true,
+      "arguments": {
+        "url": "string",
+        "method": "string",
+        "headers": "object",
+        "body": "string"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "network.revokeDomain",
+      "permission": "network",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "host": "string"
+      },
+      "required": [
+        "host"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "nfc.available",
+      "permission": "nfc",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "nfc.readNDEF",
+      "permission": "nfc",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "nfc.writeText",
+      "permission": "nfc",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "notifications.cancel",
+      "permission": "notifications",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "notifications.installSound",
+      "permission": "notifications",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "notifications.schedule",
+      "permission": "notifications",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "pdf.inspect",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "permissions.openSettings",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "permissions.request",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "permission": "string"
+      },
+      "required": [
+        "permission"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "permissions.status",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "permission": "string"
+      },
+      "required": [
+        "permission"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "photos.pick",
+      "permission": "photoLibrary",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "photos.read",
+      "permission": "photoLibrary",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string",
+        "offset": "number",
+        "length": "number"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "photos.save",
+      "permission": "photoLibrary",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "push.register",
+      "permission": "notifications",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "reminders.create",
+      "permission": "reminders",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "reminders.delete",
+      "permission": "reminders",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "reminders.list",
+      "permission": "reminders",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "reminders.update",
+      "permission": "reminders",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "secureStorage.get",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string"
+      },
+      "required": [
+        "key"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "secureStorage.remove",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string"
+      },
+      "required": [
+        "key"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "secureStorage.set",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string",
+        "value": "string"
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "share.present",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "shortcuts.consumeAction",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "appName": "string"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.listen",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.listenStop",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.recognize",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.speak",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "text": "string"
+      },
+      "required": [
+        "text"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.stop",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "speech.stopRecognizing",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "spotlight.clear",
+      "permission": "spotlight",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "spotlight.enable",
+      "permission": "spotlight",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "spotlight.index",
+      "permission": "spotlight",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string",
+        "title": "string",
+        "summary": "string"
+      },
+      "required": [
+        "key",
+        "title"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "spotlight.remove",
+      "permission": "spotlight",
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "key": "string"
+      },
+      "required": [
+        "key"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "symbols.render",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "symbols.search",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "system.open",
+      "permission": "externalApps",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "url": "string"
+      },
+      "required": [
+        "url"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.configure",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "items": "array",
+        "selected": "string"
+      },
+      "required": [
+        "items"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.pulse",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.remove",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.select",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.setHidden",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "hidden": "boolean",
+        "animated": "boolean"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "tabs.update",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string",
+        "title": "string",
+        "symbol": "string",
+        "badge": "string"
+      },
+      "required": [
+        "id"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "ui.alert",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "title": "string",
+        "message": "string",
+        "actions": "array"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ui.colorPicker",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "hex": "string",
+        "alpha": "boolean"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ui.datePicker",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "title": "string",
+        "mode": "string",
+        "value": "string",
+        "timestampMS": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "ui.menu",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "title": "string",
+        "message": "string",
+        "actions": "array"
+      },
+      "required": [
+        "actions"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "video.capture",
+      "permission": "camera",
+      "minimumIOS": "16.0",
+      "userInitiated": true,
+      "nativeCancellation": false,
+      "arguments": {
+        "maxDuration": "number"
+      },
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "vision.classifyImage",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "imageDataURL": "string"
+      },
+      "required": [
+        "imageDataURL"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "vision.detectFaces",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "imageDataURL": "string"
+      },
+      "required": [
+        "imageDataURL"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "vision.recognizeText",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "imageDataURL": "string"
+      },
+      "required": [
+        "imageDataURL"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "vision.scanCodes",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "imageDataURL": "string"
+      },
+      "required": [
+        "imageDataURL"
+      ],
+      "result": "unknown"
+    },
+    {
+      "method": "widgets.configure",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "widgets.list",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "widgets.reload",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {},
+      "required": [],
+      "result": "unknown"
+    },
+    {
+      "method": "widgets.remove",
+      "permission": null,
+      "minimumIOS": "16.0",
+      "userInitiated": false,
+      "nativeCancellation": false,
+      "arguments": {
+        "id": "string"
+      },
+      "required": [],
+      "result": "unknown"
+    }
+  ]
+}

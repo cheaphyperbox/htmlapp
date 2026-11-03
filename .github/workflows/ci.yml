@@ -48,6 +48,17 @@ jobs:
           else
             echo "::notice::Swift compiler unavailable; Forge semantic tests require Swift."
           fi
+      - name: Schema-generated native argument and availability tests
+        shell: bash
+        run: |
+          if command -v swiftc >/dev/null 2>&1; then
+            swiftc HTMLAppV3/HTMLAppBridgeRegistry.swift \
+              scripts/test-bridge-registry.swift \
+              -o "${RUNNER_TEMP:-/tmp}/htmlapp-native-registry-tests"
+            "${RUNNER_TEMP:-/tmp}/htmlapp-native-registry-tests"
+          else
+            echo "::notice::Swift compiler unavailable; native schema tests require Swift."
+          fi
       - name: Swift parser checks (when Swift installed)
         shell: bash
         run: |

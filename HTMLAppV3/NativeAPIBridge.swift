@@ -85,6 +85,13 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
         guard let id = body["id"] as? String,
               let method = body["method"] as? String else { return }
         let args = body["args"] as? [String: Any] ?? [:]
+        // Generated canonical schema validates known top-level payload shapes
+        // before touching native frameworks. Service-specific range, origin
+        // and permission validation remains mandatory in each operation.
+        if let issue = HTMLAppBridgeRegistry.argumentIssue(method: method, arguments: args) {
+            reject(id, code: "invalid_arguments", message: issue)
+            return
+        }
 
         switch method {
         case "audio.record":
