@@ -48,7 +48,7 @@ async function main() {
   assert.equal(await runtime.runOperation('save', async () => 42,
     state => successStates.push(state.status)), 42);
   assert.deepEqual(successStates, ['loading', 'success']);
-  assert.deepEqual(runtime.activeOperations, []);
+  assert.equal(runtime.activeOperations.length, 0);
 
   const errorStates = [];
   await assert.rejects(runtime.runOperation('failure', async () => {
@@ -63,7 +63,7 @@ async function main() {
   await assert.rejects(stalled, error =>
     error.name === 'AbortError' && error.code === 'cancelled');
   assert.deepEqual(cancelStates, ['loading', 'cancelled']);
-  assert.deepEqual(runtime.activeOperations, []);
+  assert.equal(runtime.activeOperations.length, 0);
 
   let runCount = 0;
   const first = runtime.runOperation('duplicate', async () => {
