@@ -1036,6 +1036,11 @@ struct AIGenerationView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .coordinateSpace(name: "forgeEditSurface")
+            .overlay {
+                if microphoneCapturing && dictation.appleSpeechActive {
+                    liveDictationCaptions
+                }
+            }
             .overlay(alignment: .topLeading) {
                 if !exploringStyles && !styleOptions.isEmpty {
                     voiceEditBubble(in: geometry.size, forStyleFeedback: true)
@@ -1376,6 +1381,12 @@ struct AIGenerationView: View {
             } message: {
                 Text(runtimeErrors.prefix(5).joined(separator: "\n"))
             }
+            .overlay {
+                if (microphoneCapturing || dictationForEdit) &&
+                   dictation.appleSpeechActive {
+                    liveDictationCaptions
+                }
+            }
             .overlay(alignment: .topLeading) {
                 if !session.isWorking && !browserResearch.isBrowsing && !session.streamedHTML.isEmpty && !saving {
                     voiceEditBubble(in: proxy.size)
@@ -1433,6 +1444,46 @@ struct AIGenerationView: View {
         .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 15))
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
+    }
+
+    /// Real-time Apple Speech subtitles sit above the preview but do not
+    /// intercept dragging, taps, or navigation. Whisper is excluded because
+    /// it only decodes after recording.
+    private var liveDictationCaptions: some View {
+        let words = dictation.transcript
+            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        let recent = words.suffix(27).joined(separator: " ")
+        return VStack(spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .symbolRenderingMode(.hierarchical)
+                Text("APPLE SPEECH · LIVE")
+                    .tracking(1.5)
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.secondary)
+            Text(recent.isEmpty ? "Listening to your words…" : recent)
+                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .minimumScaleFactor(0.65)
+                .lineLimit(2...5)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.primary)
+                .contentTransition(.opacity)
+                .accessibilityLabel(recent.isEmpty ? "Listening" : recent)
+            Text("Release the microphone to use these words")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 23)
+        .frame(maxWidth: 470)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
+        .overlay(RoundedRectangle(cornerRadius: 26)
+            .strokeBorder(.primary.opacity(0.09), lineWidth: 1))
+        .shadow(color: .black.opacity(0.16), radius: 22, y: 10)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
     }
 
     private func voiceEditBubble(in size: CGSize, forStyleFeedback: Bool = false) -> some View {

@@ -815,3 +815,21 @@ assert f'CURRENT_PROJECT_VERSION: "{build}"' in project
 
 print(f"HTMLApp source invariants passed for {version} ({build}); IPA packaging still requires an Xcode build.")
 
+# Files/Share Sheet incoming HTML must survive cold launch, onboarding and
+# release-note covers instead of vanishing in a one-shot NotificationCenter post.
+appcore = source("HTMLAppV3/AppCore.swift")
+library = source("HTMLAppV3/LibraryUI.swift")
+incoming = source("HTMLAppV3/HTMLExternalFileInbox.swift")
+settings = source("HTMLAppV3/OnboardingSettings.swift")
+speech = source("HTMLAppV3/ForgeDictation.swift")
+forgeview = source("HTMLAppV3/AIGenerationView.swift")
+assert "queueExternalHTMLFile(url)" in appcore
+assert "pendingExternalHTMLFiles" in appcore and "canPresentExternalHTMLImport" in appcore
+assert "HTMLExternalFileInbox.stage(url)" in appcore
+assert "store.takeExternalHTMLFile()" in library
+assert "HTMLExternalFileInbox.read(url)" in library
+assert "HTMLExternalFileInbox.disposeIfStaged(url)" in library
+assert "NSFileCoordinator" in incoming and "startAccessingSecurityScopedResource" in incoming
+assert "DisclosureGroup(\"Advanced Settings\")" in settings
+assert "APPLE SPEECH · LIVE" in forgeview and "liveDictationCaptions" in forgeview
+assert "appleSpeechActive" in speech and "shouldReportPartialResults = true" in speech

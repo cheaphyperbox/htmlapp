@@ -74,6 +74,7 @@ struct HTMLAppMain: App {
                 }
                 .fullScreenCover(isPresented: $presentingWhatsNew, onDismiss: {
                     recordVersionSeen()
+                    store.setExternalHTMLImportReady(onboardingComplete)
                     if let url = deferredExternalURL {
                         deferredExternalURL = nil
                         store.openDeepLink(url)
@@ -84,7 +85,17 @@ struct HTMLAppMain: App {
                     }
                     .interactiveDismissDisabled(true)
                 }
-                .onAppear(perform: checkVersionOnLaunch)
+                .onAppear {
+                    checkVersionOnLaunch()
+                    store.setExternalHTMLImportReady(
+                        onboardingComplete && !presentingWhatsNew
+                    )
+                }
+                .onChange(of: presentingWhatsNew) { showing in
+                    store.setExternalHTMLImportReady(
+                        onboardingComplete && !showing
+                    )
+                }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLApp.FaceDownShakeExit"))) { _ in
                     // The runner is a SwiftUI full-screen cover, not a UIKit
                     // controller that can reliably be dismissed via responders.
@@ -103,6 +114,7 @@ struct HTMLAppMain: App {
                     if phase == .active { store.requestICloudSync() }
                 }
                 .onChange(of: onboardingComplete) { finished in
+                    store.setExternalHTMLImportReady(finished && !presentingWhatsNew)
                     guard finished else { return }
                     checkedVersionThisLaunch = false
                     checkVersionOnLaunch()
@@ -128,8 +140,12 @@ struct HTMLAppMain: App {
                 }
                 .onOpenURL { url in
                     if url.isFileURL, ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name("HTMLAppExternalHTMLFileOpened"), object: url)
+                        // The Library may not yet exist during cold launch or
+                        // may be covered by onboarding/release notes. Retain
+                        // the request in AppStore instead of posting a
+                        // notification that can be lost before it subscribes.
+                        store.queueExternalHTMLFile(url)
+                        if presentingWhatsNew { presentingWhatsNew = false }
                         return
                     }
                     // A cold Lock Screen launch can race the What's New cover.
@@ -236,6 +252,10 @@ struct LibraryFolder: Identifiable, Codable, Hashable, Sendable {
 final class AppStore: ObservableObject {
     @Published private(set) var voiceCreateRequest = 0
     @Published private(set) var remoteHTMLImportRequest: URL?
+    // Files/Open In and Share Sheet can arrive before the Library is visible.
+    // Retain incoming URLs until the import UI consumes them.
+    @Published private(set) var pendingExternalHTMLFiles: [URL] = []
+    @Published private(set) var canPresentExternalHTMLImport = false
     @Published private(set) var apps: [SavedHTMLApp] = []
     @Published private(set) var folders: [LibraryFolder] = []
     @Published var runningApp: SavedHTMLApp?
@@ -1062,6 +1082,37 @@ final class AppStore: ObservableObject {
             validFolderIDs: Set(folders.map(\.id))
         )
         notice = "Imported \(importedApps.count) HTMLApp\(importedApps.count == 1 ? "" : "s") as portable copies."
+    }
+
+    func queueExternalHTMLFile(_ url: URL) {
+        guard url.isFileURL,
+              ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) else {
+            return
+        }
+        do {
+            // This scope can expire before the Library appears. Copy the
+            // incoming document immediately to the private temporary inbox.
+            let staged = try HTMLExternalFileInbox.stage(url)
+            if let running = runningApp {
+                NotificationCenter.default.post(
+                    name: Notification.Name("HTMLAppCaptureRuntimeState"),
+                    object: running.id
+                )
+                runningApp = nil
+            }
+            pendingExternalHTMLFiles.append(staged)
+        } catch {
+            errorMessage = "Couldn't prepare that HTML file: \(error.localizedDescription)"
+        }
+    }
+
+    func setExternalHTMLImportReady(_ ready: Bool) {
+        canPresentExternalHTMLImport = ready
+    }
+
+    func takeExternalHTMLFile() -> URL? {
+        guard !pendingExternalHTMLFiles.isEmpty else { return nil }
+        return pendingExternalHTMLFiles.removeFirst()
     }
 
     func openDeepLink(_ url: URL) {

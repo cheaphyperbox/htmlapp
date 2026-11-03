@@ -151,6 +151,12 @@ struct LibraryView: View {
         .sheet(item: $permissionsApp) { EnhancedAppPermissionsView(app: $0) }
         .sheet(item: $storageManagementApp) { HTMLAppStorageManagementView(app: $0) }
         .sheet(item: $pendingImport) { ImportHTMLDestinationView(payload: $0).environmentObject(store) }
+        .onChange(of: pendingImport) { item in
+            if item == nil {
+                presentQueuedFileImport()
+                consumeExternalHTMLImport()
+            }
+        }
         .alert("This HTML needs its original server", isPresented: Binding(
             get: { serverDependentImport != nil },
             set: { if !$0 { serverDependentImport = nil } }
@@ -168,9 +174,20 @@ struct LibraryView: View {
         } message: {
             Text("This file calls a root-relative server API such as /api/build. Saving it offline cannot include the server. To keep the build or login functions working, enter the real hosted website URL in Website Import. If you import a local copy, those API calls will be unavailable until configured.")
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HTMLAppExternalHTMLFileOpened"))) { notification in
-            guard let url = notification.object as? URL else { return }
-            importFile(.success([url]))
+        // An incoming file can be delivered before Library exists.
+        // AppStore retains a private staged copy until this screen and all
+        // launch covers are ready to present a sheet.
+        .onChange(of: store.pendingExternalHTMLFiles) { _ in
+            consumeExternalHTMLImport()
+        }
+        .onChange(of: store.canPresentExternalHTMLImport) { ready in
+            if ready { consumeExternalHTMLImport() }
+        }
+        .onChange(of: showSettings) { showing in
+            if !showing { consumeExternalHTMLImport() }
+        }
+        .onChange(of: showGenerator) { showing in
+            if !showing { consumeExternalHTMLImport() }
         }
         .onChange(of: importingFile) { showing in
             if !showing { presentQueuedFileImport() }
@@ -198,6 +215,7 @@ struct LibraryView: View {
             beginRemoteHTMLImportIfRequested()
         }
         .onAppear {
+            consumeExternalHTMLImport()
             handlePendingShortcut()
             beginRemoteHTMLImportIfRequested()
             if !checkedInterruptedForgeThisLaunch && !showGenerator {
@@ -218,6 +236,7 @@ struct LibraryView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            consumeExternalHTMLImport()
             handlePendingShortcut()
             beginRemoteHTMLImportIfRequested()
         }
@@ -678,48 +697,39 @@ struct LibraryView: View {
         else { editor = .edit(app) }
     }
 
+    private func consumeExternalHTMLImport() {
+        guard store.canPresentExternalHTMLImport,
+              !importingFile,
+              !showSettings, !showGenerator,
+              remoteHTMLDraft == nil, aiEditorApp == nil,
+              !showWebsiteImporter,
+              pendingImport == nil, queuedFileImport == nil,
+              serverDependentImport == nil,
+              let url = store.takeExternalHTMLFile() else { return }
+        importFile(.success([url]))
+    }
+
     private func importFile(_ result: Result<[URL], Error>) {
         do {
             guard let url = try result.get().first else { return }
-            let ext = url.pathExtension.lowercased()
-            guard ["html", "htm", "xhtml", "txt"].contains(ext) else {
-                store.errorMessage = "Choose an HTML file (.html or .htm). A .txt file containing HTML also works."
-                return
-            }
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            defer { HTMLExternalFileInbox.disposeIfStaged(url) }
 
-            // Coordinated reading supports iCloud and third-party Files
-            // providers while the document is being downloaded/materialized.
-            let coordinator = NSFileCoordinator(filePresenter: nil)
-            var coordinationError: NSError?
-            var readResult: Result<Data, Error>?
-            coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { readableURL in
-                readResult = Result { try Data(contentsOf: readableURL) }
-            }
-            if let coordinationError { throw coordinationError }
-            guard let readResult else {
-                store.errorMessage = "The file isn't ready yet. Download it in Files, then choose it again."
-                return
-            }
-            let data = try readResult.get()
-            guard data.count <= 12_000_000 else {
-                store.errorMessage = "This HTML file is larger than 12 MB. Try a smaller file."
-                return
-            }
-            let html = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+            // Coordinated reading covers iCloud and third-party providers,
+            // while Files/share-sheet launches are already staged in private
+            // temporary storage and survive startup presentation delays.
+            let data = try HTMLExternalFileInbox.read(url)
+            let html = String(data: data, encoding: .utf8)
+                ?? String(decoding: data, as: UTF8.self)
             guard !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 store.errorMessage = "The selected file is empty."
                 return
             }
             let payload = HTMLFileImportPayload(fileName: url.lastPathComponent, html: html)
-            // iOS 16 can silently drop a second sheet while the system Files
-            // picker is dismissing. Stage the result, then present after
-            // the fileImporter state has returned to false.
-            // Root-relative /api routes belong to the website's server.
-            // Do not attempt to precache them as static app assets.
-            if html.range(of: #"(?i)(?:fetch\s*\(\s*['\x22\x60]|const\s+API\s*=\s*['\x22])/api/"#,
-                          options: .regularExpression) != nil {
+            // Root-relative /api calls still require the original server.
+            if html.range(
+                of: #"(?i)(?:fetch\s*\(\s*['\x22\x60]|const\s+API\s*=\s*['\x22])/api/"#,
+                options: .regularExpression
+            ) != nil {
                 serverDependentImport = payload
             } else {
                 queuedFileImport = payload
@@ -731,11 +741,15 @@ struct LibraryView: View {
     }
 
     private func presentQueuedFileImport() {
-        guard !importingFile, queuedFileImport != nil else { return }
-        // The dismissal animation needs more than a single main-actor yield
-        // on iOS 16; a short deferral avoids presenting over UIDocumentPicker.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            guard !importingFile, let payload = queuedFileImport else { return }
+        guard !importingFile, pendingImport == nil,
+              serverDependentImport == nil,
+              queuedFileImport != nil else { return }
+        // UIKit document picker dismissal and launch covers can otherwise
+        // race the next SwiftUI sheet on iOS 16.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard !importingFile, pendingImport == nil,
+                  serverDependentImport == nil,
+                  let payload = queuedFileImport else { return }
             queuedFileImport = nil
             pendingImport = payload
         }

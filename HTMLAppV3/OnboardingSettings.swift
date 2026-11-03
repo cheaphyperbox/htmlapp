@@ -444,228 +444,160 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Button {
-                        onboardingComplete = false
-                        dismiss()
-                    } label: {
-                        Label("Show Me How to Use HTMLApp", systemImage: "graduationcap.fill")
-                            .font(.headline)
-                    }
+                Section("AI & Voice") {
                     NavigationLink {
                         AIConfigurationSettingsView()
                     } label: {
-                        Label("Connect My AI", systemImage: "sparkles")
+                        Label("AI Connection & Generation", systemImage: "sparkles")
                     }
-                } header: {
-                    Text("Need a hand?")
-                } footer: {
-                    Text("The guide explains every major feature. You can skip any step and come back later.")
-                }
-                Section {
-                    Picker("Dictation Engine", selection: $dictationEngine) {
-                        Label("Apple Speech", systemImage: "mic").tag("apple")
-                        Label("Whisper Offline", systemImage: "waveform").tag("whisper")
+                    Picker("Voice Dictation", selection: $dictationEngine) {
+                        Label("Apple Speech — Live", systemImage: "waveform").tag("apple")
+                        Label("Whisper Offline", systemImage: "mic").tag("whisper")
                     }
                     .pickerStyle(.navigationLink)
-                    Label(dictationEngine == "whisper"
-                          ? "Whisper records first, then transcribes when you release the mic."
-                          : "Apple transcribes as you speak.", systemImage: "info.circle")
-                        .font(.footnote).foregroundStyle(.secondary)
-                } header: {
-                    Text("Voice Dictation")
-                } footer: {
-                    Text("Whisper is free and requires no API key. First use downloads an on-device model; allow microphone access and storage space.")
-                }
-                Section {
-                    Toggle("Sync HTMLApps with iCloud", isOn: $iCloudSyncApps)
-                        .onChange(of: iCloudSyncApps) { enabled in
-                            if enabled { store.requestICloudSync() }
-                        }
-                    if iCloudSyncApps {
-                        Toggle("Sync HTMLApp Data", isOn: $iCloudSyncData)
-                            .onChange(of: iCloudSyncData) { _ in store.requestICloudSync() }
-                        Text("Sync app code and details across devices signed into the same iCloud account. Data syncing includes each HTMLApp's portable saved data, but not permissions or credentials.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        Button("Sync Now") { store.requestICloudSync() }
-                    } else {
-                        Text("iCloud syncing is off. Apps and data stay on this device.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Label("iCloud Sync", systemImage: "icloud")
-                } footer: {
-                    Text("Requires iCloud Drive and an iCloud-enabled signing profile. Turning this off keeps existing local and cloud copies.")
-                }
-
-                Section("Home View") {
-                    Picker("Layout", selection: $libraryLayout) {
-                        Label("List", systemImage: "list.bullet").tag("list")
-                        Label("Grid", systemImage: "square.grid.3x3").tag("grid")
-                    }
-                    .pickerStyle(.segmented)
-                    Text(libraryLayout == "grid"
-                         ? "Grid resembles an iPhone Home Screen and creates swipeable pages when needed."
-                         : "List shows descriptions and supports quick swipe actions.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-                DisclosureGroup("Organize Library") {
-                    Toggle("Folders on top", isOn: $libraryFoldersOnTop)
-                    Toggle("Favorite apps on top", isOn: $libraryFavoritesOnTop)
-
-                    Picker("Sort", selection: $librarySortModeRaw) {
-                        ForEach(LibrarySortMode.allCases) { mode in
-                            Text(mode.title).tag(mode.rawValue)
-                        }
-                    }
-
-                    if selectedSortMode.usesDateBasis {
-                        Picker("Latest uses", selection: $librarySortDateBasisRaw) {
-                            ForEach(LibrarySortDateBasis.allCases) { basis in
-                                Text(basis.title).tag(basis.rawValue)
-                            }
-                        }
-                    }
-                    Text(librarySortDescription)
+                    Text(dictationEngine == "apple"
+                         ? "See words live while speaking. Some devices may use Apple's speech service."
+                         : "Record first, then transcribe on-device after releasing the microphone.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section {
-                    NavigationLink {
-                        AIConfigurationSettingsView()
-                    } label: {
-                        Label("AI & Creation", systemImage: "sparkles.rectangle.stack")
-                    }
-
-                    NavigationLink {
-                        GeneratedIntegrationsView()
-                            .environmentObject(store)
-                    } label: {
-                        Label("Widgets & Background", systemImage: "square.grid.2x2")
-                    }
-
-                    NavigationLink {
-                        HTMLAppDataTransferView()
-                            .environmentObject(store)
-                    } label: {
-                        Label("Backup & Transfer", systemImage: "arrow.left.arrow.right.square")
-                    }
-                } header: {
-                    Text("Creation & Transfer")
-                } footer: {
-                    Text("Create apps, manage Home Screen widgets, and share or back up your Library.")
-                }
-
-                Section("App Controls") {
-                    Toggle("Close app by flipping face down and shaking", isOn: $closeOnFlipShake)
-                    Text("While an HTML app is open, hold the phone screen-down and gently shake for about one second to return to Library.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    HStack {
-                        Text("Required shake time")
-                        Spacer()
-                        Text(shakeExitSeconds.formatted(.number.precision(.fractionLength(1))) + " s")
-                    }
-                    Slider(value: $shakeExitSeconds, in: 0.5...5.0, step: 0.1)
-                    Text("Selected shake time: " + shakeExitSeconds.formatted(.number.precision(.fractionLength(1))) + " seconds of detected motion.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Toggle("Ask before switching apps", isOn: $askBeforeSwitch)
-                }
-
-                Section("Developer") {
-                    Toggle("Developer Mode", isOn: $developerMode)
-                    if developerMode {
-                        HStack {
-                            Text("Fade disappears at")
-                            Spacer()
-                            Text("\(Int(shakeFadeEndAngle)) degrees")
-                        }
-                        Slider(value: $shakeFadeEndAngle, in: 20...180, step: 5)
-                        Text("Selected: \(Int(shakeFadeEndAngle)) degrees from screen-down.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        NavigationLink {
-                            ForgeDeveloperDiagnosticsView().environmentObject(store)
-                        } label: {
-                            Label("Build, AI & Failure Diagnostics", systemImage: "ladybug")
-                        }
-                        NavigationLink {
-                            AIDebugTraceView()
-                        } label: {
-                            Label("Past AI Edit Logs", systemImage: "doc.text.magnifyingglass")
-                        }
-                    }
-                    Text("Developer Mode reveals saved error logs, AI task timings, widget diagnostics and advanced controls.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-                if developerMode {
-                Section("Downloaded Websites") {
-                    Toggle("Always apply website updates immediately", isOn: $autoApplyWebsiteUpdates)
-                    Text(autoApplyWebsiteUpdates
-                         ? "When a newer downloaded website snapshot finishes in the background, HTMLApp automatically restarts that app into the new version."
-                         : "When a newer snapshot is found, HTMLApp asks whether to restart now or use it on the next launch.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
                 Section("Library") {
-                    LabeledContent("Saved apps", value: "\(store.apps.count)")
-                    LabeledContent("Folders", value: "\(store.folders.count)")
-                    Button("Refresh All External Sources") { refreshAll() }.disabled(working || store.apps.isEmpty)
-                    Button("Rebuild All Saved Icons") { rebuildIcons() }.disabled(working || store.apps.isEmpty)
-                    Button("Clear All Source Caches", role: .destructive) { SourceCache.shared.clearAll() }
-                }
-
-                Section("External Source Cache") {
-                    Stepper("Refresh after \(sourceRefreshDays) days", value: $sourceRefreshDays, in: 1...30)
-                    Text("Old cached copies remain available if updating fails or the device is offline.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-                Section("Home Screen Profiles") {
-                    Toggle("Open Web Clips full screen", isOn: $webClipFullScreen)
-                    Toggle("Use precomposed icons", isOn: $webClipPrecomposed)
-                    Text("Profiles include the saved PNG icon as base64 data.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-                Section("Web Content") {
-                    Toggle("Allow JavaScript", isOn: $allowJavaScript)
-                    Text("Protected device capabilities still use each saved app’s Permissions page and applicable iOS system permissions.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-
-                }
-                Section("Help & Updates") {
-                    Button {
-                        showWhatsNew = true
-                    } label: {
-                        Label("What's New in HTMLApp", systemImage: "sparkles.rectangle.stack")
+                    Picker("Layout", selection: $libraryLayout) {
+                        Label("List", systemImage: "list.bullet").tag("list")
+                        Label("Grid", systemImage: "square.grid.2x2").tag("grid")
                     }
+                    .pickerStyle(.segmented)
+
+                    DisclosureGroup("Sorting & Organization") {
+                        Picker("Sort Apps", selection: $librarySortModeRaw) {
+                            ForEach(LibrarySortMode.allCases) { mode in
+                                Text(mode.title).tag(mode.rawValue)
+                            }
+                        }
+                        if selectedSortMode.usesDateBasis {
+                            Picker("Sort by Date", selection: $librarySortDateBasisRaw) {
+                                ForEach(LibrarySortDateBasis.allCases) { basis in
+                                    Text(basis.title).tag(basis.rawValue)
+                                }
+                            }
+                        }
+                        Toggle("Folders First", isOn: $libraryFoldersOnTop)
+                        Toggle("Favorites First", isOn: $libraryFavoritesOnTop)
+                    }
+                }
+
+                Section("iCloud") {
+                    Toggle("Sync Saved Apps", isOn: $iCloudSyncApps)
+                        .onChange(of: iCloudSyncApps) { enabled in
+                            if enabled { store.requestICloudSync() }
+                        }
+                    if iCloudSyncApps {
+                        Toggle("Include Saved App Data", isOn: $iCloudSyncData)
+                            .onChange(of: iCloudSyncData) { _ in
+                                store.requestICloudSync()
+                            }
+                        Button("Sync Now") { store.requestICloudSync() }
+                        Text("iCloud sync requires a compatible signing profile. App permissions and credentials never sync.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Manage") {
+                    NavigationLink {
+                        GeneratedIntegrationsView().environmentObject(store)
+                    } label: {
+                        Label("Widgets & Background Tasks", systemImage: "square.grid.2x2")
+                    }
+                    NavigationLink {
+                        HTMLAppDataTransferView().environmentObject(store)
+                    } label: {
+                        Label("Backup, Import & Transfer", systemImage: "square.and.arrow.up.on.square")
+                    }
+                    Toggle("Confirm App Switching", isOn: $askBeforeSwitch)
+                }
+
+                Section("Help") {
                     Button {
                         onboardingComplete = false
                         dismiss()
                     } label: {
-                        Label("Replay Guided Tutorial", systemImage: "hand.tap")
+                        Label("Guided Tutorial", systemImage: "questionmark.circle")
+                    }
+                    Button { showWhatsNew = true } label: {
+                        Label("What's New", systemImage: "sparkles.rectangle.stack")
                     }
                 }
 
-                Section("About") {
-                    LabeledContent("App code version", value: HTMLAppReleaseNotes.compiledVersion)
-                    LabeledContent("App code build", value: HTMLAppReleaseNotes.compiledBuild)
-                    LabeledContent("IPA installed version", value: HTMLAppReleaseNotes.packagedVersion)
-                    LabeledContent("IPA installed build", value: HTMLAppReleaseNotes.packagedBuild)
-                    if !HTMLAppReleaseNotes.packagingMatchesCode {
-                        Label("The installed IPA metadata does not match the compiled app. Rebuild using the 1.4.0 packaging settings.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.orange)
+                Section {
+                    DisclosureGroup("Advanced Settings") {
+                        Toggle("Close App with Face-Down Shake", isOn: $closeOnFlipShake)
+                        if closeOnFlipShake {
+                            HStack {
+                                Text("Shake Duration")
+                                Spacer()
+                                Text(shakeExitSeconds.formatted(.number.precision(.fractionLength(1))) + " s")
+                            }
+                            Slider(value: $shakeExitSeconds, in: 0.5...5.0, step: 0.1)
+                        }
+                        Toggle("Developer Mode", isOn: $developerMode)
+
+                        if developerMode {
+                            NavigationLink {
+                                ForgeDeveloperDiagnosticsView().environmentObject(store)
+                            } label: {
+                                Label("Diagnostics", systemImage: "ladybug")
+                            }
+                            NavigationLink {
+                                AIDebugTraceView()
+                            } label: {
+                                Label("AI Edit Logs", systemImage: "doc.text.magnifyingglass")
+                            }
+                            Toggle("Auto-Apply Website Updates", isOn: $autoApplyWebsiteUpdates)
+                            Stepper("Source Cache: \(sourceRefreshDays) Days",
+                                    value: $sourceRefreshDays, in: 1...30)
+                            Toggle("Full-Screen Home Screen Apps", isOn: $webClipFullScreen)
+                            Toggle("Precomposed App Icons", isOn: $webClipPrecomposed)
+                            Toggle("Allow JavaScript", isOn: $allowJavaScript)
+                            HStack {
+                                Text("Shake Fade Angle")
+                                Spacer()
+                                Text("\(Int(shakeFadeEndAngle))°")
+                            }
+                            Slider(value: $shakeFadeEndAngle, in: 20...180, step: 5)
+                            Button("Refresh External Sources") { refreshAll() }
+                                .disabled(working || store.apps.isEmpty)
+                            Button("Rebuild Saved Icons") { rebuildIcons() }
+                                .disabled(working || store.apps.isEmpty)
+                            Button("Clear Source Caches", role: .destructive) {
+                                SourceCache.shared.clearAll()
+                            }
+                            LabeledContent("Saved Apps", value: "\(store.apps.count)")
+                            LabeledContent("Folders", value: "\(store.folders.count)")
+                        }
                     }
-                    if !previousOpenedVersion.isEmpty {
-                        LabeledContent("Updated from", value: previousOpenedVersion)
+                } footer: {
+                    Text("Less-used controls and developer tools stay here without cluttering everyday settings.")
+                }
+
+                Section {
+                    LabeledContent("Version", value: HTMLAppReleaseNotes.compiledVersion)
+                    if developerMode {
+                        LabeledContent("Source Build", value: HTMLAppReleaseNotes.compiledBuild)
+                        LabeledContent("Installed IPA", value: HTMLAppReleaseNotes.packagedVersion)
+                        LabeledContent("IPA Build", value: HTMLAppReleaseNotes.packagedBuild)
+                        if !previousOpenedVersion.isEmpty {
+                            LabeledContent("Updated From", value: previousOpenedVersion)
+                        }
+                        if !HTMLAppReleaseNotes.packagingMatchesCode {
+                            Label("Installed IPA metadata differs from the source version.",
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
                     }
-                    LabeledContent("Minimum iOS", value: "16.0")
-                    if developerMode { LabeledContent("URL scheme", value: "htmlapp://") }
-                    Text("The interface uses native system navigation, toolbars, menus, materials, and controls and adapts across iPhone and iPad.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                } header: {
+                    Text("About")
                 }
             }
             .navigationTitle("Settings")

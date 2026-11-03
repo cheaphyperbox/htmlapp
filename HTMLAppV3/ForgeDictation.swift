@@ -8,6 +8,10 @@ final class ForgeDictation: ObservableObject {
     @Published var requestingPermission = false
     @Published var transcribingOffline = false
     @Published var transcript = ""
+    // True only while SFSpeechRecognizer is actively delivering live partial
+    // results. Offline Whisper decodes after recording and is never labeled
+    // as live captions.
+    @Published private(set) var appleSpeechActive = false
     @Published var status = "Dictate your idea. Review the text before generating."
     private let engine = AVAudioEngine()
     private var offlineRecorder: AVAudioRecorder?
@@ -78,7 +82,12 @@ final class ForgeDictation: ObservableObject {
             task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self, self.generation == generation else { return }
-                    if let result { self.transcript = result.bestTranscription.formattedString }
+                    if let result {
+                        let words = result.bestTranscription.formattedString
+                        if !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            self.transcript = words
+                        }
+                    }
                     if error != nil || result?.isFinal == true {
                         if error != nil { self.preferWhisperWhenAppleUnavailable = true }
                         self.stop()
@@ -89,6 +98,7 @@ final class ForgeDictation: ObservableObject {
             }
             engine.prepare()
             try engine.start()
+            appleSpeechActive = true
             recording = true
             status = recognizer.supportsOnDeviceRecognition ? "Listening on device…" : "Listening using Apple speech recognition. Audio may be sent to Apple."
             if !tapToStop {
@@ -106,6 +116,7 @@ final class ForgeDictation: ObservableObject {
         }
     }
     private func startOffline(tapToStop: Bool = false) async {
+        appleSpeechActive = false
         let requestedGeneration = generation
         requestingPermission = true
         defer { requestingPermission = false }
@@ -173,6 +184,7 @@ final class ForgeDictation: ObservableObject {
     }
 
     func cancel() {
+        appleSpeechActive = false
         generation = UUID()
         // Explicit cancellation discards a captured recording instead of
         // launching an expensive Whisper decode outside the drop target.
@@ -190,6 +202,7 @@ final class ForgeDictation: ObservableObject {
     }
 
     func stop() {
+        appleSpeechActive = false
         if offlineMode {
             offlineRecorder?.stop()
             offlineRecorder = nil
