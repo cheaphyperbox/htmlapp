@@ -40,3 +40,7 @@ Store Discord webhook URLs as GitHub Actions secrets. The current build and deli
 ## Generated app viewport contract
 
 Saved/generated HTMLApps use a fixed page scale to avoid pinch, double-tap and input-focus zoom. The host also prevents document-level horizontal scrolling; explicitly designed horizontal carousels, chip strips, graphs and table wrappers opt in via `data-htmlapp-horizontal-scroll="true"`. Forge validates multiple phone/iPad/landscape widths and treats measured horizontal overflow as a blocking defect. An overflow-clipping safety net is not a substitute for responsive layouts. Generated typography must remain legible at accessibility text sizes; these restrictions are for app surfaces, not ordinary website browsing.
+
+## Semantic Forge editing
+
+Forge now creates a conservative value-free semantic model of saved apps (DOM/component identifiers, storage keys, database collections, native integrations and acceptance invariants). The local `ForgeSemanticModels` sidecars remember short edit summaries without storing prompts, secret values or full code. Short requests such as 'cleaner', 'more native', 'faster', and 'add reminders' are turned into bounded edit contracts before patching. The literal request remains authoritative. Full-source fallback is preserved when a focused selector is ambiguous; the system does not claim full automated workflow verification.

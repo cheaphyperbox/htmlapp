@@ -2055,6 +2055,9 @@ Requested edit:
             }
             if let existingApp {
                 await store.updateFromAI(existingApp, html: html, summary: session.description.isEmpty ? existingApp.summary : session.description, note: session.lastEditSummary.isEmpty ? "AI changed this app." : session.lastEditSummary)
+                ForgeSemanticAppModelStore.save(for: existingApp.id, html: html,
+                    purpose: session.description.isEmpty ? existingApp.summary : session.description,
+                    editNote: session.lastEditSummary)
                 if let icon = session.renderedIconData {
                     store.setGeneratedIcon(icon, for: existingApp)
                 }
@@ -2067,6 +2070,7 @@ Requested edit:
                 let beforeIDs = Set(store.apps.map(\.id))
                 await store.add(html: html, summary: session.description)
                 if let added = store.apps.first(where: { !beforeIDs.contains($0.id) }) {
+                    ForgeSemanticAppModelStore.save(for: added.id, html: html, purpose: session.description)
                     workTracker.associateDraft(with: added.id)
                     if let selectedStyle {
                         ForgeStyleReferenceStore.save(selectedStyle, for: added.id)

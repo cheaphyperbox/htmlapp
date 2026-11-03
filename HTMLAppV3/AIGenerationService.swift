@@ -240,7 +240,9 @@ final class AIGenerationSession: ObservableObject {
         streamedHTML = app.html
         description = app.summary
         renderedIconData = app.favicon
-        refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches."
+        let semantic = ForgeSemanticAppModelStore.load(for: app.id)
+            ?? ForgeSemanticAppModel.build(html: app.html, purpose: app.summary)
+        refinedBrief = "Editing \(app.name) with AI. Existing functionality is the starting point and revisions will be applied as patches.\n" + semantic.summary
         verificationReport = ""
         phase = "Ready for AI edits"
     }
@@ -521,19 +523,25 @@ final class AIGenerationSession: ObservableObject {
         wantsUIPolish = false
         do {
             let cleanChange = change.trimmingCharacters(in: .whitespacesAndNewlines)
+            let semanticModel = ForgeSemanticAppModel.build(html: streamedHTML, purpose: description)
+            let editContract = ForgeEditContract.make(
+                request: cleanChange, model: semanticModel, taste: ForgeTasteMemory.summary
+            )
+            AIDebugTraceStore.shared.append("SEMANTIC EDIT CONTRACT",
+                "Scope: \(editContract.scope.rawValue); targets: \(editContract.targets.joined(separator: ", ")); capability candidates: \(editContract.recommendedCapabilities.joined(separator: ", "))")
             iconRefreshAllowed = Self.changeMayNeedIconRefresh(cleanChange) || renderedIconData == nil
             let canApplyDirectly = cleanChange.count <= 280 && !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
             let improvedChange: String
             if canApplyDirectly {
                 phase = "Preparing focused patch"
-                improvedChange = cleanChange
+                improvedChange = editContract.implementationBrief
                 AIDebugTraceStore.shared.append(
                     "CHANGE PLANNER",
                     "Skipped because this is a concise local edit; the patching model can apply it directly without another AI planning round trip."
                 )
             } else {
                 phase = "Improving the requested change"
-                improvedChange = try await AIHTMLAgent.refineRevision(change, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
+                improvedChange = try await AIHTMLAgent.refineRevision(editContract.implementationBrief, appBrief: refinedBrief, config: AISettingsStore.configuration(for: .planner))
             }
 
             let suppliedResearch = researchReport.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -568,7 +576,8 @@ final class AIGenerationSession: ObservableObject {
             if !research.isEmpty { lastResearch = research }
 
             phase = "Patching the app"
-            let focusedSource = ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange)
+            let focusedSource = ForgeFocusedEditContext.make(source: streamedHTML, request: cleanChange,
+                                                           semanticTargets: editContract.targets)
             let sourceContext = focusedSource ?? "<htmlapp_existing>\n" + streamedHTML + "\n</htmlapp_existing>"
             AIDebugTraceStore.shared.append("EDIT SOURCE CONTEXT",
                 focusedSource == nil ? "Full source included for safe patching." :
@@ -576,6 +585,9 @@ final class AIGenerationSession: ObservableObject {
             let user = """
 Current app:
 \(sourceContext)
+
+Semantic app model and preserved invariants:
+\(semanticModel.summary)
 
 Requested change:
 \(improvedChange)

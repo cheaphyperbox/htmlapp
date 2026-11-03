@@ -169,7 +169,7 @@ enum HTMLAppResponsiveViewport {
           'img,video,canvas,svg{max-width:100%}',
           'input,select,textarea{font-size:max(16px,1rem)}',
           '[data-htmlapp-horizontal-scroll="true"]{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}'
-        ].join('\\n');
+        ].join(' ');
         document.head.appendChild(style);
       }
     })();

@@ -3,7 +3,7 @@ import Foundation
 /// Optional context reduction for very large HTML edits with an explicitly
 /// named selector. Falls back to full source rather than guessing a target.
 enum ForgeFocusedEditContext {
-    static func make(source html: String, request: String) -> String? {
+    static func make(source html: String, request: String, semanticTargets: [String] = []) -> String? {
         guard html.utf8.count > 20_000,
               request.count <= 200,
               let pattern = try? NSRegularExpression(
@@ -13,7 +13,9 @@ enum ForgeFocusedEditContext {
         let requestText = request as NSString
         let matches = pattern.matches(in: request,
             range: NSRange(location: 0, length: requestText.length))
-        let selectors = Array(Set(matches.map { requestText.substring(with: $0.range) }))
+        let explicit = matches.map { requestText.substring(with: $0.range) }
+        let inferred = semanticTargets.prefix(3).map { "#" + $0 }
+        let selectors = Array(Set(explicit + inferred)).sorted()
         guard !selectors.isEmpty, selectors.count <= 3 else { return nil }
         let text = html as NSString
         var windows: [NSRange] = []
