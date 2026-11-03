@@ -20,7 +20,12 @@ enum ForgeEditSafetyGate {
         let migrationPresent =
             text.contains("htmlappdata.migrate(") ||
             text.range(of: #"migratev[0-9]+"#, options: .regularExpression) != nil
-        if migrationPresent { return [] }
+        // An unrelated migration must not authorize deleting other app data.
+        func hasMigrationFor(_ name: String) -> Bool {
+            guard migrationPresent else { return false }
+            return ["\"" + name + "\"", "'" + name + "'", "`" + name + "`"]
+                .contains { revised.contains($0) }
+        }
 
         var issues: [Violation] = []
         let oldKeys = Set(old.storageKeys)
@@ -31,13 +36,26 @@ enum ForgeEditSafetyGate {
         // Explicit destructive requests still require migration when user
         // data could remain. Removing a screen is not permission to erase its
         // accumulated data.
-        let missingKeys = oldKeys.subtracting(newKeys).sorted()
-        let missingCollections = oldCollections.subtracting(newCollections).sorted()
+        let missingKeys = oldKeys.subtracting(newKeys).filter { !hasMigrationFor($0) }.sorted()
+        let missingCollections = oldCollections.subtracting(newCollections)
+            .filter { !hasMigrationFor($0) }.sorted()
         if !missingKeys.isEmpty {
             issues.append(Violation(kind: "persistent storage keys", names: missingKeys))
         }
         if !missingCollections.isEmpty {
             issues.append(Violation(kind: "native database collections", names: missingCollections))
+        }
+        let cosmetic = ["cleaner", "simpler", "polish", "rounder", "font",
+                        "spacing", "colors", "theme", "more native", "apple-like"]
+            .contains { request.lowercased().contains($0) }
+        let intentionalRemoval = ["remove", "delete", "replace", "drop"]
+            .contains { request.lowercased().contains($0) }
+        if cosmetic && !intentionalRemoval {
+            let removedMethods = Set(old.nativeMethods).subtracting(new.nativeMethods).sorted()
+            if !removedMethods.isEmpty {
+                issues.append(Violation(kind: "native integrations during a visual-only edit",
+                                        names: removedMethods))
+            }
         }
         return issues
     }

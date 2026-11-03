@@ -150,27 +150,46 @@ enum HTMLAppResponsiveViewport {
     static let source = #"""
     (() => {
       const root = document.documentElement;
-      if (!root || !document.head) return;
-      let viewport = document.querySelector('meta[name="viewport"]');
-      if (!viewport) {
-        viewport = document.createElement('meta');
-        viewport.name = 'viewport';
-        document.head.appendChild(viewport);
-      }
-      viewport.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
-      root.style.setProperty('-webkit-text-size-adjust', '100%');
-      root.style.setProperty('text-size-adjust', '100%');
-      if (!document.getElementById('__htmlappViewportGuard')) {
-        const style = document.createElement('style');
-        style.id = '__htmlappViewportGuard';
-        style.textContent = [
-          'html,body{max-width:100%!important;overflow-x:clip!important}',
-          '*,*::before,*::after{box-sizing:border-box}',
-          'img,video,canvas,svg{max-width:100%}',
-          'input,select,textarea{font-size:max(16px,1rem)}',
-          '[data-htmlapp-horizontal-scroll="true"]{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}'
-        ].join(' ');
-        document.head.appendChild(style);
+      const head = document.head;
+      if (!root || !head) return;
+      const viewportContent = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+      const guardCSS = [
+        'html,body{max-width:100%!important;overflow-x:clip!important}',
+        'body{overflow-wrap:anywhere}',
+        '*,*::before,*::after{box-sizing:border-box}',
+        'img,video,canvas,svg{max-width:100%}',
+        'input,select,textarea{font-size:max(16px,1rem)}',
+        '[data-htmlapp-horizontal-scroll="true"]{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}'
+      ].join(' ');
+      const enforce = () => {
+        // A page's later scripts must not re-enable website-style page zoom.
+        let viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+          viewport = document.createElement('meta');
+          viewport.name = 'viewport';
+          head.appendChild(viewport);
+        }
+        if (viewport.content !== viewportContent) viewport.content = viewportContent;
+        root.style.setProperty('-webkit-text-size-adjust', '100%');
+        root.style.setProperty('text-size-adjust', '100%');
+        let style = document.getElementById('__htmlappViewportGuard');
+        if (!style) {
+          style = document.createElement('style');
+          style.id = '__htmlappViewportGuard';
+          head.appendChild(style);
+        }
+        if (style.textContent !== guardCSS) style.textContent = guardCSS;
+      };
+      enforce();
+      if (typeof MutationObserver === 'function') {
+        const observer = new MutationObserver(enforce);
+        observer.observe(head, {
+          childList: true, subtree: true, attributes: true,
+          attributeFilter: ['content']
+        });
+        if (typeof window !== 'undefined' && window.addEventListener) {
+          window.addEventListener('pagehide', () => observer.disconnect(), { once: true });
+        }
       }
     })();
     """#

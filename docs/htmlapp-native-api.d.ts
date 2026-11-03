@@ -145,6 +145,9 @@ export interface HTMLAppNativeCapabilityDescriptor {
   method: HTMLAppNativeMethod;
   protocolVersion: number;
   available: boolean;
+  implemented?: boolean;
+  hostPolicy?: string;
+  availabilityNote?: string;
   permission: string;
   title: string;
   description: string;
@@ -163,7 +166,7 @@ export interface HTMLAppNativeAPI {
     describe(method: HTMLAppNativeMethod): Promise<HTMLAppNativeCapabilityDescriptor>;
   };
   permissions: {
-    status(permission: string): Promise<{ hostPolicy: "ask" | "allow" | "deny"; systemAuthorization: string; canRequest: boolean }>;
+    status(permission: string): Promise<{ hostPolicy: "ask" | "allow" | "deny"; systemAuthorization: string; available: boolean; canRequest: boolean; settingsRequired: boolean; note: string }>;
     request(permission: string): Promise<{ hostAllowed: boolean }>;
     openSettings(): Promise<{ opened: boolean }>;
   };

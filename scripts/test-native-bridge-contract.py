@@ -57,6 +57,10 @@ assert "Never disable user zoom" not in product
 assert "no document-level" in product.lower() or "no document-level" in forge.lower()
 assert "ForgeEditContract.make" in forge
 assert "ForgeEditSafetyGate.violations" in forge
+assert "POST-REPAIR DATA PRESERVATION" in forge
+assert 'Runtime: unmarked horizontal scroller' in verifier
+assert 'Runtime: page zoom allowed' in verifier
+assert "HTMLAppSystemPermissionStatus.read" in native
 assert "ForgeSemanticAppModelStore.load" in forge
 assert "ForgeSemanticAppModelStore.save" in read("HTMLAppV3/AIGenerationView.swift")
 assert "data loss" not in model.lower()  # Model contains no stored user values.

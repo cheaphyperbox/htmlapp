@@ -72,20 +72,37 @@ enum HTMLAppRuntimeFoundation {
         if (operations.has(name)) return operations.get(name).promise;
         const controller = new AbortController();
         report(onChange, { status: 'loading', name });
-        const promise = Promise.resolve()
-          .then(() => work({ signal: controller.signal }))
+        // Race the cancellation signal so even work which ignores abort
+        // settles its UI immediately. The underlying task receives the signal.
+        const cancellation = () => Object.assign(new Error('Operation cancelled.'), {
+          name: 'AbortError', code: 'cancelled'
+        });
+        let abortListener;
+        const cancelled = new Promise((_, reject) => {
+          abortListener = () => reject(cancellation());
+          controller.signal.addEventListener('abort', abortListener, { once: true });
+        });
+        const workPromise = Promise.resolve().then(() => {
+          if (controller.signal.aborted) throw cancellation();
+          return work({ signal: controller.signal });
+        });
+        const promise = Promise.race([workPromise, cancelled])
           .then(value => {
-            if (controller.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+            if (controller.signal.aborted) throw cancellation();
             report(onChange, { status: 'success', name });
             return value;
-          }, error => {
+          })
+          .catch(error => {
             report(onChange, {
               status: controller.signal.aborted ? 'cancelled' : 'error',
               name, error
             });
             throw error;
           })
-          .finally(() => operations.delete(name));
+          .finally(() => {
+            controller.signal.removeEventListener('abort', abortListener);
+            operations.delete(name);
+          });
         operations.set(name, { controller, promise });
         return promise;
       };

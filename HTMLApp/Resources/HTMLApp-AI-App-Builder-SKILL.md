@@ -27,6 +27,12 @@ if (!hasFilePicker) showMessage('Open this app inside HTMLApp to pick files.');
 ```
 Do not silently access contacts, health, location, camera or microphone, and never assume a permission was granted. Catch rejections, handle cancellation, and offer retry.
 
+## Short-prompt editing and semantic stability
+
+When revising an existing HTMLApp from a very short prompt (for example "cleaner", "more native", "make stats better" or "do the same to history"), infer the smallest reversible change from the current app. First identify the relevant screen/component, existing storage keys, native methods, navigation and current design tokens. Preserve all unrelated behaviors. Avoid a full rewrite for a local change. A reference such as "do the same" should use the preceding accepted edit when available; do not guess destructive changes from vague instructions.
+
+Use stable `data-forge-screen` or `data-screen` identifiers for major screens, `data-forge-id` for meaningful components, and `data-route` for named destinations. Keep them stable across edits. Reuse CSS design tokens to make simple changes localized. If storage identity changes, write an explicit idempotent data migration and retain legacy records.
+
 ## Offline vs online — critical
 
 A self-contained HTML file **does not contain a server**. It can work offline for local UI, calculators, notes and some native device features. A cloud AI API, website backend, GitHub Actions build service, Discord webhook, Theos compiler or other remote process still needs a working network connection and an independently deployed server. Do not claim to compile iOS tweaks, generate binaries, deliver pushes or run a server using HTML/CSS/JS alone.
@@ -55,7 +61,7 @@ Return the full HTML file with a clear filename, brief instructions for saving i
 
 ## Native bridge discovery and safe cancellation
 
-Recent HTMLApp runtimes expose `HTMLAppNative.protocolVersion`, `await HTMLAppNative.capabilities.has(method)`, `await HTMLAppNative.capabilities.describe(method)`, and `HTMLAppNative.permissions.status(name)` / `.request(name)`. Do not equate host permission with iOS system authorization. `HTMLAppNative.call(method, args, {signal})` can abandon a pending promise on AbortSignal; only currently cancellable native operations such as supported AI requests stop their underlying native task. Do not claim arbitrary operations are cancellable. Continue feature-detecting older runtimes.
+Recent HTMLApp runtimes expose `HTMLAppNative.protocolVersion`, `await HTMLAppNative.capabilities.has(method)`, `await HTMLAppNative.capabilities.describe(method)`, and `HTMLAppNative.permissions.status(name)` / `.request(name)`. Do not equate host permission with iOS system authorization. Recent builds return non-prompting `systemAuthorization` values where iOS exposes them (for example camera, microphone, location, photos and notifications); other frameworks may return `unknown`, `per_data_type` or `unavailable`. Never treat `capabilities.describe().available` as permission to read user data: check the saved-app host policy and request iOS consent when required. `HTMLAppNative.call(method, args, {signal})` can abandon a pending promise on AbortSignal; only currently cancellable native operations such as supported AI requests stop their underlying native task. Do not claim arbitrary operations are cancellable. Continue feature-detecting older runtimes.
 
 ## Native UI controls
 

@@ -534,7 +534,17 @@ final class AIGenerationSession: ObservableObject {
             AIDebugTraceStore.shared.append("SEMANTIC EDIT CONTRACT",
                 "Scope: \(editContract.scope.rawValue); targets: \(editContract.targets.joined(separator: ", ")); capability candidates: \(editContract.recommendedCapabilities.joined(separator: ", "))")
             iconRefreshAllowed = Self.changeMayNeedIconRefresh(cleanChange) || renderedIconData == nil
-            let canApplyDirectly = cleanChange.count <= 280 && !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
+            // A short request can still be architecturally consequential.
+            // Skip the extra planning call only for safe, local edit classes.
+            let simpleScope: Bool = {
+                switch editContract.scope {
+                case .appearance, .copy, .component, .screenLayout,
+                     .accessibility, .bugFix, .performance: return true
+                case .behavior, .dataModel, .nativeCapability, .architecture: return false
+                }
+            }()
+            let canApplyDirectly = cleanChange.count <= 280 && simpleScope &&
+                !AIHTMLAgent.needsCapabilityResearch(for: cleanChange)
             let improvedChange: String
             if canApplyDirectly {
                 phase = "Preparing focused patch"
@@ -562,7 +572,10 @@ final class AIGenerationSession: ObservableObject {
                     "Skipped because this edit is local UI/behavior work and does not introduce a new device or web capability."
                 )
             }
-            let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: plan.deviceQueries)
+            // The structured edit interpreter can identify bridge methods
+            // even when the optional research planner misses a terse prompt.
+            let candidateQueries = Array(Set(plan.deviceQueries + editContract.recommendedCapabilities)).sorted()
+            let deviceResearch = HTMLAppDeviceAPIResearch.research(queries: candidateQueries)
             AIDebugTraceStore.shared.append(
                 "DEVICE API RESEARCH",
                 deviceResearch.isEmpty ? "No new internal device capability research was needed for this edit." : deviceResearch
@@ -648,6 +661,16 @@ Requested change:
                 AIDebugTraceStore.shared.append("ICON", "Preserved the existing app icon because this edit did not request an icon or identity change.")
             }
             try await verifyAndRepair(config: config)
+            // The verification repair may also edit HTML; protect the final
+            // artifact after that pass, not only the first patch candidate.
+            let finalSafety = ForgeEditSafetyGate.violations(
+                before: beforeEditHTML, after: streamedHTML, request: cleanChange
+            )
+            if !finalSafety.isEmpty {
+                AIDebugTraceStore.shared.append("POST-REPAIR DATA PRESERVATION",
+                    finalSafety.map(\.description).joined(separator: "\n"))
+                throw AIGenerationError.invalidPatch
+            }
             try Task.checkCancellation()
             phase = "Ready to review"
         } catch is CancellationError {
@@ -1168,6 +1191,8 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                 issue.hasPrefix("JavaScript did not compile") ||
                 issue.hasPrefix("Runtime: document body rendered empty") ||
                 issue.hasPrefix("Runtime: horizontal page overflow") ||
+                issue.hasPrefix("Runtime: unmarked horizontal scroller") ||
+                issue.hasPrefix("Runtime: page zoom allowed") ||
                 issue.hasPrefix("Runtime tapability:") ||
                 issue.hasPrefix("uncaught error:") ||
                 issue.hasPrefix("Runtime: document became blank")
@@ -1234,6 +1259,9 @@ Your previous response was cut off before the HTMLApp output was complete. Conti
                     $0.hasPrefix("JavaScript syntax in inline script") ||
                     $0.hasPrefix("JavaScript did not compile") ||
                     $0.hasPrefix("Runtime: document body rendered empty") ||
+                    $0.hasPrefix("Runtime: horizontal page overflow") ||
+                    $0.hasPrefix("Runtime: unmarked horizontal scroller") ||
+                    $0.hasPrefix("Runtime: page zoom allowed") ||
                     $0.hasPrefix("Runtime tapability:") ||
                     $0.hasPrefix("uncaught error:") ||
                     $0.hasPrefix("Runtime: document became blank")

@@ -28,10 +28,24 @@ jobs:
         run: node scripts/generate-native-contract.js --check
       - name: Native bridge and viewport behavior
         run: node scripts/test-native-bridge.js
+      - name: Runtime helper cancellation, migration and lifecycle
+        run: node scripts/test-runtime-foundation.js
       - name: Widget and car display JavaScript
         run: |
           node scripts/test-widget-bridge.js
           node scripts/test-car-display.js
+      - name: Forge semantic edit-contract regression tests
+        shell: bash
+        run: |
+          if command -v swiftc >/dev/null 2>&1; then
+            swiftc HTMLAppV3/ForgeSemanticAppModel.swift \
+              HTMLAppV3/ForgeEditSafetyGate.swift \
+              scripts/test-forge-contract.swift \
+              -o "${RUNNER_TEMP:-/tmp}/htmlapp-forge-contract-tests"
+            "${RUNNER_TEMP:-/tmp}/htmlapp-forge-contract-tests"
+          else
+            echo "::notice::Swift compiler unavailable; Forge semantic tests require Swift."
+          fi
       - name: Swift parser checks (when Swift installed)
         shell: bash
         run: |

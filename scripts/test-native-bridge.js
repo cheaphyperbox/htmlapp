@@ -64,11 +64,26 @@ function testViewport() {
     getElementById(id) { return elements[id] || null; },
     createElement(tag) { return { tag, name: '', id: '', content: '', textContent: '' }; }
   };
-  vm.runInNewContext(viewportScript, { document }, { filename: 'HTMLAppResponsiveViewport.js' });
+  let enforce;
+  class MutationObserver {
+    constructor(callback) { enforce = callback; }
+    observe() {}
+    disconnect() {}
+  }
+  vm.runInNewContext(viewportScript, {
+    document, MutationObserver, window: { addEventListener() {} }
+  }, { filename: 'HTMLAppResponsiveViewport.js' });
   assert.ok(elements.viewport.content.includes('user-scalable=no'));
   assert.ok(elements.viewport.content.includes('maximum-scale=1'));
   assert.ok(elements.__htmlappViewportGuard.textContent.includes('overflow-x:clip'));
   assert.ok(elements.__htmlappViewportGuard.textContent.includes('data-htmlapp-horizontal-scroll'));
+  assert.ok(elements.__htmlappViewportGuard.textContent.includes('overflow-wrap:anywhere'));
+  elements.viewport.content = 'width=640, user-scalable=yes';
+  enforce();
+  assert.ok(elements.viewport.content.includes('user-scalable=no'));
+  elements.__htmlappViewportGuard.textContent = 'body{overflow-x:scroll}';
+  enforce();
+  assert.ok(elements.__htmlappViewportGuard.textContent.includes('overflow-x:clip'));
 }
 
 (async () => {

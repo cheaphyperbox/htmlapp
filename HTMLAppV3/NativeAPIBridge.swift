@@ -658,10 +658,35 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
             ])
         case "capabilities.describe":
             guard let name = args["method"] as? String,
-                  let value = HTMLAppBridgeRegistry.describe(name) else {
+                  var value = HTMLAppBridgeRegistry.describe(name) else {
                 reject(id, code: "unsupported_method", message: "The requested capability is not registered.")
                 return
             }
+            let hardwareAvailable: Bool
+            if name == "camera.capturePhoto" {
+                hardwareAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
+            } else if name.hasPrefix("nfc.") {
+                hardwareAvailable = HTMLAppNFCReader.available
+            } else if name.hasPrefix("health.") {
+                hardwareAvailable = HTMLAppHealthReader.available
+            } else if name == "device.torch" {
+                hardwareAvailable = AVCaptureDevice.default(for: .video)?.hasTorch ?? false
+            } else if name.hasPrefix("liveActivities.") {
+                if #available(iOS 16.2, *) {
+                    hardwareAvailable = ActivityAuthorizationInfo().areActivitiesEnabled
+                } else {
+                    hardwareAvailable = false
+                }
+            } else {
+                hardwareAvailable = true
+            }
+            let permission = HTMLAppBridgeRegistry.permission(for: name)
+            value["implemented"] = true
+            value["available"] = appID != "PREVIEW" && hardwareAvailable
+            value["hostPolicy"] = permission.map {
+                HTMLPermissionStore.choice(for: $0, appID: appID).rawValue
+            } ?? "not_required"
+            value["availabilityNote"] = "Available means compiled and supported by available hardware; it does not grant host permission or prove iOS authorization. Check permissions.status."
             resolve(id, value: value)
         case "permissions.status":
             guard let name = args["permission"] as? String,
@@ -670,15 +695,21 @@ final class HTMLNativeAPIBridge: NSObject, CNContactPickerDelegate, PHPickerView
                 return
             }
             let policy = HTMLPermissionStore.choice(for: permission, appID: appID)
-            resolve(id, value: [
-                "permission": name,
-                "hostPolicy": policy.rawValue,
-                "systemAuthorization": "unknown",
-                "available": appID != "PREVIEW",
-                "canRequest": appID != "PREVIEW" && policy != .deny,
-                "settingsRequired": policy == .deny,
-                "note": "Host permission does not prove iOS authorization; use the native operation to request applicable system consent."
-            ] as [String: Any])
+            Task { [weak self] in
+                guard let self else { return }
+                let systemStatus = await HTMLAppSystemPermissionStatus.read(for: permission)
+                let systemDenied = systemStatus == "denied" || systemStatus == "restricted"
+                let available = self.appID != "PREVIEW" && systemStatus != "unavailable"
+                self.resolve(id, value: [
+                    "permission": name,
+                    "hostPolicy": policy.rawValue,
+                    "systemAuthorization": systemStatus,
+                    "available": available,
+                    "canRequest": available && policy != .deny && !systemDenied,
+                    "settingsRequired": policy == .deny || systemDenied,
+                    "note": "Host consent and iOS system consent are independent. Unknown and per_data_type states require the actual framework operation to check authorization."
+                ] as [String: Any])
+            }
         case "permissions.openSettings":
             guard let url = URL(string: UIApplication.openSettingsURLString) else {
                 reject(id, code: "settings_unavailable", message: "Could not open iOS settings.")

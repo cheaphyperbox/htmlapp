@@ -305,6 +305,12 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             if phone.horizontalOverflow {
                 appendIssue("Runtime: horizontal page overflow at 390pt; " + (phone.overflowOffender ?? "inspect fixed-width content."))
             }
+            if let unmarked = phone.unmarkedScroller, !unmarked.isEmpty {
+                appendIssue("Runtime: unmarked horizontal scroller at 390pt: " + unmarked + ". Mark intentional component scrolling or fix its layout.")
+            }
+            if phone.pageZoomEnabled {
+                appendIssue("Runtime: page zoom allowed at 390pt; the fixed app viewport policy was not applied.")
+            }
         } else {
             appendIssue("Runtime: could not inspect the generated DOM at 390pt width.")
         }
@@ -316,9 +322,16 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             (CGFloat(430), CGFloat(932)), (CGFloat(844), CGFloat(390)),
             (CGFloat(768), CGFloat(1024)), (CGFloat(1024), CGFloat(768))
         ] {
-            if let layout = await snapshot(webView, width: width, height: height),
-               layout.horizontalOverflow {
-                appendIssue("Runtime: horizontal page overflow at \(Int(width))pt; " + (layout.overflowOffender ?? "inspect fixed-width content."))
+            if let layout = await snapshot(webView, width: width, height: height) {
+                if layout.horizontalOverflow {
+                    appendIssue("Runtime: horizontal page overflow at \(Int(width))pt; " + (layout.overflowOffender ?? "inspect fixed-width content."))
+                }
+                if let unmarked = layout.unmarkedScroller, !unmarked.isEmpty {
+                    appendIssue("Runtime: unmarked horizontal scroller at \(Int(width))pt: " + unmarked + ".")
+                }
+                if layout.pageZoomEnabled {
+                    appendIssue("Runtime: page zoom allowed at \(Int(width))pt.")
+                }
             }
         }
 
@@ -355,6 +368,8 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         let domNonEmpty: Bool
         let horizontalOverflow: Bool
         let overflowOffender: String?
+        let unmarkedScroller: String?
+        let pageZoomEnabled: Bool
     }
 
     private func snapshot(_ webView: WKWebView, width: CGFloat, height: CGFloat) async -> Snapshot? {
@@ -394,7 +409,33 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
                   : null;
                 return scrollOverflow || offenders.length > 0;
               })(),
-              overflowOffender: window.__htmlappLayoutOffender
+              overflowOffender: window.__htmlappLayoutOffender,
+              unmarkedScroller: (() => {
+                // A local carousel/table is legitimate only with an explicit
+                // marker. An unmarked overflow:auto container feels like a
+                // broken desktop webpage inside an iOS application.
+                const nodes = Array.from(document.body?.querySelectorAll('*') || [])
+                  .filter(el => !el.closest('[data-htmlapp-horizontal-scroll="true"]'))
+                  .filter(el => {
+                    if (['INPUT', 'TEXTAREA'].includes(el.tagName)) return false;
+                    const style = getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden') return false;
+                    if (style.overflowX !== 'auto' && style.overflowX !== 'scroll') return false;
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 5 && rect.height > 5 &&
+                      el.scrollWidth > el.clientWidth + 3;
+                  });
+                return nodes.slice(0, 3).map(el =>
+                  el.id ? '#' + el.id : el.tagName.toLowerCase()
+                ).join(', ');
+              })(),
+              pageZoomEnabled: (() => {
+                const content = document.querySelector('meta[name="viewport"]')?.content || '';
+                const directives = content.toLowerCase().split(',').map(item => item.trim());
+                return !directives.includes('user-scalable=no') ||
+                  !directives.includes('maximum-scale=1') ||
+                  (window.visualViewport?.scale || 1) > 1.01;
+              })()
             }))()
             """,
             in: webView
@@ -404,7 +445,9 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
         return Snapshot(
             domNonEmpty: object["domNonEmpty"] as? Bool ?? false,
             horizontalOverflow: object["horizontalOverflow"] as? Bool ?? false,
-            overflowOffender: object["overflowOffender"] as? String
+            overflowOffender: object["overflowOffender"] as? String,
+            unmarkedScroller: object["unmarkedScroller"] as? String,
+            pageZoomEnabled: object["pageZoomEnabled"] as? Bool ?? false
         )
     }
 

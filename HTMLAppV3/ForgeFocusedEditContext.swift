@@ -27,7 +27,11 @@ enum ForgeFocusedEditContext {
             let clean = token.hasPrefix("#") ? String(token.dropFirst()) : ""
             let anchors = clean.isEmpty ? [token] : [
                 token, "id=\"" + clean + "\"", "id='" + clean + "'",
-                "data-forge-id=\"" + clean + "\"", "data-forge-id='" + clean + "'"
+                "data-forge-id=\"" + clean + "\"", "data-forge-id='" + clean + "'",
+                "data-screen=\"" + clean + "\"", "data-screen='" + clean + "'",
+                "data-view=\"" + clean + "\"", "data-view='" + clean + "'",
+                "data-page=\"" + clean + "\"", "data-page='" + clean + "'",
+                "data-route=\"" + clean + "\"", "data-route='" + clean + "'"
             ]
             for anchor in anchors {
                 cursor = 0
