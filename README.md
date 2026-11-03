@@ -56,3 +56,7 @@ The documented native dispatcher surface is enumerated in `HTMLAppV3/HTMLAppBrid
 ## Native UI and domain management
 
 Saved apps can optionally invoke UIKit alerts, action menus and date/time pickers through `HTMLAppNative.ui`, with bounded action counts and throttling. `HTMLAppNative.events.on` provides a JS unsubscribe wrapper for existing native events. The per-app Permissions screen lists approved native-network API domains so each can be revoked independently.
+
+## Generated-app runtime helpers
+
+The host now provides optional `HTMLAppData.collection(name)` and `.kv` adapters for the existing native document DB and portable storage, plus idempotent versioned migrations. `HTMLAppRuntime.runOperation` supports per-operation loading/error state and AbortSignal; lifecycle callbacks allow apps to clean up timers and subscriptions when the app loses focus. The host exports the current system content-size multiplier as `--htmlapp-text-scale` (rechecked on accessibility text-size changes). All helpers require feature detection for older installed HTMLApp versions; none permits arbitrary background HTML execution.

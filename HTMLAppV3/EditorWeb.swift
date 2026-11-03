@@ -216,6 +216,11 @@ struct HTMLWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppRuntimeFoundation.source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
         if appID != "PREVIEW" {
             controller.addUserScript(WKUserScript(
                 source: HTMLAppRuntimeStateScript.source,
@@ -355,6 +360,7 @@ struct HTMLWebView: UIViewRepresentable {
         private var downloadDestinations: [ObjectIdentifier: URL] = [:]
         private var blobTransfers: [String: BlobTransfer] = [:]
         private var launchObserver: NSObjectProtocol?
+        private var lifecycleObservers: [NSObjectProtocol] = []
         private var pendingStateRestore: HTMLAppRuntimeSnapshot?
         private var coldRestoreSnapshot: HTMLAppRuntimeSnapshot?
         private var offlineNoticePending = false
@@ -403,6 +409,29 @@ struct HTMLWebView: UIViewRepresentable {
             nativeBridge = HTMLNativeAPIBridge(webView: webView, appID: appID, permissionCoordinator: nativePermissions)
             localNetworkBridge = HTMLLocalNetworkBridge(webView: webView, permissionCoordinator: nativePermissions)
             if appID != "PREVIEW" {
+                let lifecycleNotifications: [(Notification.Name, String)] = [
+                    (UIApplication.didBecomeActiveNotification, "active"),
+                    (UIApplication.willResignActiveNotification, "inactive"),
+                    (UIApplication.didEnterBackgroundNotification, "background"),
+                    (UIApplication.willEnterForegroundNotification, "resume")
+                ]
+                for (notificationName, state) in lifecycleNotifications {
+                    let observer = NotificationCenter.default.addObserver(
+                        forName: notificationName, object: nil, queue: .main
+                    ) { [weak webView] _ in
+                        webView?.evaluateJavaScript(
+                            "window.dispatchEvent(new CustomEvent('htmlapp:lifecycle',{detail:{state:'\(state)'}}));"
+                        )
+                    }
+                    lifecycleObservers.append(observer)
+                }
+                let textSizeObserver = NotificationCenter.default.addObserver(
+                    forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main
+                ) { [weak self, weak webView] _ in
+                    guard let self, let webView else { return }
+                    self.applyAccessibleTextScale(to: webView)
+                }
+                lifecycleObservers.append(textSizeObserver)
                 launchObserver = NotificationCenter.default.addObserver(
                     forName: Notification.Name("HTMLAppCaptureRuntimeState"),
                     object: nil,
@@ -415,8 +444,17 @@ struct HTMLWebView: UIViewRepresentable {
             }
         }
 
+        private func applyAccessibleTextScale(to webView: WKWebView) {
+            let raw = Double(UIFontMetrics(forTextStyle: .body).scaledValue(for: 17) / 17)
+            let scale = min(2.5, max(1.0, raw))
+            webView.evaluateJavaScript(
+                "document.documentElement.style.setProperty('--htmlapp-text-scale', '\(scale)');"
+            )
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? HTMLAppDisplayWebView)?.updateDisplay(force: true)
+            applyAccessibleTextScale(to: webView)
 
             if let snapshot = pendingStateRestore {
                 pendingStateRestore = nil
@@ -495,6 +533,8 @@ struct HTMLWebView: UIViewRepresentable {
         func shutdown() {
             if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
             launchObserver = nil
+            lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
+            lifecycleObservers.removeAll()
             shakeExit?.stop()
             shakeExit = nil
             nativeBridge?.shutdown()

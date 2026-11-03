@@ -60,3 +60,7 @@ Recent HTMLApp runtimes expose `HTMLAppNative.protocolVersion`, `await HTMLAppNa
 ## Native UI controls
 
 Supported recent runtimes can use `HTMLAppNative.ui.alert({title,message,actions})`, `.menu(...)`, and `.datePicker({title,mode,value})` for real UIKit dialogs/pickers. Show them only in response to user intent; excessive modal requests are rate-limited. `HTMLAppNative.events.on(name, handler)` subscribes to existing `htmlapp:*` native events (and returns an unsubscribe function). Do not invent unimplemented native UI primitives.
+
+## Runtime helpers for real applications
+
+Current HTMLApp releases may expose `HTMLAppData.collection(name)` (`put/get/remove/query/search/count`), `HTMLAppData.kv` (native portable appStorage), and `HTMLAppData.migrate(name, version, migrations)` for versioned, idempotent schema changes. `HTMLAppRuntime.runOperation(key, async ({signal}) => work, onStatus)` consolidates per-operation loading/error/cancel behavior; `cancelOperation(key)` and `onActive/onInactive/onBackground/onResume` assist cleanup. Use only after feature detection and never claim JavaScript keeps running while iOS suspends the host. Use `--htmlapp-text-scale` from the host for accessibility text scaling.

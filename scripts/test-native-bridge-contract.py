@@ -67,6 +67,8 @@ node = shutil.which("node")
 if node:
     scripts = [
         ("native", sdk.split('static let source = #"""', 1)[1].split('"""#', 1)[0]),
+        ("runtime-foundation", read("HTMLAppV3/HTMLAppRuntimeFoundation.swift")
+         .split('static let source = #"""', 1)[1].split('"""#', 1)[0]),
         ("viewport", editor.split("enum HTMLAppResponsiveViewport {", 1)[1]
          .split('static let source = #"""', 1)[1].split('"""#', 1)[0]),
     ]

@@ -16,6 +16,8 @@ struct ForgeSemanticAppModel: Codable {
         let source = String(html.prefix(1_000_000))
         let ids = captures(#"\bid\s*=\s*["']([^"']+)["']"#, source)
         let semantic = captures(#"data-forge-id\s*=\s*["']([^"']+)["']"#, source)
+            + captures(#"data-screen\s*=\s*["']([^"']+)["']"#, source)
+            + captures(#"data-view\s*=\s*["']([^"']+)["']"#, source)
         let appKeys = captures(#"(?:localStorage|sessionStorage)\.(?:setItem|getItem|removeItem)\(\s*["']([^"']+)["']"#, source)
             + captures(#"HTMLAppNative\.appStorage\.(?:get|set|remove)\(\s*["']([^"']+)["']"#, source)
         let collections = captures(#"HTMLAppNative\.db\.(?:put|get|query|delete|search|count)\(\s*["']([^"']+)["']"#, source)

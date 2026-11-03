@@ -23,6 +23,7 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
     private var completed = false
     private var issues: [String] = []
     private var mockAppStorage: [String: String] = [:]
+    private var mockDocuments: [String: [String: [String: Any]]] = [:]
 
     init(html: String) {
         self.html = html
@@ -70,6 +71,11 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             source: HTMLNativeAPIScript.source,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
+        ))
+        controller.addUserScript(WKUserScript(
+            source: HTMLAppRuntimeFoundation.source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
         ))
         controller.addUserScript(WKUserScript(
             source: HTMLLocalNetworkScript.source,
@@ -144,10 +150,94 @@ private final class HTMLRuntimeCheckSession: NSObject, WKNavigationDelegate, WKS
             case "capabilities.list":
                 ok = true
                 value = [
-                    "methods": HTMLAppDeviceAPIResearch.entries.map(\.id),
-                    "permissions": [],
+                    "methods": HTMLAppBridgeRegistry.methods,
+                    "permissions": HTMLPermission.allCases.map { $0.rawValue },
+                    "protocolVersion": HTMLAppBridgeRegistry.protocolVersion,
                     "qaMock": true, "nativeHardwareAvailable": false
                 ] as [String: Any]
+            case "capabilities.describe":
+                ok = true
+                var descriptor = HTMLAppBridgeRegistry.describe(args["method"] as? String ?? "") ?? [:]
+                descriptor["available"] = false
+                descriptor["qaMock"] = true
+                value = descriptor
+            case "permissions.status":
+                ok = true
+                value = [
+                    "permission": args["permission"] as? String ?? "",
+                    "hostPolicy": "deny",
+                    "systemAuthorization": "denied",
+                    "available": false,
+                    "canRequest": false,
+                    "settingsRequired": true,
+                    "qaMock": true
+                ] as [String: Any]
+            case "permissions.request":
+                replyToMockRequest(id: id, ok: false,
+                                   value: ["code": "qa_permission_denied", "message": "Native permissions are unavailable in offline QA."])
+                return
+            case "ui.alert", "ui.menu", "ui.datePicker":
+                ok = true
+                value = ["cancelled": true]
+            case "network.allowedDomains":
+                ok = true
+                value = ["domains": []]
+            case "network.request":
+                replyToMockRequest(id: id, ok: false,
+                                   value: ["code": "qa_offline", "message": "No remote API calls are made during offline QA."])
+                return
+            case "db.put":
+                let collection = args["collection"] as? String ?? ""
+                let key = args["id"] as? String ?? ""
+                if collection.isEmpty || key.isEmpty || (args["document"] as? [String: Any]) == nil {
+                    replyToMockRequest(id: id, ok: false,
+                                       value: ["code": "invalid_arguments", "message": "Database put requires collection, id and document."])
+                    return
+                }
+                mockDocuments[collection, default: [:]][key] = args["document"] as? [String: Any]
+                ok = true
+                value = ["ok": true]
+            case "db.get":
+                let collection = args["collection"] as? String ?? ""
+                let key = args["id"] as? String ?? ""
+                ok = true
+                value = (mockDocuments[collection]?[key] as Any?) ?? NSNull()
+            case "db.delete":
+                let collection = args["collection"] as? String ?? ""
+                let key = args["id"] as? String ?? ""
+                mockDocuments[collection]?.removeValue(forKey: key)
+                ok = true
+                value = ["ok": true]
+            case "db.count":
+                let collection = args["collection"] as? String ?? ""
+                ok = true
+                value = ["count": mockDocuments[collection]?.count ?? 0]
+            case "db.query":
+                let collection = args["collection"] as? String ?? ""
+                let cursor = args["cursor"] as? String ?? ""
+                let limit = max(1, min(100, args["limit"] as? Int ?? 50))
+                let rows = (mockDocuments[collection] ?? [:]).keys.sorted()
+                    .filter { $0 > cursor }.prefix(limit).compactMap { key -> [String: Any]? in
+                        guard let document = mockDocuments[collection]?[key] else { return nil }
+                        return ["id": key, "document": document]
+                    }
+                ok = true
+                value = ["items": rows, "cursor": rows.last?["id"] ?? NSNull() as Any]
+            case "db.search":
+                let collection = args["collection"] as? String ?? ""
+                let text = args["text"] as? String ?? ""
+                let limit = max(1, min(50, args["limit"] as? Int ?? 50))
+                let rows = (mockDocuments[collection] ?? [:]).keys.sorted()
+                    .filter { key in
+                        let doc = mockDocuments[collection]?[key] ?? [:]
+                        return key.localizedCaseInsensitiveContains(text) ||
+                            String(describing: doc).localizedCaseInsensitiveContains(text)
+                    }.prefix(limit).compactMap { key -> [String: Any]? in
+                        guard let document = mockDocuments[collection]?[key] else { return nil }
+                        return ["id": key, "document": document]
+                    }
+                ok = true
+                value = ["items": rows]
             case "appStorage.get":
                 ok = true
                 let stored: Any = mockAppStorage[args["key"] as? String ?? ""] ?? NSNull()

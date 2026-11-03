@@ -24,16 +24,24 @@ enum ForgeFocusedEditContext {
             let scanRange = NSRange(location: 0, length: text.length)
             var cursor = scanRange.location
             var occurrences = 0
-            while cursor < text.length {
-                let found = text.range(of: selector as String, options: [], range:
-                    NSRange(location: cursor, length: text.length - cursor))
-                guard found.location != NSNotFound else { break }
-                occurrences += 1
-                if occurrences > 4 { return nil } // Ambiguous selector.
-                let start = max(0, found.location - 1100)
-                let end = min(text.length, found.location + found.length + 1500)
-                windows.append(NSRange(location: start, length: end - start))
-                cursor = found.location + max(1, found.length)
+            let clean = token.hasPrefix("#") ? String(token.dropFirst()) : ""
+            let anchors = clean.isEmpty ? [token] : [
+                token, "id=\"" + clean + "\"", "id='" + clean + "'",
+                "data-forge-id=\"" + clean + "\"", "data-forge-id='" + clean + "'"
+            ]
+            for anchor in anchors {
+                cursor = 0
+                while cursor < text.length {
+                    let found = text.range(of: anchor, options: [],
+                        range: NSRange(location: cursor, length: text.length - cursor))
+                    guard found.location != NSNotFound else { break }
+                    occurrences += 1
+                    if occurrences > 6 { return nil } // Ambiguous target.
+                    let start = max(0, found.location - 1100)
+                    let end = min(text.length, found.location + found.length + 1500)
+                    windows.append(NSRange(location: start, length: end - start))
+                    cursor = found.location + max(1, found.length)
+                }
             }
             if occurrences == 0 { return nil }
         }
