@@ -60,7 +60,7 @@ assert 'WhisperKit' in project and 'package: WhisperKit' in project
 assert 'htmlapp.dictationEngine' in source("HTMLAppV3/ForgeDictation.swift")
 assert 'HTMLAppOfflineSpeech.shared.transcribe' in source("HTMLAppV3/ForgeDictation.swift")
 assert 'Try Whisper Offline Instead' in source("HTMLAppV3/OnboardingSettings.swift")
-assert 'Picker("Dictation Engine"' in source("HTMLAppV3/OnboardingSettings.swift")
+assert 'Picker("Voice Dictation"' in source("HTMLAppV3/OnboardingSettings.swift"), "Settings must offer Apple Speech and Whisper"
 assert "generateSingle(for request:" in source("HTMLAppV3/ForgeStylePreview.swift"), "AI preview generator must accept an independent request"
 assert "exploringStyles = true" in source("HTMLAppV3/AIGenerationView.swift"), "Preview loading state must render"
 assert "Never auto-open an already saved app" in source("HTMLAppV3/LibraryUI.swift"), "Saved app must not be forced open"
