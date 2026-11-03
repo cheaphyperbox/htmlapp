@@ -24,6 +24,8 @@ jobs:
         run: python3 scripts/test-source-invariants.py
       - name: Bridge registry and generated runtime consistency
         run: python3 scripts/test-native-bridge-contract.py
+      - name: Verify generated TypeScript and JSON native contracts
+        run: node scripts/generate-native-contract.js --check
       - name: Native bridge and viewport behavior
         run: node scripts/test-native-bridge.js
       - name: Widget and car display JavaScript
